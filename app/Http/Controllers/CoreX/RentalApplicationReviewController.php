@@ -180,22 +180,43 @@ class RentalApplicationReviewController extends Controller
     }
 
     /**
-     * AT-392 Phase 2 usability round — page previews + any marks already
-     * saved for this document, for the highlight tool. Mirrors
-     * ViewingPackController::redactionData(). Nothing written to disk here —
-     * the unmarked preview only lives in this authenticated response.
+     * Progressive load, 2026-09-08 — Johan's decision on the measured 9.2s
+     * cold-open cost: page 1 + total page count, fast, so the agent can
+     * start reading/marking immediately. Any marks already saved for this
+     * document come back here too (not split per page) — cheap, and avoids
+     * any risk of a mark for a not-yet-loaded page being dropped.
      */
-    public function highlightData(RentalApplication $rentalApplication, Document $document, RentalApplicationDocumentHighlightService $highlights)
+    public function highlightFirstPage(RentalApplication $rentalApplication, Document $document, RentalApplicationDocumentHighlightService $highlights)
     {
         $this->guardRentalApplication($rentalApplication);
         $this->guardDocumentBelongsToApplication($rentalApplication, $document);
 
         try {
-            return response()->json($highlights->pagePreviews($document));
+            return response()->json($highlights->firstPagePreview($document));
         } catch (\Throwable $e) {
-            \Log::error('Rental application document highlight preview failed', ['document' => $document->id, 'error' => $e->getMessage()]);
+            \Log::error('Rental application document first-page preview failed', ['document' => $document->id, 'error' => $e->getMessage()]);
 
             return response()->json(['error' => 'This document could not be opened for highlighting.'], 422);
+        }
+    }
+
+    /**
+     * Progressive load, 2026-09-08 — the remaining pages behind
+     * highlightFirstPage() above. Called by the frontend right after the
+     * first page renders; the agent can already be reading/marking page 1
+     * while this is in flight.
+     */
+    public function highlightRemainingPages(RentalApplication $rentalApplication, Document $document, RentalApplicationDocumentHighlightService $highlights)
+    {
+        $this->guardRentalApplication($rentalApplication);
+        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
+
+        try {
+            return response()->json($highlights->remainingPagePreviews($document));
+        } catch (\Throwable $e) {
+            \Log::error('Rental application document remaining-pages preview failed', ['document' => $document->id, 'error' => $e->getMessage()]);
+
+            return response()->json(['error' => 'The rest of this document could not be loaded.'], 422);
         }
     }
 

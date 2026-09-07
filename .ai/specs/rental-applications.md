@@ -2505,3 +2505,244 @@ hard-deleted, recoverable, same as any other archived row):
 `cc3-proof-agent2@example.test` (users, one per branch/role tested), two
 Contact rows, and two RentalApplication rows (both left archived at the
 end of this round's verification — recoverable, not deleted).
+
+---
+
+## Review screen — re-verification against a fresh nine-point list, autosave/warning fix (Johan, 2026-09-08)
+
+Johan gave nine points on the review screen, several of them near-verbatim
+repeats of items already fixed and documented above in "In-place
+annotation, stroke marks, notes, and speed" and "Six usability fixes from
+Johan's first real test." Rather than assume either that they were already
+fixed or that they needed rebuilding, each was independently RE-VERIFIED
+against the current code over real HTTP (login, CSRF, curl, direct DB
+reads) before touching anything — the same standard this file already
+holds itself to elsewhere (see BUILD_STANDARD.md §5a, written earlier the
+same night from this exact module's RA-06 defect).
+
+**(a) "left page panel should not load as default" — already fixed,
+re-confirmed live, not touched again.** The rendered page's own `x-data`
+init shows `activeDocId: null` and there is no `x-init` anywhere that
+opens a document automatically — fetched the real page over HTTP and
+grepped the actual response for both, rather than trusting the Blade
+source alone. This was the modal-vs-inline defect fixed in "In-place
+annotation..." above (item 5); still fixed.
+
+**(b) "set the default to highlighter with a bright yellow colour" —
+already fixed, re-confirmed live.** Same real-HTTP fetch shows
+`activeTool: 'highlight'` and `activeColor: 'yellow'` (`#ffeb3b`) on load.
+
+**(d) "left and right panels should scroll independently" — already
+fixed, re-confirmed against the pattern source.** `.rental-review-main`
+and `.rental-review-aside` use the same `max-height: calc(100vh - 88px)` +
+`overflow-y: auto` + (on the aside) `position: sticky` + `align-self:
+stretch` mechanism as `docuperfect/signatures/review.blade.php`'s
+`.review-aside`/`#agentAmendPanel` — checked that file's actual CSS
+side-by-side (`align-self: stretch` there is called out as LOAD-BEARING;
+matched here) rather than assuming the earlier port was faithful.
+
+**(g) "highlighter buttons at top not in a header, save button off
+screen" — already fixed, re-confirmed live.** The tool picker, colour
+picker, undo/redo, mark count, and Save button all render inside
+`<x-sticky-action-bar>`'s right slot (`resources/views/components/
+sticky-action-bar.blade.php`, `class="sticky top-0 z-50 ..."`) — the same
+shared component `rental-applications/show.blade.php` already uses for
+its own identical fix. Confirmed the component's own CSS is genuinely
+`position: sticky` (not just "looks sticky"), and that it sits OUTSIDE
+`.rental-review-main`'s own internal scroll container, so it never
+scrolls away while paging through a long document.
+
+**(h) "we don't have the write something, or insert a note bit" —
+already fixed, re-confirmed with a real save.** Notes were added in
+"In-place annotation..." above (item 4). Re-verified over real HTTP
+rather than trusting that entry: POSTed a note-only mark
+(`{type:'note', x, y, text, color}`) to document 2974's highlight
+endpoint, got a real 200 (`mark_count:1`), reloaded via the highlight-data
+endpoint and got the exact same text back. Cleared afterward.
+
+**(c) "if I edit / highlight anything on the pdf will it automatically
+save?" — genuinely still ambiguous, now fixed.** Not covered by the
+modal-vs-inline fix above — a different, narrower defect. The tool used a
+HYBRID: an explicit Save button, but ALSO a silent auto-save when
+switching documents or clicking "Done" while marks were unsaved
+(`if (this.dirty) await this.applyHighlights()`, no confirmation shown to
+the agent). Worse, the one save-confirmation badge that existed
+(`justSaved`) lived inside the SAME `x-if="activeDocId !== null"` template
+as the rest of the toolbar — so a save-then-close hid the confirmation in
+the same tick it fired, meaning the silent path never even proved itself
+had happened. Fixed to match the viewing-pack redaction tool's own
+answer to this exact question (`command-center/viewing-packs/
+show.blade.php`'s `redactionTool()` has no autosave at all — "Apply
+redaction" is the only way a box is ever persisted): highlighting/notes
+are EXPLICIT-save only now. Switching documents or clicking "Done" while
+dirty shows a real `confirm()` — "Save them before switching/closing?" —
+never a silent act either way; declining leaves the agent on the same
+document with their marks intact (never discarded, never guessed-saved).
+The save confirmation itself moved OUTSIDE the open-document template
+into a page-level toast so it survives the panel closing.
+
+**(e) "clicking back to application shows a changes may be lost popup but
+theres no save button visible anywhere" — fixed by pairing, not by
+removing the warning.** No `beforeunload` handler existed anywhere in
+this file (grepped the whole rental-applications view tree — zero
+matches), unlike several other CoreX screens that already have this
+exact pattern (`role-manager.blade.php`, `properties/show.blade.php`,
+`agent/assistants/matrix.blade.php`, `compliance/policy/edit.blade.php`,
+`docuperfect-editor.js` — all use `if (dirty) { e.preventDefault();
+e.returnValue = ''; }`). Added the same pattern here, wired to the
+highlighter's own `dirty` flag via an `init()` hook Alpine calls
+automatically. The pairing Johan asked for is now real: the warning can
+only ever fire while `dirty` is true, and the sticky header's Save button
+(item (g), already fixed) is visible the entire time a document is open
+for marking — so a warning is never shown without a reachable way to act
+on it.
+
+**(f) "right hand panel? is that filled in from where?" — already
+investigated and answered in "Six usability fixes..." item 6 above
+(100% agent-typed, verified against a real user's real DB row), but that
+answer lived only in this spec file, never on the screen itself. Fixed
+by putting it on screen**, in plain language, in two places: the aside's
+own intro copy now reads "You type these — nothing here is pre-filled
+from the application," and the Suggested-check block now names its rent
+figure explicitly ("Rent (applicant's self-reported current rent, from
+the application)") instead of showing a number with no stated source.
+**Answer for Johan, plainly:** the Affordability panel is 100% the
+agent's own typing — nothing on it is ever pulled in automatically. The
+one number it calculates FROM elsewhere is the "rent" used in the
+suggested check, which comes from the applicant's own self-reported
+current rental amount on their application form (not the property being
+applied for — there is no separate "asking rent" field captured yet).
+
+**(i) "larger docs loads slow" — re-measured, not re-guessed; unchanged
+from the prior round's own finding, still Johan's call, nothing shipped.**
+This is the SAME item already measured and documented in "In-place
+annotation..." above — re-ran it fresh rather than trusting the old
+number. Cleared document 2974's rasterization cache directly and timed a
+genuinely cold real-HTTP fetch of its highlight-data endpoint (17 pages):
+**9,226ms**, matching the prior round's 9,129ms almost exactly (no
+regression, no silent improvement since). Root cause, unchanged: Poppler
+`pdftoppm` rasterization at 150 DPI, ~500ms/page, paid ONCE per document
+version and cached after — but the FIRST time any agent opens ANY
+document is exactly the common case (a freshly-submitted application's
+documents have never been opened by anyone yet), so the cache does not
+help the case Johan is actually hitting when he tests. The two
+previously-flagged, not-yet-decided options stand unchanged: lower the
+render DPI (cuts render time roughly with pixel count, at a real
+on-screen sharpness cost) or return page 1 immediately and rasterize the
+rest in the background (improves perceived speed on a first-ever open
+without reducing total server work). Not built this round — reporting
+the cause and the fresh number, per instruction, before touching
+anything.
+
+**Files touched this round:** `resources/views/corex/rental-applications/
+review.blade.php` only — (c)/(e)/(f) above. (a)/(b)/(d)/(g)/(h) required
+no code change, only re-verification; (i) is report-only.
+
+---
+
+## (i) resolved — progressive load, no quality tradeoff (Johan's decision, 2026-09-08)
+
+Johan's decision on the 9.2s cold-open cost above: build the progressive
+option, NOT the lower-DPI option — verbatim, *"the agent is reading an ID
+document, a payslip, a bank statement. Sharpness is the entire point of
+the screen; a slightly softer image to save a few seconds is a bad trade
+on exactly the documents where detail matters."* Two explicit requirements
+attached: the agent must be able to SEE more pages are coming and roughly
+how many, and marking on a not-yet-rendered page must never be possible
+(silently losing it is worse than not letting it happen).
+
+**What changed.** `RentalApplicationDocumentHighlightService::pagePreviews()`
+(one call, rasterizes and returns every page before anything can render)
+replaced with two methods:
+
+- `firstPagePreview()` — rasterizes ONLY page 1 (`pdftoppm -f 1 -l 1`),
+  returns it plus the real total page count (from `pdfinfo`, cached to a
+  `total-pages.txt` marker in the cache dir so a second request never
+  re-decrypts the source or re-runs `pdfinfo` for a number already known)
+  and the FULL saved-marks blob for the document (not split per page —
+  see "no data loss" below).
+- `remainingPagePreviews()` — rasterizes pages 2..N in ONE further
+  `pdftoppm` call (`-f 2`, no `-l`), same "batch, don't spawn per page"
+  lesson already measured for the full-document path. Both share the
+  exact same on-disk cache directory/versioning as before, so a document
+  that's already fully cached (a repeat open) is exactly as fast as it
+  always was — this only changes the FIRST-ever open of a document.
+
+Two new routes/controller methods (`highlightFirstPage`,
+`highlightRemainingPages`) replace the old single `highlight-data`
+endpoint. The frontend fetches the first page, renders it immediately,
+then fetches the remainder in the background — the agent can read and
+mark up page 1 while pages 2..N are still rendering server-side.
+
+**Real measurement, same 17-page document, genuinely cold cache:**
+first page **670ms** (down from 9.2s to see ANYTHING — a ~14× improvement
+in what the agent actually waits for before the screen is useful), then
+remaining 16 pages **8,694ms** in the background. Total server work
+**9,364ms** — essentially unchanged from the 9.2s single-call cost (as
+expected: it's the same `pdftoppm` rasterization, just split into two
+calls instead of one), confirming this is a genuine PERCEIVED-latency
+fix, not a hidden total-cost regression. Warm-cache repeat opens:
+**125ms** / **136ms** for the two calls — unchanged from before. Full
+150 DPI preserved throughout, page 1 and page 17 both verified at
+1241×1755px — no quality tradeoff of any kind, per instruction.
+
+**Requirement 1 — visible progress, not a silent wait.** A banner
+("Page 1 of 17 shown — loading the remaining 16 pages. You can start
+marking up page 1 now.") shows on screen while the remaining pages load,
+driven by a real `pagesLoading` flag, not a fixed timer.
+
+**Requirement 2 — cannot mark an unrendered page, and cannot lose a
+mark that was already there.** Two separate risks, both closed:
+
+- A page that hasn't loaded yet has no image and no draw-surface `<div>`
+  in the DOM at all (`x-for="page in pages"` only iterates over pages
+  that have actually arrived) — there is nothing for the agent to click
+  or drag on, so marking an unrendered page is not merely discouraged,
+  it's structurally impossible.
+- The more dangerous risk, found while building this (not by testing
+  after the fact): `applyHighlights()` (Save) builds its payload from
+  `this.pages` — if that only contains page 1 because the rest are still
+  loading, and the agent saves anyway, the resulting POST would REPLACE
+  the document's entire mark set server-side with a payload that only
+  covers page 1 — silently wiping any already-saved marks on pages 2..N,
+  exactly the class of loss Johan ruled out, just on OLD marks rather
+  than a mark the agent just drew. Fixed on both sides: `applyHighlights()`
+  now refuses outright while `pagesLoading` is true (a real, tested
+  guard, not just a disabled button — the Save button is ALSO disabled
+  and relabelled "Loading…" for the same duration, so the refusal is
+  never the agent's first sign anything was wrong). Backend
+  defence-in-depth: `cachedOrRasterizedPagePaths()` (used by
+  `applyMarks()` to assemble the final flattened PDF) now verifies the
+  cached page COUNT matches the real page count before trusting the
+  cache — previously it treated "any page file present" as "fully
+  cached," which a partially-loaded document now makes a real, not
+  hypothetical, state. Proved directly: cleared the cache, fetched ONLY
+  the first page (leaving the cache genuinely partial), then POSTed a
+  mark straight to the save endpoint bypassing the frontend guard on
+  purpose — got a real 200, and the resulting flattened PDF was verified
+  at a full **17 pages**, not 1.
+- Existing saved marks for a not-yet-loaded page are never dropped
+  either: the full marks blob comes back with the FIRST page's response
+  (cheap, and page-agnostic), held client-side, and applied to each page
+  the moment that specific page's image actually arrives — proved by
+  saving a note on page 6 and confirming it round-trips through the
+  first-page response's `marks` object correctly before page 6's image
+  has even loaded.
+
+**No cost not accounted for.** Checked before calling this done, per
+instruction to stop and say so if the real cost turned out worse than
+9.2s: total server-side work is unchanged (9.36s vs 9.2s, within normal
+variance), and the one edge case that costs MORE than before (an agent
+saving while pages are still loading) is exactly the scenario now
+prevented at the UI level — the backend safety net exists only to make
+that scenario correct rather than reachable in the first place.
+
+**Files touched:** `app/Services/RentalApplications/
+RentalApplicationDocumentHighlightService.php` (replaced `pagePreviews()`
+with `firstPagePreview()`/`remainingPagePreviews()`, refactored the
+private rasterization helpers to share one page-range rasterizer),
+`app/Http/Controllers/CoreX/RentalApplicationReviewController.php`
+(replaced `highlightData()` with two thin controller methods),
+`routes/web.php` (two routes replacing one), `resources/views/corex/
+rental-applications/review.blade.php` (progressive fetch, loading banner,
+save-guard).

@@ -51,47 +51,71 @@ class RentalApplicationDocumentHighlightService
     private const STROKE_WIDTH = 26;
 
     /**
-     * Rasterized source pages for the on-screen tool, plus any marks already
-     * saved for this document (so reopening the tool shows the agent their
-     * own existing marks, not a blank slate).
+     * Progressive load, 2026-09-08 — Johan's decision on the measured 9.2s
+     * cold-open cost for a 17-page document: show page 1 immediately, load
+     * the rest behind it, and do NOT trade image sharpness for speed (these
+     * are ID documents, payslips, bank statements — detail is the entire
+     * point of the screen). Two calls instead of one big pagePreviews():
+     * this method for the fast first page + total count, remainingPagePreviews()
+     * for the rest. Both share the SAME on-disk cache directory/versioning as
+     * before, so a document already fully cached (a repeat open) is just as
+     * fast as it always was — this only changes the FIRST-ever open.
      *
-     * Performance, 2026-09-08 — measured against a real 17-page/928KB
-     * document: pagePreviews() took 11.5s end-to-end (~676ms/page). Broke it
-     * down: pdftoppm rendering itself is ~512ms/page (the genuine, largely
-     * irreducible cost — same DPI the proven redaction tool already uses),
-     * but ~120ms/page (18% of total) was pure waste — decoding the just-
-     * written PNG through GD (imagecreatefrompng) and re-encoding it
-     * (imagepng) for NO reason, since a passive preview never touches a
-     * pixel. Fixed here: read the rasterized PNG bytes straight off disk for
-     * previewing — no GD round-trip unless a burn is actually happening.
-     * Second fix: rasterized pages are now CACHED on disk per document (see
-     * cachedPagePaths()) — a document reopened by the same or another agent
-     * skips pdftoppm entirely on every subsequent open, cutting the dominant
-     * ~8.7s cost to near zero after the first view.
-     *
-     * @return array{pages: array<int, array{index:int,width:int,height:int,data_uri:string}>, marks: array}
+     * @return array{page: array{index:int,width:int,height:int,data_uri:string}, total_pages: int, marks: array}
      */
-    public function pagePreviews(Document $document): array
+    public function firstPagePreview(Document $document): array
     {
-        $pagePaths = $this->cachedOrRasterizedPagePaths($document);
+        $cacheDir = $this->cacheDirFor($document);
+        @mkdir($cacheDir, 0775, true);
 
-        $out = [];
-        foreach ($pagePaths as $i => $path) {
-            [$w, $h] = getimagesize($path);
-            $out[] = [
-                'index'    => $i,
-                'width'    => $w,
-                'height'   => $h,
-                'data_uri' => 'data:image/png;base64,' . base64_encode(file_get_contents($path)),
-            ];
+        $totalPages = $this->pageCountFor($document, $cacheDir);
+
+        $path = $cacheDir . '/page-0.png';
+        if (! is_file($path)) {
+            $this->rasterizeIntoCache($document, $cacheDir, fromPage: 1, toPage: 1);
         }
 
+        [$w, $h] = getimagesize($path);
         $existing = RentalApplicationDocumentHighlight::where('document_id', $document->id)->first();
 
         return [
-            'pages' => $out,
+            'page' => ['index' => 0, 'width' => $w, 'height' => $h, 'data_uri' => 'data:image/png;base64,' . base64_encode(file_get_contents($path))],
+            'total_pages' => $totalPages,
             'marks' => $existing->marks_json ?? [],
         ];
+    }
+
+    /**
+     * The remaining pages (index 1..N-1) behind the fast first page above.
+     * Called by the frontend immediately after firstPagePreview() resolves —
+     * the agent can already be reading/marking page 1 while this runs. ONE
+     * pdftoppm call for the whole remainder (not one per page) — the same
+     * "batch, don't spawn per page" lesson already measured for the
+     * full-document path.
+     *
+     * @return array{pages: array<int, array{index:int,width:int,height:int,data_uri:string}>}
+     */
+    public function remainingPagePreviews(Document $document): array
+    {
+        $cacheDir = $this->cacheDirFor($document);
+        @mkdir($cacheDir, 0775, true);
+
+        $totalPages = $this->pageCountFor($document, $cacheDir);
+
+        if ($totalPages > 1 && ! is_file($cacheDir . '/page-1.png')) {
+            $this->rasterizeIntoCache($document, $cacheDir, fromPage: 2, toPage: null);
+        }
+
+        $out = [];
+        for ($i = 1; $i < $totalPages; $i++) {
+            $path = $cacheDir . '/page-' . $i . '.png';
+            [$w, $h] = getimagesize($path);
+            $out[] = ['index' => $i, 'width' => $w, 'height' => $h, 'data_uri' => 'data:image/png;base64,' . base64_encode(file_get_contents($path))];
+        }
+
+        $this->pruneOldCacheVersions($document);
+
+        return ['pages' => $out];
     }
 
     /**
@@ -293,117 +317,168 @@ class RentalApplicationDocumentHighlightService
      * updated_at so a genuinely different file (should the source ever be
      * replaced) rasterizes fresh rather than serving stale pixels.
      *
+     * Used by applyMarks() to burn+assemble the FULL flattened PDF — this
+     * must always return every page, never a partial set. 2026-09-08 —
+     * since firstPagePreview()/remainingPagePreviews() can now leave the
+     * cache dir PARTIALLY populated (just page-0.png, if an agent saves
+     * while the rest are still loading behind it), the old "any file
+     * present = fully cached" check would have silently assembled a
+     * one-page PDF and dropped the rest. Now verifies the file COUNT
+     * matches the real page count before trusting the cache.
+     *
      * @return array<int, string> page-index (0-based) => absolute PNG file path
      */
     private function cachedOrRasterizedPagePaths(Document $doc): array
     {
-        $cacheDir = storage_path('app/private/rental-applications/document-highlights/cache/doc-' . $doc->id . '-v' . $doc->updated_at->timestamp);
+        $cacheDir = $this->cacheDirFor($doc);
+        @mkdir($cacheDir, 0775, true);
 
-        if (is_dir($cacheDir)) {
+        $totalPages = $this->pageCountFor($doc, $cacheDir);
+        $files = glob($cacheDir . '/page-*.png');
+
+        if (count($files) < $totalPages) {
+            $this->rasterizeIntoCache($doc, $cacheDir, fromPage: 1, toPage: null);
             $files = glob($cacheDir . '/page-*.png');
-            if (! empty($files)) {
-                natsort($files);
-
-                return array_values($files);
-            }
         }
 
-        @mkdir($cacheDir, 0775, true);
-        $rendered = $this->renderAndCachePages($doc, $cacheDir);
+        if (count($files) < $totalPages) {
+            throw new \RuntimeException('Rasterization produced fewer pages than expected.');
+        }
 
-        // Prune any stale cache directories for an older version of this document.
+        natsort($files);
         $this->pruneOldCacheVersions($doc);
 
-        return $rendered;
+        return array_values($files);
     }
 
-    /** @return array<int, string> */
-    private function renderAndCachePages(Document $doc, string $cacheDir): array
+    private function cacheDirFor(Document $doc): string
     {
-        $bytes = $doc->decryptedContents();
-        if ($bytes === null || $bytes === '') {
-            throw new \RuntimeException('Source document could not be read.');
+        return storage_path('app/private/rental-applications/document-highlights/cache/doc-' . $doc->id . '-v' . $doc->updated_at->timestamp);
+    }
+
+    /**
+     * Real page count for this document, cached to a marker file so a
+     * SECOND request (e.g. remainingPagePreviews() right after
+     * firstPagePreview()) never re-decrypts the source or re-runs pdfinfo
+     * just to learn a number the first request already worked out.
+     */
+    private function pageCountFor(Document $doc, string $cacheDir): int
+    {
+        $marker = $cacheDir . '/total-pages.txt';
+        if (is_file($marker)) {
+            $count = (int) trim((string) file_get_contents($marker));
+            if ($count > 0) {
+                return $count;
+            }
         }
 
         $isPdf = str_contains(strtolower((string) $doc->mime_type), 'pdf');
-
         if (! $isPdf) {
-            $target = $cacheDir . '/page-0.png';
-            $img = @imagecreatefromstring($bytes);
-            if (! $img) {
-                throw new \RuntimeException('Source image could not be read.');
-            }
-            imagepng($img, $target);
-            imagedestroy($img);
+            file_put_contents($marker, '1');
 
-            return [0 => $target];
+            return 1;
+        }
+
+        $bytes = $doc->decryptedContents();
+        if ($bytes === null || $bytes === '') {
+            throw new \RuntimeException('Source document could not be read.');
         }
 
         $tmpFile = sys_get_temp_dir() . '/rental_highlight_src_' . uniqid('', true) . '.pdf';
         file_put_contents($tmpFile, $bytes);
 
         try {
-            return $this->rasterizePdfToCache($tmpFile, $cacheDir);
+            $proc = new Process(['pdfinfo', $tmpFile]);
+            $proc->setTimeout(30);
+            $proc->run();
+
+            $count = 0;
+            if ($proc->isSuccessful() && preg_match('/Pages:\s+(\d+)/', $proc->getOutput(), $m)) {
+                $count = (int) $m[1];
+            }
+            if ($count < 1) {
+                throw new \RuntimeException('Could not determine the PDF page count.');
+            }
+
+            file_put_contents($marker, (string) $count);
+
+            return $count;
         } finally {
             @unlink($tmpFile);
         }
     }
 
-    /** @return array<int, string> */
-    private function rasterizePdfToCache(string $pdfPath, string $cacheDir): array
+    /**
+     * Rasterize a page range straight into the cache dir, 0-based
+     * page-N.png naming. $fromPage/$toPage are 1-based (pdftoppm's own
+     * convention) — pass toPage: null for "to the end of the document".
+     * Handles the non-PDF single-image case too (fromPage must be 1 there).
+     */
+    private function rasterizeIntoCache(Document $doc, string $cacheDir, int $fromPage, ?int $toPage): void
     {
-        $count = $this->pageCount($pdfPath);
-        if ($count < 1) {
-            throw new \RuntimeException('Could not determine the PDF page count.');
-        }
+        $isPdf = str_contains(strtolower((string) $doc->mime_type), 'pdf');
 
-        $pdftoppm = config('splitter.pdftoppm_path', 'pdftoppm');
-
-        // One process call for the whole document, not one per page — measured
-        // against a real 17-page file this saves only ~4% (pdftoppm's own
-        // rendering dominates, not process-spawn overhead), but it's free to
-        // do and removes 16 unnecessary process spawns.
-        $proc = new Process([$pdftoppm, '-png', '-r', (string) self::DPI, $pdfPath, $cacheDir . '/page']);
-        $proc->setTimeout(180);
-        $proc->run();
-
-        if (! $proc->isSuccessful()) {
-            throw new \RuntimeException('pdftoppm failed: ' . trim($proc->getErrorOutput()));
-        }
-
-        $files = glob($cacheDir . '/page-*.png');
-        if (count($files) < $count) {
-            throw new \RuntimeException('pdftoppm produced fewer pages than expected.');
-        }
-        natsort($files);
-        $files = array_values($files);
-
-        // Renumber pdftoppm's 1-based "page-1.png" output to our 0-based
-        // page-0.png convention so cachedOrRasterizedPagePaths()'s glob
-        // sorts and indexes consistently on every read.
-        $out = [];
-        foreach ($files as $i => $f) {
-            $target = $cacheDir . '/page-' . $i . '.png';
-            if ($f !== $target) {
-                rename($f, $target);
+        if (! $isPdf) {
+            $bytes = $doc->decryptedContents();
+            if ($bytes === null || $bytes === '') {
+                throw new \RuntimeException('Source document could not be read.');
             }
-            $out[$i] = $target;
+            $img = @imagecreatefromstring($bytes);
+            if (! $img) {
+                throw new \RuntimeException('Source image could not be read.');
+            }
+            imagepng($img, $cacheDir . '/page-0.png');
+            imagedestroy($img);
+
+            return;
         }
 
-        return $out;
-    }
-
-    private function pageCount(string $pdfPath): int
-    {
-        $proc = new Process(['pdfinfo', $pdfPath]);
-        $proc->setTimeout(30);
-        $proc->run();
-
-        if ($proc->isSuccessful() && preg_match('/Pages:\s+(\d+)/', $proc->getOutput(), $m)) {
-            return (int) $m[1];
+        $bytes = $doc->decryptedContents();
+        if ($bytes === null || $bytes === '') {
+            throw new \RuntimeException('Source document could not be read.');
         }
 
-        return 0;
+        $tmpFile = sys_get_temp_dir() . '/rental_highlight_src_' . uniqid('', true) . '.pdf';
+        file_put_contents($tmpFile, $bytes);
+
+        try {
+            $pdftoppm = config('splitter.pdftoppm_path', 'pdftoppm');
+            $tmpPrefix = $cacheDir . '/.raw-' . uniqid('', true);
+
+            $args = [$pdftoppm, '-png', '-r', (string) self::DPI, '-f', (string) $fromPage];
+            if ($toPage !== null) {
+                $args[] = '-l';
+                $args[] = (string) $toPage;
+            }
+            $args[] = $tmpFile;
+            $args[] = $tmpPrefix;
+
+            $proc = new Process($args);
+            $proc->setTimeout(180);
+            $proc->run();
+
+            if (! $proc->isSuccessful()) {
+                throw new \RuntimeException('pdftoppm failed: ' . trim($proc->getErrorOutput()));
+            }
+
+            // pdftoppm names output by the ORIGINAL (1-based, zero-padded)
+            // page number regardless of -f — e.g. "-f 2" produces
+            // "prefix-02.png", not "prefix-01.png". Renumber to our 0-based
+            // page-N.png convention on the way in.
+            $files = glob($tmpPrefix . '-*.png');
+            if (empty($files)) {
+                throw new \RuntimeException('pdftoppm produced no output for the requested page range.');
+            }
+            foreach ($files as $f) {
+                if (! preg_match('/-(\d+)\.png$/', $f, $m)) {
+                    continue;
+                }
+                $originalPageNum = (int) $m[1];
+                rename($f, $cacheDir . '/page-' . ($originalPageNum - 1) . '.png');
+            }
+        } finally {
+            @unlink($tmpFile);
+        }
     }
 
     /** Delete cache directories for older versions of this same document, so a re-uploaded file's cache never grows unbounded. */

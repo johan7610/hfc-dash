@@ -75,14 +75,30 @@
                     <span class="text-xs font-semibold hidden sm:inline" style="color: var(--text-secondary);" x-show="!loading">
                         <span x-text="markCount()"></span> mark<span x-show="markCount() !== 1">s</span>
                     </span>
-                    <span class="text-xs" x-show="justSaved" x-cloak style="color: var(--ds-emerald, #059669);">&check; Saved</span>
                     <button type="button" class="corex-btn-primary text-xs" x-show="!loading && !loadError"
-                            :disabled="applying" x-text="applying ? 'Saving…' : 'Save'" @click="applyHighlights()"></button>
+                            :disabled="applying || pagesLoading" :title="pagesLoading ? 'Still loading the rest of this document' : ''"
+                            x-text="applying ? 'Saving…' : (pagesLoading ? 'Loading…' : 'Save')" @click="applyHighlights()"></button>
                     <button type="button" class="corex-btn-outline text-xs" @click="closeHighlighter()">Done</button>
                 </div>
             </template>
         </x-slot>
     </x-sticky-action-bar>
+
+    {{-- Save confirmation, 2026-09-08 — Johan: "if I edit / highlight anything on
+         the pdf will it automatically save?" It did not autosave, and answering
+         that ambiguity is the fix: highlighting/notes are EXPLICIT-save only,
+         same as the viewing-pack redaction tool (command-center/viewing-packs/
+         show.blade.php's redactionTool() has no autosave either — "Apply
+         redaction" is the only way a box is ever persisted). This toast is
+         OUTSIDE the "document open" template on purpose — the old badge lived
+         inside x-if="activeDocId !== null" and got hidden the same instant
+         Done closed the panel, so a save-then-close never actually showed
+         anything. Page-level, so it survives the panel closing. --}}
+    <div x-show="justSaved" x-cloak x-transition
+         class="fixed z-40 rounded-md px-3 py-2 text-xs font-medium flex items-center gap-1.5"
+         style="top: 72px; right: 20px; background: var(--ds-emerald, #059669); color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+        &check; Marks saved — the next person to open this document sees them.
+    </div>
 
     {{-- Layout, 2026-09-07 — Johan rejected the original 50/50 grid ("makes the
          document unreadable, defeats the purpose"). CoreX already solves "dominant
@@ -183,7 +199,8 @@
                                             <button type="button" style="color: var(--ds-blue, #2563eb); font-weight: 600;"
                                                     @click="openHighlighter({
                                                         documentId: {{ $document->id }},
-                                                        dataUrl: '{{ route('corex.rental-applications.documents.highlight-data', [$rentalApplication, $document]) }}',
+                                                        firstPageUrl: '{{ route('corex.rental-applications.documents.highlight-data.first', [$rentalApplication, $document]) }}',
+                                                        remainingPagesUrl: '{{ route('corex.rental-applications.documents.highlight-data.remaining', [$rentalApplication, $document]) }}',
                                                         postUrl: '{{ route('corex.rental-applications.documents.highlight', [$rentalApplication, $document]) }}',
                                                         label: {{ Js::from($document->original_name) }},
                                                     })"
@@ -213,6 +230,17 @@
                                         <span x-show="activeTool === 'note'">Click anywhere on the document to pin a note.</span>
                                         Marks are saved for this document — anyone who opens it next sees the same marks.
                                     </p>
+
+                                    {{-- Progressive load, 2026-09-08 — Johan: "the agent must be able to
+                                         SEE that more pages are still coming, and roughly how many. A
+                                         page 1 that looks like the whole document is worse than a slow
+                                         load." Sharpness kept at full quality per his decision — this is
+                                         a one-time cost per document, made LESS painful by showing page 1
+                                         immediately, not made invisible. --}}
+                                    <div class="flex items-center gap-2 text-xs py-2 px-3 rounded-md mb-2" x-show="pagesLoading" x-cloak
+                                         style="background: var(--ds-blue-soft, #eff6ff); color: var(--ds-blue, #2563eb);">
+                                        <span>Page 1 of <span x-text="totalPages"></span> shown — loading the remaining <span x-text="totalPages - pages.length"></span> pages. You can start marking up page 1 now.</span>
+                                    </div>
 
                                     <div class="space-y-4 pt-2" x-show="!loading && !loadError">
                                         <template x-for="page in pages" :key="page.index">
@@ -320,8 +348,15 @@
              see the in-place-annotation note above the layout <style> block. --}}
         <div class="rental-review-aside rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
             <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Affordability Assessment</h2>
+            {{-- 2026-09-08 — Johan: "right hand panel? is that filled in from
+                 where?" It wasn't filled in from anywhere — every field below
+                 is blank until an agent types into it, and nothing here is
+                 ever pre-populated from the application. Saying so plainly,
+                 on screen, is the fix (not just in a code comment he'll never
+                 see). --}}
             <p class="text-xs mb-4" style="color: var(--text-muted);">
-                Your own notes — nothing here is sent to the applicant or shown anywhere else. Saved automatically as you type.
+                You type these — nothing here is pre-filled from the application, and nothing here is
+                sent to the applicant or shown anywhere else. Saved automatically as you type.
             </p>
 
             <div class="space-y-3">
@@ -369,12 +404,19 @@
             <div class="rounded-md p-3 mt-4" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px solid var(--border);">
                 <p class="text-[11px] font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Suggested check — not a rule</p>
                 <template x-if="result.label === 'incomplete'">
-                    <p class="text-sm" style="color: var(--text-muted);">Enter income and check the rent on the application to see a suggestion here.</p>
+                    <p class="text-sm" style="color: var(--text-muted);">Enter income above, and make sure "Current rental amount" is filled in on the application itself, to see a suggestion here.</p>
                 </template>
+                {{-- 2026-09-08 — Johan: "right hand panel? is that filled in
+                     from where?" This calculation's RENT figure was never
+                     shown — an agent could see a suggestion without knowing
+                     what rent it was measured against. Naming the source
+                     (the applicant's own self-reported current rent, from
+                     the application form) here, not just in a tooltip. --}}
                 <template x-if="result.label !== 'incomplete'">
                     <div class="text-sm space-y-1">
-                        <p>Total income: <strong x-text="formatR(result.total_income)"></strong></p>
-                        <p>Rent required (income &times; <span x-text="result.multiplier"></span>): <strong x-text="formatR(result.required_income)"></strong></p>
+                        <p>Total income (your entries above): <strong x-text="formatR(result.total_income)"></strong></p>
+                        <p>Rent (applicant's self-reported current rent, from the application): <strong x-text="formatR(result.rent)"></strong></p>
+                        <p>Income needed at &times; <span x-text="result.multiplier"></span>: <strong x-text="formatR(result.required_income)"></strong></p>
                         <p class="mt-2">
                             <span class="ds-badge" :class="result.meets_threshold ? 'ds-badge-success' : 'ds-badge-warning'"
                                   x-text="result.meets_threshold ? 'Income appears to cover the rent — worth a closer look either way' : 'Income may not cover the rent — worth a closer look'"></span>
@@ -427,6 +469,19 @@
 <script>
 function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initialMarkedUpDocIds, requestMoreInfoUrl, submitForApprovalUrl }) {
     return {
+        // 2026-09-08 — Johan: "clicking back to application shows a changes
+        // may be lost popup but there's no save button visible anywhere." No
+        // beforeunload guard existed at all, so that warning (wherever it
+        // came from) was never paired with a real, reachable way to act on
+        // it. This is the real pairing: the SAME native browser warning,
+        // wired to the highlighter's own `dirty` flag, with the sticky
+        // header's Save button (see (g) above) visible the entire time the
+        // warning could possibly fire — never one without the other.
+        init() {
+            window.addEventListener('beforeunload', (e) => {
+                if (this.dirty) { e.preventDefault(); e.returnValue = ''; }
+            });
+        },
         // ── Affordability assessment (unchanged) ──────────────────────────
         fields: initial,
         markedUpDocIds: initialMarkedUpDocIds || [],
@@ -546,9 +601,19 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
         applying: false,
         justSaved: false,
         label: '',
-        dataUrl: '',
+        firstPageUrl: '',
+        remainingPagesUrl: '',
         postUrl: '',
         pages: [],
+        totalPages: 0,
+        // Progressive load, 2026-09-08 (Johan's decision on the measured 9.2s
+        // cold-open cost) — page 1 loads first, the rest load behind it.
+        // `pagesLoading` drives the "N more pages loading" banner; `_savedByPage`
+        // holds ALL saved marks (raster px, keyed by page index) from the
+        // first-page response so marks for not-yet-loaded pages can still be
+        // restored the moment their page actually arrives — never dropped.
+        pagesLoading: false,
+        _savedByPage: {},
         marks: [],   // FLAT array: {type:'highlight', page, points:[{x,y}], width, color} | {type:'note', page, x, y, text, color}
         dirty: false,
         colors: [
@@ -567,11 +632,19 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
         redoStack: [],
 
         async openHighlighter(detail) {
-            // Switching documents (or the same one) while unsaved marks exist —
-            // never silently lose them (standing rule). Auto-save first, same
-            // philosophy as the assessment panel's own autosave.
+            // Switching documents while unsaved marks exist — 2026-09-08: this
+            // USED to auto-save silently here, which is exactly the ambiguity
+            // Johan flagged ("will it automatically save?" — he could not
+            // tell). Explicit-save only now, matching the viewing-pack
+            // redaction tool: ask, in words, rather than act silently. Never
+            // lose the marks either way — declining just keeps the agent on
+            // the current document with their marks intact.
             if (this.activeDocId !== null && this.activeDocId !== detail.documentId && this.dirty) {
+                if (! confirm('You have unsaved highlights or notes on this document. Save them before switching?')) {
+                    return;
+                }
                 await this.applyHighlights();
+                if (this.applyError) return; // save failed — stay put, don't lose the marks by switching away
             }
             if (this.activeDocId === detail.documentId) {
                 this.activeDocId = null; // toggle closed
@@ -579,24 +652,28 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
             }
 
             this.activeDocId = detail.documentId;
-            this.dataUrl = detail.dataUrl;
+            this.firstPageUrl = detail.firstPageUrl;
+            this.remainingPagesUrl = detail.remainingPagesUrl;
             this.postUrl = detail.postUrl;
             this.label = detail.label || '';
             this.activeTool = 'highlight';
             this.pages = [];
+            this.totalPages = 0;
             this.marks = [];
+            this._savedByPage = {};
             this.dirty = false;
             this.undoStack = [];
             this.redoStack = [];
             this.loadError = '';
             this.applyError = '';
             this.justSaved = false;
+            this.pagesLoading = false;
             this.openNote = null;
             this.pendingNote = null;
             this.activeColor = 'yellow';
             this.loading = true;
             try {
-                const res = await fetch(this.dataUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
+                const res = await fetch(this.firstPageUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
                 if (!res.ok) {
                     let msg = '';
                     try { msg = (await res.json()).error || ''; } catch (_) {}
@@ -605,40 +682,90 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
                     return;
                 }
                 const data = await res.json();
-                this.pages = data.pages || [];
-                if (!this.pages.length) { this.loadError = 'The document opened but produced no pages.'; }
-                // Existing saved marks come back in RASTER px (page.width space) —
-                // convert to DISPLAY px once the images have laid out.
-                const savedByPage = data.marks || {};
-                this.$nextTick(() => {
-                    for (const pageIndexStr of Object.keys(savedByPage)) {
-                        const pageIndex = parseInt(pageIndexStr, 10);
-                        const page = this.pages.find(p => p.index === pageIndex);
-                        const img = document.querySelector('img.rah-page-img[data-page="' + pageIndex + '"]');
-                        if (!page || !img || !img.clientWidth) continue;
-                        const scaleX = img.clientWidth / page.width;
-                        const scaleY = img.clientHeight / page.height;
-                        (savedByPage[pageIndexStr] || []).forEach(m => {
-                            if (m.type === 'note') {
-                                this.marks.push({ type: 'note', page: pageIndex, x: m.x * scaleX, y: m.y * scaleY, text: m.text, color: m.color || 'yellow' });
-                            } else {
-                                this.marks.push({
-                                    type: 'highlight', page: pageIndex,
-                                    points: (m.points || []).map(p => ({ x: p.x * scaleX, y: p.y * scaleY })),
-                                    width: (m.width || 26) * scaleX,
-                                    color: m.color || 'yellow',
-                                });
-                            }
-                        });
-                    }
-                });
+                if (!data.page) { this.loadError = 'The document opened but produced no pages.'; this.loading = false; return; }
+                this.pages = [data.page];
+                this.totalPages = data.total_pages || 1;
+                // Existing saved marks come back in ONE blob (RASTER px, keyed by
+                // page index) — never split per page, so a mark for a page that
+                // hasn't loaded yet is never at risk of being dropped; it's just
+                // restored later, the moment its page actually arrives (see
+                // fetchRemainingPages() below).
+                this._savedByPage = data.marks || {};
+                this.restoreSavedMarksForPages([0]);
+                this.loading = false;
+
+                if (this.totalPages > 1) {
+                    this.fetchRemainingPages();
+                }
             } catch (e) {
                 this.loadError = 'This document could not be opened: ' + (e && e.message ? e.message : 'network error') + '.';
+                this.loading = false;
             }
-            this.loading = false;
+        },
+        // Progressive load, 2026-09-08 — runs AFTER page 1 is already on
+        // screen; deliberately not awaited by openHighlighter() so the agent
+        // can start reading/marking page 1 immediately. `pagesLoading` drives
+        // the on-screen "N more pages loading" banner (Johan: the agent must
+        // be able to SEE more pages are coming, not just guess).
+        async fetchRemainingPages() {
+            this.pagesLoading = true;
+            try {
+                const res = await fetch(this.remainingPagesUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
+                if (!res.ok) {
+                    let msg = '';
+                    try { msg = (await res.json()).error || ''; } catch (_) {}
+                    this.loadError = msg || ('The rest of this document could not be loaded (HTTP ' + res.status + ').');
+                    this.pagesLoading = false;
+                    return;
+                }
+                const data = await res.json();
+                const newPages = data.pages || [];
+                this.pages = this.pages.concat(newPages);
+                this.restoreSavedMarksForPages(newPages.map(p => p.index));
+            } catch (e) {
+                this.loadError = 'The rest of this document could not be loaded: ' + (e && e.message ? e.message : 'network error') + '.';
+            }
+            this.pagesLoading = false;
+        },
+        // Shared by both the first-page load and the remaining-pages load —
+        // converts saved marks (RASTER px) to DISPLAY px for the given page
+        // indexes, once their images have actually laid out.
+        restoreSavedMarksForPages(pageIndexes) {
+            this.$nextTick(() => {
+                for (const pageIndex of pageIndexes) {
+                    const saved = this._savedByPage[String(pageIndex)] || this._savedByPage[pageIndex];
+                    if (!saved) continue;
+                    const page = this.pages.find(p => p.index === pageIndex);
+                    const img = document.querySelector('img.rah-page-img[data-page="' + pageIndex + '"]');
+                    if (!page || !img || !img.clientWidth) continue;
+                    const scaleX = img.clientWidth / page.width;
+                    const scaleY = img.clientHeight / page.height;
+                    saved.forEach(m => {
+                        if (m.type === 'note') {
+                            this.marks.push({ type: 'note', page: pageIndex, x: m.x * scaleX, y: m.y * scaleY, text: m.text, color: m.color || 'yellow' });
+                        } else {
+                            this.marks.push({
+                                type: 'highlight', page: pageIndex,
+                                points: (m.points || []).map(p => ({ x: p.x * scaleX, y: p.y * scaleY })),
+                                width: (m.width || 26) * scaleX,
+                                color: m.color || 'yellow',
+                            });
+                        }
+                    });
+                }
+            });
         },
         async closeHighlighter() {
-            if (this.dirty) await this.applyHighlights();
+            // Same explicit-confirm rule as openHighlighter() above — "Done"
+            // must never silently save-or-discard without the agent knowing
+            // which happened.
+            if (this.dirty) {
+                if (! confirm('You have unsaved highlights or notes on this document. Save them before closing?')) {
+                    return;
+                }
+                await this.applyHighlights();
+                if (this.applyError) return; // save failed — stay open so nothing is lost
+            }
             this.activeDocId = null;
         },
         colorCss(key) {
@@ -750,6 +877,16 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
 
         async applyHighlights() {
             if (this.applying || this.activeDocId === null) return;
+            // Progressive load, 2026-09-08 — the save payload is built from
+            // `this.pages` (only the pages loaded so far) and REPLACES the
+            // document's whole mark set server-side. Saving while the
+            // remaining pages are still loading would silently wipe out any
+            // already-saved marks on those not-yet-loaded pages — exactly
+            // the "silently lose it" Johan ruled out. Refuse, don't guess.
+            if (this.pagesLoading) {
+                this.applyError = 'Still loading the rest of this document — wait a moment, then save.';
+                return;
+            }
             this.applyError = '';
             this.justSaved = false;
             this.applying = true;
