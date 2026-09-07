@@ -10,6 +10,7 @@ use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Property;
 use App\Models\RentalApplication;
+use App\Models\RentalApplicationStatusHistory;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -570,5 +571,156 @@ final class RentalApplicationAgentControllerTest extends TestCase
         $sentOnly = $this->actingAs($this->agent)->get(route('corex.rental-applications.index', ['status' => 'sent']));
         $sentOnly->assertSee($sentApp->contact->full_name);
         $sentOnly->assertDontSee($draftApp->contact->full_name);
+    }
+
+    // ── Round 4 (Johan, QA1): "on returned applications theres statuses at
+    // the top, but theres no way to mark application status to what it is?"
+    // ──────────────────────────────────────────────────────────────────────
+
+    public function test_agent_can_set_an_agent_owned_status_once_the_application_has_been_returned(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'returned']);
+
+        $response = $this->actingAs($this->agent)->post(
+            route('corex.rental-applications.update-status', $app),
+            ['status' => 'under_assessment', 'note' => 'Checking payslips.']
+        );
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+        $this->assertSame('under_assessment', $app->fresh()->status);
+    }
+
+    public function test_every_status_change_is_recorded_with_who_when_from_and_to(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'returned']);
+
+        $this->actingAs($this->agent)->post(
+            route('corex.rental-applications.update-status', $app),
+            ['status' => 'approved', 'note' => 'Income qualifies, ID verified.']
+        );
+
+        $this->assertDatabaseHas('rental_application_status_history', [
+            'rental_application_id' => $app->id,
+            'agency_id' => $this->agency->id,
+            'from_status' => 'returned',
+            'to_status' => 'approved',
+            'changed_by_user_id' => $this->agent->id,
+            'note' => 'Income qualifies, ID verified.',
+        ]);
+    }
+
+    public function test_a_system_owned_status_cannot_be_hand_set_even_by_a_crafted_request(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'returned']);
+
+        foreach (['draft', 'sent', 'in_progress', 'returned'] as $fakedStatus) {
+            $response = $this->actingAs($this->agent)->post(
+                route('corex.rental-applications.update-status', $app),
+                ['status' => $fakedStatus]
+            );
+
+            $response->assertSessionHasErrors('status');
+        }
+
+        $this->assertSame('returned', $app->fresh()->status, 'None of the system-owned statuses may be hand-set.');
+        $this->assertSame(0, RentalApplicationStatusHistory::count(), 'A rejected status change must never be recorded as if it happened.');
+    }
+
+    public function test_status_cannot_be_set_on_an_application_that_has_not_been_returned_yet(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'sent']);
+
+        $response = $this->actingAs($this->agent)->post(
+            route('corex.rental-applications.update-status', $app),
+            ['status' => 'approved']
+        );
+
+        $response->assertSessionHas('error');
+        $this->assertSame('sent', $app->fresh()->status, 'Nothing to assess before the applicant has actually submitted.');
+        $this->assertSame(0, RentalApplicationStatusHistory::count());
+    }
+
+    public function test_resubmitting_the_same_status_is_a_no_op_and_does_not_duplicate_history(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'under_assessment']);
+
+        $this->actingAs($this->agent)->post(
+            route('corex.rental-applications.update-status', $app),
+            ['status' => 'under_assessment']
+        );
+
+        $this->assertSame('under_assessment', $app->fresh()->status);
+        $this->assertSame(0, RentalApplicationStatusHistory::count(), 'Resubmitting the current value must not write a fake transition.');
+    }
+
+    public function test_status_change_respects_agency_scoping(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'returned']);
+
+        $otherAgency = Agency::create(['name' => 'A Different Agency', 'slug' => 'other-' . uniqid()]);
+        $otherBranch = Branch::create(['agency_id' => $otherAgency->id, 'name' => 'HQ']);
+        $otherAdmin = User::factory()->create(['agency_id' => $otherAgency->id, 'branch_id' => $otherBranch->id, 'role' => 'admin']);
+
+        $response = $this->actingAs($otherAdmin)->post(
+            route('corex.rental-applications.update-status', $app),
+            ['status' => 'approved']
+        );
+
+        $response->assertStatus(404);
+        $this->assertSame('returned', $app->fresh()->status);
+    }
+
+    public function test_the_show_page_actually_renders_the_status_control_and_history_once_returned(): void
+    {
+        // Regression for the exact class of bug found earlier this round: a
+        // real render, not just php -l, is the only thing that proves a
+        // Blade change actually compiles and executes correctly.
+        $app = $this->application($this->contact(), ['status' => 'returned']);
+        RentalApplicationStatusHistory::record($app, 'in_progress', 'returned', $this->agent, null);
+
+        $response = $this->actingAs($this->agent)->get(route('corex.rental-applications.show', $app));
+
+        $response->assertOk();
+        $response->assertSee('Application Status');
+        $response->assertSee('name="status"', false);
+        $response->assertSee('Under assessment');
+    }
+
+    public function test_the_show_page_hides_the_status_control_before_the_application_is_returned(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'sent']);
+
+        $response = $this->actingAs($this->agent)->get(route('corex.rental-applications.show', $app));
+
+        $response->assertOk();
+        $response->assertDontSee('Application Status');
+    }
+
+    public function test_the_returned_applications_list_actually_renders_the_inline_status_control(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'under_assessment']);
+
+        $response = $this->actingAs($this->agent)->get(route('corex.rental-applications.returned'));
+
+        $response->assertOk();
+        $response->assertSee('name="status"', false);
+        $response->assertSee(route('corex.rental-applications.update-status', $app), false);
+    }
+
+    public function test_status_change_never_hard_deletes_anything_and_stays_soft_deletable(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'returned']);
+
+        $this->actingAs($this->agent)->post(
+            route('corex.rental-applications.update-status', $app),
+            ['status' => 'declined']
+        );
+
+        $app->refresh();
+        $this->assertSame('declined', $app->status);
+        $app->delete();
+        $this->assertSoftDeleted('rental_applications', ['id' => $app->id]);
+        $this->assertDatabaseHas('rental_application_status_history', ['rental_application_id' => $app->id]);
     }
 }

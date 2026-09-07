@@ -24,6 +24,25 @@ class RentalApplication extends Model
         'draft', 'sent', 'in_progress', 'returned', 'under_assessment', 'approved', 'declined', 'withdrawn',
     ];
 
+    /**
+     * AT-392 — Johan, QA1: "theres no way to mark application status to
+     * what it is?" Split deliberately: draft/sent/in_progress/returned are
+     * FACTS the system records (nothing typed, sent, or submitted — never
+     * hand-settable, or the "status lies" defect this feature already fixed
+     * once comes back). under_assessment/approved/declined/withdrawn are the
+     * agent's own judgement calls once an application has actually been
+     * returned — these are the only values a human may set by hand, and
+     * only once the application is at or past 'returned'.
+     */
+    public const AGENT_SETTABLE_STATUSES = [
+        'under_assessment', 'approved', 'declined', 'withdrawn',
+    ];
+
+    /** Statuses at/after which a hand-set judgement call makes sense. */
+    public const POST_RETURN_STATUSES = [
+        'returned', 'under_assessment', 'approved', 'declined', 'withdrawn',
+    ];
+
     public const EMPLOYMENT_TYPES = [
         'permanently_employed', 'business_owner_personal_account', 'business_owner_business_account',
     ];
@@ -131,6 +150,12 @@ class RentalApplication extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class, 'source_id')->where('source_type', 'rental_application');
+    }
+
+    /** AT-392 — the status change trail, newest first. */
+    public function statusHistory(): HasMany
+    {
+        return $this->hasMany(RentalApplicationStatusHistory::class)->latest('created_at');
     }
 
     public function declarationSignature(): ?RentalApplicationSignature

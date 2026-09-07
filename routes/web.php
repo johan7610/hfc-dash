@@ -2830,6 +2830,8 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             ->middleware('permission:rental_applications.create')->name('corex.rental-applications.destroy');
         Route::post('/{rentalApplication}/restore', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'restore'])
             ->middleware('permission:rental_applications.create')->name('corex.rental-applications.restore');
+        Route::post('/{rentalApplication}/status', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'updateStatus'])
+            ->middleware('permission:rental_applications.create')->name('corex.rental-applications.update-status');
     });
 
     // AT-392 Phase 2 — agent review split-screen (RentalApplicationReviewController,

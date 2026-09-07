@@ -1970,3 +1970,109 @@ Agent side, added to `RentalApplicationAgentControllerTest.php`:
 `test_email_backfill_never_crosses_agency_boundaries`,
 `test_archiving_from_the_list_soft_deletes_and_it_is_findable_and_restorable`,
 `test_the_status_filter_on_the_main_list_actually_filters`.
+
+**Post-merge incident, found and fixed during live proof:** after this
+round's PR merge landed on QA1, the public show page 500'd for every
+real request. Root cause: `documents: @json($application->documents->map(fn ($d) => [...]))`
+nested a multi-line arrow-function/array literal (including a `route()`
+call with an array argument) inside `@json()`'s own parentheses. Blade's
+directive-argument parser mishandled the nesting and compiled it to
+genuinely invalid PHP — a real `ParseError` on first render, not a Blade
+templating error. **`Blade::compileString()` alone did not catch this** —
+it only proves the Blade→PHP string transform succeeded, never that the
+resulting PHP is itself parseable; that requires an actual render (or a
+`php -l` on the compiled output). Fixed by computing the array in a
+`@php ... @endphp` block ahead of `<!DOCTYPE html>` and referencing the
+plain variable inside `@json()`. Lesson for this codebase: never nest a
+multi-line closure/array literal directly inside a Blade directive's own
+parentheses — compute it in a preceding `@php` block instead, and verify
+any `@json()`/directive change with a real render, not just
+`compileString()`.
+
+## Round 4 (Johan, QA1) — hand-settable status on Returned Applications
+
+Johan: "on returned applications theres statuses at the top, but theres
+no way to mark application status to what it is?" The status tabs at the
+top of Returned Applications were filters only — an agent could see and
+filter by status but never actually set one.
+
+**Status classification, established before writing any code, per
+Johan's own instruction not to guess:**
+
+| Status | Who sets it | Why |
+|---|---|---|
+| `draft` | System only | True starting state on creation. |
+| `sent` | System only | Set only once mail has genuinely left (Round 3 fix — a hand-settable override would reintroduce the "status lies" defect that fix closed). |
+| `in_progress` | System only | Set the moment the applicant starts interacting with the public form (upload/save activity before a full submit). |
+| `returned` | System only | Set only by `RentalApplicationSigningController::submit()` — a fact: the applicant genuinely submitted. |
+| `under_assessment`, `approved`, `declined`, `withdrawn` | **Agent, by hand** | The agent's own judgement call once an application has actually been returned — nothing else can determine these. |
+
+`RentalApplication::AGENT_SETTABLE_STATUSES` is exactly the four
+judgement-call values; `POST_RETURN_STATUSES` (`returned` + those four)
+gates when the control is even shown — assessing something the applicant
+hasn't submitted yet makes no sense, so the control never appears on
+`draft`/`sent`/`in_progress` rows.
+
+**Built, copying the existing simple status-select pattern already used
+in this codebase** (`FeedbackReportController::updateStatus()` +
+`command-center/feedback/show.blade.php` — a plain `<select>` + note +
+POST, not a bespoke control):
+- `RentalApplicationController::updateStatus()` — validates against
+  `AGENT_SETTABLE_STATUSES` only (`Rule::in`), so a system-owned value is
+  rejected by validation even from a crafted request, never silently
+  accepted. Refuses to act at all unless the application is already in
+  `POST_RETURN_STATUSES`. A resubmit of the current value is a harmless
+  no-op (no history row written — that would fake a transition that
+  never happened). Scoped through the same `guardRentalApplication()`
+  own/branch/agency guard every other single-record action in this
+  controller already uses.
+- Route: `POST /corex/rental-applications/{rentalApplication}/status`,
+  gated on `rental_applications.create` — the same permission every other
+  action on this screen (Send/Resend, Archive) already uses; no new
+  permission key introduced for what is an action on an existing feature,
+  not a new one.
+- **Every change recorded** — `RentalApplicationStatusHistory` (new
+  table + model, mirroring `FicaStatusHistory`'s existing append-only
+  status-trail pattern rather than the field-diff `ContactAuditLog`
+  shape, since this only ever records one thing: a status transition).
+  One immutable row per change: `from_status`, `to_status`,
+  `changed_by_user_id`, an optional `note`, `created_at`. No update path,
+  no delete path — a decision on a tenant application gets a permanent
+  trail, full stop.
+- **UI, both places Johan asked for:** the detail page
+  (`show.blade.php`) gets an "Application Status" card (select + optional
+  note + Update button, plus the change history rendered underneath) —
+  shown only once `POST_RETURN_STATUSES`. The Returned Applications list
+  (`returned.blade.php`) gets the same control inlined into the Status
+  column as an auto-submitting `<select>` for a same-row change with no
+  separate note field (row space is too tight; use the detail page for a
+  reasoned decision).
+
+**Migration gotcha hit and fixed:** the first migration attempt failed
+with `Identifier name '...' is too long` — Laravel's auto-generated name
+for a composite index on `rental_application_status_history` exceeded
+MySQL's 64-character identifier limit. Because MySQL DDL causes an
+implicit commit, the table itself had already been created before the
+index statement failed, leaving an untracked table with a missing index
+and no row in the `migrations` table — diagnosed via
+`information_schema.tables`/`SHOW CREATE TABLE`, fixed by dropping the
+orphaned table and re-running the corrected migration (explicit short
+index names) cleanly. Lesson: give composite indexes on
+`rental_application_*`-prefixed tables (or any long table name) an
+explicit short name rather than relying on Laravel's auto-generated one.
+
+**Regression tests**, added to `RentalApplicationAgentControllerTest.php`:
+`test_agent_can_set_an_agent_owned_status_once_the_application_has_been_returned`,
+`test_every_status_change_is_recorded_with_who_when_from_and_to`,
+`test_a_system_owned_status_cannot_be_hand_set_even_by_a_crafted_request`,
+`test_status_cannot_be_set_on_an_application_that_has_not_been_returned_yet`,
+`test_resubmitting_the_same_status_is_a_no_op_and_does_not_duplicate_history`,
+`test_status_change_respects_agency_scoping`,
+`test_status_change_never_hard_deletes_anything_and_stays_soft_deletable`,
+plus two real-render regression tests
+(`test_the_show_page_actually_renders_the_status_control_and_history_once_returned`,
+`test_the_returned_applications_list_actually_renders_the_inline_status_control`)
+— given this round's own earlier incident, a real render is the only
+thing that proves a Blade change actually compiles and executes, and
+`php -l` on a `.blade.php` file does not exercise the compiled directives
+at all.
