@@ -2505,3 +2505,87 @@ hard-deleted, recoverable, same as any other archived row):
 `cc3-proof-agent2@example.test` (users, one per branch/role tested), two
 Contact rows, and two RentalApplication rows (both left archived at the
 end of this round's verification — recoverable, not deleted).
+
+## Round 8 — cc5's re-test: 2 defects survived (RA-03 review screen, RA-02 incomplete)
+
+cc5 re-tested against the real merged QA1 HEAD. Most of Round 5-7's work
+held up. Two things didn't, both reported here with a full investigation
+before any shared file was touched, per standing instruction.
+
+### RA-03, still broken — on the REVIEW screen specifically
+
+The "added after submission" badge (Round 7) only ever landed on
+`show.blade.php` (this branch's own file). `review.blade.php` — cc6's
+split-screen, the ACTUAL screen an agent reviews a returned application
+on — never got it. The original regression tests only ever rendered
+`show.blade.php`, so they kept passing while testing a surface the agent
+doesn't actually use for this. Confirmed cc6 already applied the
+"who added it" attribution snippet from Round 6 there (visible at
+`review.blade.php:178`) — just not the after-submission badge, which
+was never handed over.
+
+**Not fixed directly** — `review.blade.php` is under active rebuild by
+cc6 (Johan's nine review-screen complaints). Coordinated instead: the
+one-line addition needed, immediately after the existing attribution
+`<span>` at `review.blade.php:178`, mirroring `show.blade.php`'s
+existing badge exactly:
+```blade
+@if($rentalApplication->submitted_at && $document->created_at->greaterThanOrEqualTo($rentalApplication->submitted_at))
+    <span class="ds-badge ds-badge-warning" title="This document was added after the application was submitted">Added after submission</span>
+    <span style="color: var(--text-muted); font-size: 11px;">{{ $document->created_at->format('d M Y H:i') }}</span>
+@endif
+```
+Waiting on sequencing before either of us touches the file.
+
+### RA-02, incomplete — every numeric field enumerated, not just two
+
+Johan's instruction was every numeric field on the whole flow, not the
+four `sanitizeNumericInput()` originally covered. Full audit (exhaustive,
+not a spot check):
+
+| Field | Model | Where validated | Sanitized before this round? |
+|---|---|---|---|
+| `current_rental_amount`, `monthly_salary`, `adults`, `children` | `RentalApplication` | `update()`, `submit()` | Yes (Round 7) |
+| `monthly_income`, `other_monthly_income`, `monthly_expenses` | `RentalApplicationAssessment` | `RentalApplicationReviewController::saveAssessment()` | **No** |
+| `approved_rental_amount` | `RentalApplication` (added by the RO/CO migration) | `RentalApplicationAuthorisationController::approve()` — this is the exact field cc5 found broken | **No** |
+| `income_to_rent_multiplier` | `RentalApplicationQualifyingSetting` | `RentalApplicationSettingsController::updateQualifyingFormula()` | **No** |
+
+`contact_id`/`property_id`/`document_type_id`/RO-CO user-id lists/
+checklist ids/`per_page` are all numeric-typed but picked from a widget
+or the URL, never hand-typed as money — not applicable, listed so the
+audit is provably exhaustive rather than silently incomplete.
+
+**Built (own file, no coordination needed):**
+`RentalApplication::sanitizeNumericInput()` generalized to accept an
+explicit `$fields` list (defaults to `NUMERIC_FIELDS` — every existing
+caller unchanged), so the three remaining fixes are each a one-line
+addition in the controller that owns them, not a duplicated copy of the
+same string-cleanup logic:
+```php
+$request->merge(RentalApplication::sanitizeNumericInput(
+    $request->only(['monthly_income', 'other_monthly_income', 'monthly_expenses']),
+    ['monthly_income', 'other_monthly_income', 'monthly_expenses'],
+));
+```
+(same shape for `approved_rental_amount` in `approve()`, and
+`income_to_rent_multiplier` in `updateQualifyingFormula()`). All three
+call sites are on cc6-owned files — not touched, handed over for
+sequencing. Pushed on its own branch,
+`feature/rental-applications-numeric-fix-2026-09-08`, based on the real
+current QA1 HEAD (not the older `feature/rental-applications` tip),
+specifically so it doesn't drag in the rest of that day's other lanes'
+work when it lands.
+
+**Regression tests**: `test_sanitize_numeric_input_accepts_an_explicit_field_list_beyond_its_own_defaults`,
+`test_sanitize_numeric_input_still_defaults_to_its_own_constant_when_no_list_given`
+— unit-level (the utility itself is a pure function; the three actual
+wiring points can't be tested via HTTP until they exist). Full
+`RentalApplicationInputPreservationTest.php`: 9 passed, 56 assertions,
+zero regressions.
+
+**Design question checked, not actioned**: the assessment/approve
+amount fields are `<input type="number">`, same as the ALREADY-working
+`monthly_salary`/`current_rental_amount` fields on this model — so the
+existing working precedent already proves the fix needed is purely
+server-side sanitization, not an input-type change. Not proposing to
+touch `type="number"` on any of these fields.
