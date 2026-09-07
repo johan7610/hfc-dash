@@ -210,15 +210,49 @@ class RentalApplicationReviewController extends Controller
         $this->guardRentalApplication($rentalApplication);
         $this->guardDocumentBelongsToApplication($rentalApplication, $document);
 
-        // Structural validation only — a mark is one of two shapes (a
-        // highlight stroke's points array, or a note's x/y/text), and
-        // RentalApplicationDocumentHighlightService::normalizeForStorage()
-        // already defensively filters/coerces every field per type before
-        // anything reaches the marks_json column (documented there: never
-        // trust the raw payload verbatim). Re-litigating the same per-type
-        // shape here would just duplicate that gate, not add a real one.
+        // RA-04, 2026-09-08 — cc5 found (and I reproduced at real HTTP level:
+        // real login, real CSRF, real curl, real DB read) that a malformed or
+        // stale-shape mark — e.g. the OLD box shape {x,y,w,h,color} from
+        // before this tool was redesigned from rectangles to marker-pen
+        // strokes — passed this rule (it's still technically an array) and
+        // was then SILENTLY DROPPED by normalizeForStorage() (no 'type', no
+        // 'points', no 'text' → fails the shape check → skipped, no error
+        // surfaced). Real HTTP 200, has_highlights:false, mark_count:0 —
+        // exactly the "nothing typed may ever be lost" failure this codebase
+        // exists to prevent, just silent instead of loud. Fixed here: every
+        // mark must now explicitly declare a valid type and the fields that
+        // type requires, or the WHOLE request is rejected with a real 422
+        // naming which mark and why — never a quiet no-op. The shape the
+        // CURRENT front-end (review.blade.php's stroke/note marks) actually
+        // sends already satisfies this and was re-verified end to end after
+        // this change (real HTTP POST → real DB row → real playback file).
         $validated = $request->validate([
-            'marks' => ['nullable', 'array'],
+            'marks' => ['nullable', 'array', function (string $attribute, $value, \Closure $fail) {
+                foreach ((array) $value as $page => $marksOnPage) {
+                    if (! is_array($marksOnPage)) {
+                        $fail("Page {$page}'s marks must be a list.");
+                        continue;
+                    }
+                    foreach ($marksOnPage as $i => $mark) {
+                        if (! is_array($mark)) {
+                            $fail("Mark {$page}.{$i} must be an object.");
+                            continue;
+                        }
+                        $type = $mark['type'] ?? null;
+                        if ($type === 'note') {
+                            if (! isset($mark['text']) || trim((string) $mark['text']) === '') {
+                                $fail("Mark {$page}.{$i} is a note but has no text.");
+                            }
+                        } elseif ($type === 'highlight') {
+                            if (! isset($mark['points']) || ! is_array($mark['points']) || count($mark['points']) < 2) {
+                                $fail("Mark {$page}.{$i} is a highlight but has fewer than 2 points.");
+                            }
+                        } else {
+                            $fail("Mark {$page}.{$i} has a missing or unrecognised type — expected 'highlight' or 'note'.");
+                        }
+                    }
+                }
+            }],
             'marks.*' => ['array'],
             'marks.*.*' => ['array'],
         ]);
