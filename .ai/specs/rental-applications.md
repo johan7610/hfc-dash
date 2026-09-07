@@ -1409,6 +1409,77 @@ this is reachable only by direct URL
 (`corex/rental-applications/{id}/review`) — reported as an open item, not
 silently left out.
 
+### Layout fix — proportions, not a rebuild (Johan, 2026-09-07)
+
+The first pass used a 50/50 `grid-cols-1 lg:grid-cols-2` split. Johan's own
+words, verbatim: *"why does all designs turn into fuckups instead of a
+working document? ... the right panel is only a small section of the
+screen. not half the screen. design basics and corex have lots of them
+already like on recipient esign screen - small usable panel on right ...
+with enough space to still use the actual document in the middle."* A
+50/50 split makes the document unreadable — it defeats the entire point of
+putting it on screen.
+
+**Pattern matched, not invented.** CoreX already solves "dominant document
++ narrow working panel," twice, and both were read before writing any CSS:
+
+- `resources/views/docuperfect/signatures/external/sign.blade.php` —
+  `.recipient-doc-main { flex: 1 1 auto; min-width: 0; }` (document,
+  dominant) + `.recipient-amend-col { flex: 0 0 260px; width: 260px;
+  align-self: stretch; }` (fixed narrow working column), row layout from
+  1440px up, stacks below it.
+- `resources/views/docuperfect/signatures/review.blade.php` (the agent-side
+  signature review screen) — `.review-main { flex: 1 1 0%; min-width: 0; }`
+  + `.review-aside { width: 260px; flex: 0 0 260px; align-self: stretch; }`,
+  stacks below 1280px. This file's own comment already reads *"260px
+  column matching cc6's recipient panel"* — confirming the 260px fixed
+  working-panel width is a deliberate, twice-applied CoreX convention, not
+  a coincidence.
+
+`review.blade.php` (this screen) now uses the same shape:
+`.rental-review-main` (flex: 1 1 auto, dominant — application summary +
+supporting documents/iframes) and `.rental-review-aside` (fixed 260px,
+sticky — the affordability assessment inputs), flex-column stacked below
+1280px, flex-row above it. No third "instructions" rail exists as real
+markup in either source file (the one comment in `sign.blade.php`
+mentioning a "fixed left rail" doesn't correspond to any implemented
+column there) — reported as such rather than inventing one.
+
+**Convention for the next screen:** any CoreX screen that puts a document
+or long content area next to an agent's own working panel should default
+to this exact shape — dominant `flex: 1 1 auto` main column + a fixed
+`260px` (`flex: 0 0 260px`) side column, collapsing to stacked below
+~1280px. Check for an existing `.review-main`/`.review-aside` or
+`.recipient-doc-main`/`.recipient-amend-col` pair before inventing a new
+proportion.
+
+**Verification.** Real in-process HTTP dispatch (Laravel's actual HTTP
+kernel, not a mock) against `corex/rental-applications/13/review` — a real
+application (agency 1) with two real attached PDFs (`Rental Application
+Test.pdf`, `Property Report - 20 Marina Glen.pdf`) — logged in as a real
+agent (id 22): `200 OK`, both PDF names present in the rendered output, the
+old `lg:grid-cols-2` grid classes gone, the new `.rental-review-columns` /
+`.rental-review-main` / `.rental-review-aside` classes present and
+correctly nested. `php -l` clean.
+
+A real Chromium screenshot at a 1500px viewport was attempted (Puppeteer +
+system Chromium, real rendered HTML, real built CSS/JS assets) — Chromium
+launched and could reach `corex/rental-applications/13/review`'s HTML
+content over `curl`/plain Node `fetch`, but the browser process's own
+requests to the same local server were intercepted by this environment's
+sandbox networking layer (returned a generic nginx 404 that did not affect
+non-browser requests to the identical URL). Could not produce an image
+because of that sandbox limitation, not a defect in the page — flagging
+rather than asserting it looks right. Verified the proportions
+arithmetically instead, from the real layout constants (not assumed):
+sidebar `w-60` = 240px, main content padding `p-4 lg:p-6` = 24px/side at
+≥1024px (`layouts/corex-app.blade.php`). At a 1500px viewport: 1500 − 240
+(sidebar) − 48 (padding) = 1212px content width; aside 260px + 16px gap =
+276px reserved; document column = 1212 − 276 = **936px**. Under the old
+50/50 grid (20px gap), the document column was (1212 − 20) / 2 = **596px**.
+The fix gives the document ~57% more width, and the assessment panel goes
+from 596px down to a fixed, always-narrow 260px — exactly Johan's ask.
+
 ---
 
 ## Round 3 (Johan, QA1) — list CRUD, contact email backfill, async document upload

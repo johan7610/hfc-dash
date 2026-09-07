@@ -31,10 +31,32 @@
         <a href="{{ route('corex.rental-applications.show', $rentalApplication) }}" class="corex-btn-outline text-xs">Back to application</a>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5" style="align-items: start;">
+    {{-- Layout, 2026-09-07 — Johan rejected the original 50/50 grid ("makes the
+         document unreadable, defeats the purpose"). CoreX already solves "dominant
+         document + narrow working panel" twice — copied the proven pattern exactly
+         rather than inventing new proportions:
+           - resources/views/docuperfect/signatures/external/sign.blade.php
+             (.recipient-doc-main flex:1 1 auto / .recipient-amend-col flex:0 0 260px)
+           - resources/views/docuperfect/signatures/review.blade.php
+             (.review-main flex:1 1 0% / .review-aside width:260px flex:0 0 260px,
+             which itself notes "260px column matching cc6's recipient panel")
+         Same two-region shape here: review-main (dominant, application + documents)
+         and review-aside (fixed 260px, the agent's own working inputs). Stacks
+         below 1280px, same breakpoint family as the signature review screen. --}}
+    <style>
+        .rental-review-columns { display: flex; flex-direction: column; gap: 20px; }
+        .rental-review-main    { flex: 1 1 auto; min-width: 0; }
+        .rental-review-aside   { width: 100%; }
+        @media (min-width: 1280px) {
+            .rental-review-columns { flex-direction: row; gap: 16px; align-items: flex-start; }
+            .rental-review-aside   { flex: 0 0 260px; width: 260px; align-self: stretch; position: sticky; top: 16px; }
+        }
+    </style>
 
-        {{-- LEFT PANEL — the submitted application + supporting documents, viewable on screen --}}
-        <div class="space-y-4">
+    <div class="rental-review-columns mt-5">
+
+        {{-- MAIN — the submitted application + supporting documents, viewable on screen. Dominant column. --}}
+        <div class="rental-review-main space-y-4">
             <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
                 <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Submitted Application</h2>
                 <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -90,8 +112,8 @@
             </div>
         </div>
 
-        {{-- RIGHT PANEL — the agent's own affordability capture + suggestive calculation --}}
-        <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
+        {{-- ASIDE — the agent's own affordability capture + suggestive calculation. Narrow, fixed 260px working column. --}}
+        <div class="rental-review-aside rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
             <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Affordability Assessment</h2>
             <p class="text-xs mb-4" style="color: var(--text-muted);">
                 Your own notes — nothing here is sent to the applicant or shown anywhere else. Saved automatically as you type.
