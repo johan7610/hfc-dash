@@ -643,16 +643,80 @@ list, detail view, PDF, and document download, never by hiding a link:**
   agency's admin gets a real 404 on both `show` and `pdf` by direct URL
   (route-model-binding never resolves a cross-agency id at all, before
   any scope check runs).
-- **Known gap, not fixed here (deploy/ops, out of this lane's scope):**
-  `corex:sync-permissions --merge-defaults` has so far only granted the 4
-  `rental_applications.*` permission keys to the `admin` role (per cc2's
-  2026-09-07 QA1 fix, see "Deploy requirements" above) — no
-  `rental_applications.view` *scope* row exists for any other role on
-  real QA1 data, so a genuine front-line `agent` account cannot open this
-  feature at all yet (403 at the permission-middleware layer, before
-  `scopeVisibleTo()` is ever reached). The scoping mechanism itself is
-  correct and tested against the `agent`/`branch_manager` roles' own
-  built-in fallback defaults (`PermissionService`'s AT-265 unseeded-grants
-  posture) — what's missing is deciding and granting which roles besides
-  `admin` should hold `rental_applications.*` at all, and at what scope.
-  That is a product/permissions decision for Johan, not a code defect.
+### Role defaults (Johan, 2026-09-07 — resolves the gap this section used to describe)
+
+**Previously a real gap, now fixed on QA1:** `corex:sync-permissions
+--merge-defaults` had only ever granted the 4 `rental_applications.*` keys
+to the `admin` role (cc2's 2026-09-07 fix only covered admin) — a genuine
+front-line agent account could not open this feature at all. Johan: "he
+moved this feature into the normal agency-visible menu precisely because
+agents are the people who will use it. A rental application that only an
+admin can open is not a working feature."
+
+`config/corex-permissions.php`'s `role_defaults` now grants, matching the
+house pattern (sanity-checked against `documents.view`/`documents.create`
+and `rentals.view`/`rentals.create`, which use the identical shared-key-
+across-roles approach — breadth is enforced by scope, not by giving each
+role a differently-named key):
+
+| Key | admin | branch_manager | agent |
+|---|---|---|---|
+| `rental_applications.view` | ✓ (via all-minus-exclude) | ✓ | ✓ |
+| `rental_applications.create` | ✓ | ✓ | ✓ |
+| `rental_applications.view_returned` | ✓ | ✓ | ✓ |
+| `rental_applications.manage_settings` | ✓ | — | — |
+
+`manage_settings` is deliberately admin-only, matching the house pattern
+for `manage_*`/`*.configure`-shaped keys elsewhere (`manage_finance_definitions`,
+`compliance.whistleblow.configure`, `outreach_templates.manage`) — narrower
+than the `view`/`create` tier. `admin` needed no explicit `role_defaults`
+edit at all: it already gets every permission via the all-minus-exclude
+pattern, which is why cc2's original sync granted it automatically.
+
+**Deployed to QA1 on 2026-09-07** via `corex:sync-permissions --merge-defaults`
+(role_permissions backed up first to `/root/db-backups/` — safe, additive,
+existing customisations untouched). Before: 55,040 total rows, 172
+`rental_applications.*` rows (admin only, 43 agencies). After: 55,280 total
+rows, 412 `rental_applications.*` rows — exactly 240 new rows
+(`branch_manager` +3 keys × 40 agencies, `agent` +3 keys × 40 agencies),
+verified by direct query that **every single new row's key starts with
+`rental_applications.`** — nothing outside this module was touched by this
+run. `rental_applications.view`'s `scope` column resolved correctly per
+`scope_defaults` (admin→`all`, branch_manager→`branch`, agent→`own`); the
+other three keys correctly carry no scope (they gate route access only,
+`getDataScope()` only ever reads the `.view` key regardless of which
+action-permission unlocked the route).
+
+**Re-verified with real QA1 accounts, not synthetic test users, after the
+grant** (Retha Kelly `agent`/branch 1, Shawn Du Bois `agent`/branch 1,
+Jenny Joubert `agent`/branch 2, Falan Du Bois `branch_manager`/branch 1,
+Sandra Mante `admin`/agency 90) — actual HTTP status codes:
+
+| Actor | Target | Route | Status |
+|---|---|---|---|
+| Agent (own) | Own application | index/show/pdf/document-download | 200 |
+| Agent (own) | Same-branch colleague's application | show/pdf/document-download | **403** |
+| Agent (own) | Different-branch agent's application | show/document-download | **403** |
+| Branch manager (branch) | Own-branch application (either agent) | index (sees both)/show | 200 |
+| Branch manager (branch) | Different-branch application | show/pdf | **403** |
+| Different-agency admin | Any application in this agency | show/pdf/document-download | **404** |
+
+The 403 vs 404 split is intentional, not inconsistent: same-agency-wrong-scope
+is a real 403 (the record exists, this user just isn't permitted); a
+different agency's admin gets 404 because `BelongsToAgency`'s global scope
+never resolves the row for route-model-binding at all, before any
+finer-grained scope check runs — the same behaviour already proven for the
+`admin`-only case earlier in this section, now reconfirmed with the newly-
+granted roles.
+
+### Required post-deploy step — do not skip
+
+**`php artisan corex:sync-permissions --merge-defaults` is a REQUIRED step
+on every environment this feature is deployed to** (QA1, Staging, live) —
+it has already been missed once on QA1 today (cc2's fix only covered
+`admin`; this entry's own fix was needed to cover `branch_manager`/`agent`
+too). A `git pull` deploy never runs this automatically. Add it to this
+feature's deploy checklist alongside `deploy:sync-reference-data`
+(CLAUDE.md Non-negotiable #12, BUILD_STANDARD §8) — both exist for the
+same reason: seeder/config-owned data that a plain `migrate` does not
+carry across environments.

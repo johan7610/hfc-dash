@@ -791,6 +791,14 @@ return [
                 'deals.view', 'deals.create', 'deals.edit',
                 'listings.view', 'listings.create', 'listings.edit',
                 'rentals.view', 'rentals.create', 'rentals.edit',
+                // AT-392 — Johan, 2026-09-07: "he moved this feature into the normal
+                // agency-visible menu precisely because agents are the people who will
+                // use it." Same shared-key-across-roles pattern as documents.view/.create
+                // and rentals.view/.create above — breadth (own/branch/all) is enforced
+                // by RentalApplication::scopeVisibleTo() via scope_defaults, not by a
+                // separate per-role key. manage_settings is deliberately NOT granted here
+                // (admin-only, matching manage_finance_definitions / outreach_templates.manage).
+                'rental_applications.view', 'rental_applications.create', 'rental_applications.view_returned',
                 'daily_activity.view', 'daily_activity.create', 'daily_activity.edit',
                 'tv_messages.view', 'tv_messages.create', 'tv_messages.edit',
                 'targets.view', 'targets.create', 'targets.edit',
@@ -910,6 +918,10 @@ return [
                 'calendar.tile.my_deals', // AT-216 R3 — deal-pipeline deck tile (agent's working surface)
                 'listings.view',
                 'rentals.view', 'rentals.create', 'rentals.edit',
+                // AT-392 — see branch_manager's identical block above for the full
+                // rationale. Agents are the people who send rental applications;
+                // manage_settings is deliberately not granted here (admin-only).
+                'rental_applications.view', 'rental_applications.create', 'rental_applications.view_returned',
                 'daily_activity.view', 'daily_activity.create', 'daily_activity.edit',
                 'targets.view',
                 'access_my_portal', 'upload_own_documents', 'edit_own_profile', 'view_agency_documents',
