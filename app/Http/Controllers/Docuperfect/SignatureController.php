@@ -21,6 +21,7 @@ use App\Models\Docuperfect\NamedField;
 use App\Services\Docuperfect\SignatureService;
 use App\Services\Docuperfect\LetterheadRefresher;
 use App\Services\Docuperfect\SignatureSurfaceNormalizer;
+use App\Services\Docuperfect\SigningWhatsAppLinkService;
 use App\Services\PermissionService;
 use App\Services\WebTemplateFieldPartyMap;
 use Illuminate\Http\Request;
@@ -31,6 +32,10 @@ use Illuminate\Support\Str;
 
 class SignatureController extends Controller
 {
+    // AT-332 — see EnforcesReauthorisationBinding's own doc block: re-authorisation
+    // after an amendment is bound to the specific user who authorised the original.
+    use \App\Http\Controllers\Concerns\EnforcesReauthorisationBinding;
+
     protected SignatureService $signatureService;
 
     public function __construct(SignatureService $signatureService)
@@ -1372,6 +1377,15 @@ class SignatureController extends Controller
 
                 if ($nextRequest) {
                     $this->signatureService->sendSigningRequest($nextRequest);
+                    // AT-395 fix (2026-09-07) — this used to land on the
+                    // "signing complete" page with no check at all of whether
+                    // the NEXT party's invitation actually sent. Sibling of the
+                    // same fix in sendForSignature() above.
+                    $freshNext = $nextRequest->fresh();
+                    if ($freshNext->status === SignatureRequest::STATUS_PENDING && $freshNext->invite_send_status === 'failed') {
+                        return redirect()->route('docuperfect.esign.signingComplete', ['flow' => $wizardFlowId])
+                            ->with('error', "Signed, but could not notify {$freshNext->signer_name} — {$freshNext->invite_send_error}");
+                    }
                 }
             }
 
@@ -1928,12 +1942,25 @@ class SignatureController extends Controller
         }
         $nextParty = $nextPartyRole ? collect($parties)->firstWhere('role', $nextPartyRole) : null;
 
+        // AT-385/AT-332 — the actual next-recipient SignatureRequest (not the
+        // raw $nextParty array above, which is display-only and does not
+        // reflect whether a real dispatch happened). Same reliable pattern
+        // ESignWizardController::signingComplete() already uses: only a
+        // genuine PENDING request counts, so the WhatsApp button never
+        // renders for a recipient who hasn't actually been sent anything yet.
+        $nextRecipientRequest = $template->requests()
+            ->where('status', SignatureRequest::STATUS_PENDING)
+            ->whereNotIn('party_role', ['agent', 'supervisor', 'supervisor_final'])
+            ->orderBy('signing_order', 'asc')
+            ->first();
+
         return view('docuperfect.signatures.send-confirmation', [
             'document' => $document,
             'template' => $template,
             'tenant' => $nextParty, // keep 'tenant' key for backward compat with existing view
             'nextParty' => $nextParty,
             'nextPartyRole' => $nextPartyRole,
+            'nextRecipientRequest' => $nextRecipientRequest,
             'user' => $user,
         ]);
     }
@@ -2001,19 +2028,41 @@ class SignatureController extends Controller
                 // candidate as $only, which the walk tries first and falls
                 // through from exactly like any other skip if it turns out
                 // to no longer qualify by the time this runs.
-                $this->signatureService->advanceToNextSigningParticipant($template, $partyRequest);
+                $dispatched = $this->signatureService->advanceToNextSigningParticipant($template, $partyRequest);
+            } else {
+                $dispatched = null;
             }
 
             $partyLabel = $currentRole ? ucfirst($currentRole) : 'next party';
 
-            if ($document->document_type === 'rental_upload_send') {
+            // AT-395 fix (2026-09-07) — this used to flash the success message
+            // unconditionally, regardless of whether the email actually sent.
+            // advanceToNextSigningParticipant() returns the request it just
+            // acted on; only a request that genuinely went through a real send
+            // attempt (STATUS_PENDING — an authoriser-role return or a
+            // deferred/email-less absorb never reaches sendSigningRequestEmail
+            // at all) can have invite_send_status='failed' worth checking.
+            $fresh = $dispatched?->fresh();
+            if ($fresh && $fresh->status === SignatureRequest::STATUS_PENDING && $fresh->invite_send_status === 'failed') {
                 return redirect()->route('docuperfect.esign.myDocuments')
-                    ->with('success', "Document sent to {$partyLabel} for signing.");
+                    ->with('error', "Could not send to {$partyLabel} — {$fresh->invite_send_error}");
             }
 
-            $dashboardRoute = $isSales ? 'docuperfect.sales' : 'docuperfect.rental';
-
-            return redirect()->route($dashboardRoute)
+            // Johan (2026-09-07): "after sending we are landing in this
+            // screen - /docuperfect/sales - old screen - we should be
+            // landing on /docuperfect/esign/my-documents." This branch
+            // (agent-complete -> next-party send) used to route sales/
+            // rental documents to the old dashboard, unconditionally on
+            // $isSales, while a rental_upload_send document (just above)
+            // already correctly went to My E-Sign Documents. Made
+            // consistent: every document sent from here lands on the same
+            // canonical e-sign documents screen, not the old dashboard.
+            // NOTE: my-documents.blade.php reads session('status'), not
+            // 'success' — using 'status' here (unlike the rental_upload_send
+            // branch just above, which flashes 'success' and so never
+            // actually displays on this page; a pre-existing, separate
+            // mismatch, reported not touched — out of this fix's scope).
+            return redirect()->route('docuperfect.esign.myDocuments')
                 ->with('status', "Document sent to {$partyLabel} for signing.");
         }
 
@@ -2061,9 +2110,19 @@ class SignatureController extends Controller
         }
 
         try {
-            $this->signatureService->sendForSigning($template, $user);
+            $dispatched = $this->signatureService->sendForSigning($template, $user);
         } catch (\LogicException $e) {
             return redirect()->back()->withErrors(['error' => $e->getMessage()]);
+        }
+
+        // AT-395 fix (2026-09-07) — this used to flash success unconditionally
+        // regardless of whether the FIRST party's invitation actually sent.
+        // Same bug class as the other advanceToNextParty()-driven flashes
+        // above: sendForSigning() now returns the request it dispatched to.
+        $freshDispatched = $dispatched?->fresh();
+        if ($freshDispatched && $freshDispatched->status === SignatureRequest::STATUS_PENDING && $freshDispatched->invite_send_status === 'failed') {
+            return redirect()->route('docuperfect.esign.myDocuments')
+                ->with('error', "Could not send to {$freshDispatched->signer_name} — {$freshDispatched->invite_send_error}");
         }
 
         if ($document->document_type === 'rental_upload_send') {
@@ -2090,7 +2149,14 @@ class SignatureController extends Controller
             return redirect()->back()->with('error', 'Cannot send reminder — request is already ' . $signatureRequest->status . '.');
         }
 
-        $this->signatureService->sendManualReminder($signatureRequest, $request->user());
+        $error = $this->signatureService->sendManualReminder($signatureRequest, $request->user());
+
+        // AT-395 fix (2026-09-07) — this used to flash success unconditionally
+        // regardless of whether sendManualReminder() actually sent the email
+        // (same bug class as the invitation-send flashes above).
+        if ($error !== null) {
+            return redirect()->back()->with('error', "Could not send reminder to {$signatureRequest->signer_name} — {$error}");
+        }
 
         return redirect()->back()->with('status', "Reminder sent to {$signatureRequest->signer_name}.");
     }
@@ -2131,6 +2197,55 @@ class SignatureController extends Controller
         }
 
         return redirect()->back()->with('status', "Re-sent the {$kind} to {$signatureRequest->signer_name}.");
+    }
+
+    /**
+     * AT-385 / AT-332 — logs that the agent OPENED the WhatsApp deep link for
+     * this recipient. This is the only thing CoreX can honestly know: the
+     * click opens wa.me in the agent's own browser client-side, and CoreX is
+     * never told whether the agent actually sent the message or whether
+     * WhatsApp delivered it. Deliberately does NOT record "sent" — see
+     * SignatureAuditLog::ACTION_WHATSAPP_LINK_OPENED and
+     * SigningWhatsAppLinkService's own docblock.
+     *
+     * Fire-and-forget from the client (called AFTER window.open(), never
+     * blocking it) — always returns a small JSON ack, never a redirect; the
+     * button's own UI does not wait on this to know it "worked" (opening the
+     * tab already told the agent that).
+     */
+    public function whatsappOpened(Request $request, Document $document, SignatureRequest $signatureRequest, SigningWhatsAppLinkService $waLinks)
+    {
+        $this->authorizeDocument($request->user(), $document);
+        $this->authorizeSignatureRequestForDocument($signatureRequest, $document);
+
+        $data = $request->validate([
+            'normalized_phone' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        // Re-derive server-side rather than trust the client's posted phone —
+        // the client only ever sends back what the server itself computed
+        // and rendered into the button, but re-deriving here means a stale
+        // page (phone edited in another tab since render) still logs the
+        // CURRENT confidently-normalised number, never a stale/mismatched one.
+        $agencyId = (int) ($document->agency_id ?? $request->user()?->effectiveAgencyId() ?? 0);
+        $availability = $waLinks->resolveAvailability($signatureRequest, $agencyId);
+
+        if (!$availability['available'] || !$availability['normalizedPhone']) {
+            // The button shouldn't have been clickable in this state — log
+            // nothing false, just say so. Never fabricate an "opened" entry
+            // for a link that couldn't have been valid.
+            return response()->json(['ok' => false, 'message' => 'WhatsApp link is not currently available for this recipient.'], 422);
+        }
+
+        $result = $waLinks->logOpened($signatureRequest, $request->user(), $availability['normalizedPhone']);
+
+        return response()->json([
+            'ok'               => true,
+            'opened_at'        => $result['auditLog']->created_at?->format('d M Y H:i') ?? now()->format('d M Y H:i'),
+            'normalized_phone' => $availability['normalizedPhone'],
+            'contact_id'       => $signatureRequest->contact_id,
+            'communication_id' => $result['communicationId'],
+        ]);
     }
 
     // ──────────────────────────────────────────────
@@ -2600,10 +2715,20 @@ class SignatureController extends Controller
 
         // Auto-approve: skip the wet-ink review step, approve immediately
         if ($request->boolean('auto_approve')) {
-            $this->signatureService->approveUploadOnBehalf($signingRequest, $request->user());
+            $dispatched = $this->signatureService->approveUploadOnBehalf($signingRequest, $request->user());
 
             // See the ~line 1900 comment — isSalesDocument(), never raw template_type.
             $dashboardRoute = $document->template?->isSalesDocument() ? 'docuperfect.sales' : 'docuperfect.rental';
+
+            // AT-395 fix (2026-09-07) — this used to flash success
+            // unconditionally regardless of whether the next party's
+            // invitation actually sent (same bug class as the other
+            // advance-flow flashes in this controller).
+            $freshDispatched = $dispatched?->fresh();
+            if ($freshDispatched && $freshDispatched->invite_send_status === 'failed') {
+                return redirect()->route($dashboardRoute)
+                    ->with('error', 'Uploaded and approved, but could not send to ' . $freshDispatched->signer_name . ' — ' . $freshDispatched->invite_send_error);
+            }
 
             return redirect()->route($dashboardRoute)
                 ->with('status', 'Uploaded and approved for ' . $signingRequest->signer_name . '. Signing advanced.');
@@ -3217,17 +3342,25 @@ class SignatureController extends Controller
 
         $result = $this->signatureService->approveAndAdvance($template);
 
-        // Johan, 2026-08-27 (found on the late-estate walkthrough — approving
-        // THIS exact "EXCLUSIVE AUTHORITY TO SELL" document landed the agent
-        // on the RENTAL dashboard) — isSalesDocument(), never raw
-        // template_type: this template's template_type is 'cds', a builder
-        // category, never the string 'sales'/'rentals' the crude check
-        // expected. See ~line 1900 for the same fix's first occurrence.
-        $dashboardRoute = $document->template?->isSalesDocument() ? 'docuperfect.sales' : 'docuperfect.rental';
-
         if ($result['action'] === 'sent') {
+            // Johan (2026-09-07): the same "old dashboard instead of My
+            // E-Sign Documents" defect as sendForSignature() above (~line
+            // 2028) — this is the second path he asked us to check for.
+            // This branch's own "document completed" sibling just below
+            // already correctly redirects to myDocuments; this "sent to
+            // next party" branch did not.
             $nextName = $result['next_name'] ?? ucfirst($result['next_party']);
-            return redirect()->route($dashboardRoute)
+
+            // AT-395 fix (2026-09-07) — this used to flash success
+            // unconditionally regardless of whether the next party's
+            // invitation actually sent (same bug class as the other
+            // advance-flow flashes in this controller).
+            if (!empty($result['invite_send_failed'])) {
+                return redirect()->route('docuperfect.esign.myDocuments')
+                    ->with('error', "Approved, but could not send to {$nextName} — {$result['invite_send_error']}");
+            }
+
+            return redirect()->route('docuperfect.esign.myDocuments')
                 ->with('status', "Approved. Document sent to {$nextName} ({$result['next_party']}) for signing.");
         }
 
@@ -3256,6 +3389,12 @@ class SignatureController extends Controller
         $this->authorizeDocument($user, $document);
 
         $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
+
+        // AT-332 — re-authorisation is bound to the original authorising user.
+        if ($blockReason = $this->reauthorisationBindingBlockReason($template, $user, 'approve_amendment_node')) {
+            return back()->with('error', $blockReason);
+        }
+
         $result = $this->signatureService->approveAmendmentNode($template, $user);
 
         if (empty($result['ok'])) {
@@ -3317,6 +3456,17 @@ class SignatureController extends Controller
         if (empty($result['ok'])) {
             return back()->with('error', $result['error'] ?? 'Could not send the document back.');
         }
+
+        // AT-395 fix (2026-09-08) — the state transition (rejecting the amendment,
+        // reopening the editor's request) genuinely succeeded even if the
+        // notification email failed, so this still redirects to myDocuments —
+        // but it must say so honestly, not claim the email went out when it didn't.
+        if (! empty($result['send_failed'])) {
+            return redirect()->route('docuperfect.esign.myDocuments')
+                ->with('error', 'Rejected and reopened for ' . ($result['editor'] ?? 'the recipient')
+                    . ', but could not send the notification email — ' . $result['send_error']);
+        }
+
         return redirect()->route('docuperfect.esign.myDocuments')
             ->with('status', 'Sent back to ' . ($result['editor'] ?? 'the recipient')
                 . ' — they will get a fresh signing link to remove their change and re-sign.');
@@ -4043,6 +4193,14 @@ class SignatureController extends Controller
             $request->signer_cell
         );
 
+        // AT-395 fix (2026-09-07) — this used to flash success unconditionally
+        // regardless of whether the resumed party's invitation actually sent
+        // (same bug class as the other advance-flow flashes in this controller).
+        if (!empty($result['invite_send_failed'])) {
+            return redirect()->route('docuperfect.esign.myDocuments')
+                ->with('error', "Signing resumed, but could not send to {$request->signer_name} — {$result['invite_send_error']}");
+        }
+
         return redirect()->route('docuperfect.esign.myDocuments')
             ->with('status', "Signing resumed — {$request->signer_name} will be sent the document for signing.");
     }
@@ -4245,6 +4403,19 @@ class SignatureController extends Controller
 
         if (!in_array($action, ['accept', 'reject'])) {
             return response()->json(['ok' => false, 'error' => 'Invalid action.'], 422);
+        }
+
+        // AT-332 — this was the most severe of the three unbound re-approval
+        // paths: agentAmendmentAction() bulk-accepts EVERY pending party's row
+        // with no identity check at all. Re-authorisation ('accept') is bound
+        // to the original authorising user; a 'reject' is not an
+        // authorisation act and is left alone.
+        if ($action === 'accept') {
+            $user = $request->user();
+            $template = $amendment->loadMissing('template')->template;
+            if ($template && ($blockReason = $this->reauthorisationBindingBlockReason($template, $user, 'amendment_action_accept'))) {
+                return response()->json(['ok' => false, 'error' => $blockReason], 422);
+            }
         }
 
         $this->signatureService->agentAmendmentAction($amendment, $action, $reason);
