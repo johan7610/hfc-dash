@@ -2838,6 +2838,13 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/{rentalApplication}/review', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'show'])->name('corex.rental-applications.review');
         Route::post('/{rentalApplication}/review/assessment', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'saveAssessment'])->name('corex.rental-applications.review.assessment');
         Route::get('/{rentalApplication}/documents/{document}/view', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'viewDocumentInline'])->name('corex.rental-applications.documents.view');
+        // Usability round, 2026-09-07 — persistent highlight marks, reusing
+        // ViewingPack's redaction architecture (own the render, persist
+        // marks, play back to the next viewer) with translucent colour
+        // instead of destructive black-out.
+        Route::get('/{rentalApplication}/documents/{document}/highlight-data', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'highlightData'])->name('corex.rental-applications.documents.highlight-data');
+        Route::post('/{rentalApplication}/documents/{document}/highlight', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'applyHighlight'])->name('corex.rental-applications.documents.highlight');
+        Route::get('/{rentalApplication}/documents/{document}/highlighted-file', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'highlightedFile'])->name('corex.rental-applications.documents.highlighted-file');
     });
 
     Route::post('/settings/presentations', [CoreXSettingsController::class, 'updatePresentations'])->middleware('permission:access_settings')->name('corex.settings.presentations.update');

@@ -1583,6 +1583,150 @@ spec conversation with Johan (who selects the approver, per-application or
 per-agency default, what "sign as well" means concretely, what happens to
 status/notifications on approval) before any code is written.
 
+### Own the viewer — persistent PDF highlights (Johan, 2026-09-07)
+
+Johan's correction, verbatim: *"we have working pdf edits like on viewing
+pack with redaction. so pdf with edits exists in corex. we just need to
+build it correctly from the word go and not build stuff that we cannot
+actually use. like calling chrome pdf and we cannot save what we do in it
+in corex for the next party to not see what was done. simple. not a
+problem if we build correctly rather than trying to take shortcuts"* — he
+was right: replacing the iframe's `#navpanes=0` tweak with a real annotation
+layer was the correct call, not a shortcut.
+
+**Files the working pattern was taken from, read before writing any code:**
+
+- `resources/views/command-center/viewing-packs/show.blade.php` (the
+  `redactionTool()` Alpine component, ~L411–701) — the real, persistent,
+  in-app drawing UI: Pointer-Events drag-to-draw over server-rendered page
+  images, undo/redo via snapshot stacks, per-mark delete, submit via
+  fetch. `resources/views/tools/pdf-suite/redact.blade.php` (a client-side
+  PDF.js one-shot download tool, unrelated to any persisted record) was
+  found first and correctly ruled OUT — it never persists anything to a
+  document.
+- `app/Services/ViewingPack/ViewingPackRedactionService.php` —
+  `pagePreviews()` rasterizes the source via Poppler `pdftoppm` (server-
+  side, NOT PDF.js — this is what lets CoreX own every pixel) and
+  `redact()` burns marks into the raster via GD, reassembles a flattened
+  image-only PDF via dompdf, stores it at a **stable path**, and updates a
+  DB pointer (`ViewingPackDocument::redacted_file_path`).
+- `app/Http/Controllers/CommandCenter/ViewingPackController.php`
+  (`redactionData` / `redactDocument` / `redactedFile`) — the three-
+  endpoint shape: get-pages, apply-marks, serve-marked-copy.
+- Playback for "the next party": `show.blade.php` ~L322 —
+  `$isRedacted ? link-to-redacted-file : link-to-original`. Whoever opens
+  the document next automatically gets the marked version. This is
+  precisely what Johan means by "the next party sees what was done," and
+  is the one property any replacement had to keep.
+
+**One deliberate divergence, not a guess — a technical call made and
+stated plainly rather than asked as a question:** redaction burns *opaque
+black* into a *flattened, text-destroying* new file — correct and required
+for POPIA (nothing may survive to be recovered). A highlighter is the
+opposite by definition: translucent, non-destructive, meant to be seen
+and later removed. Reusing `redact()`'s literal behaviour for a
+"highlighter" would have blacked out passages instead of highlighting
+them — the wrong feature, not a shortcut avoided. So this reuses the
+**architecture** exactly (own the render, capture marks the identical way,
+persist to a stable artifact, substitute it at read-time for the next
+viewer) through a **new, dedicated service**
+(`app/Services/RentalApplications/RentalApplicationDocumentHighlightService.php`)
+rather than a mode flag on `ViewingPackRedactionService` — that file is
+live compliance code for an unrelated feature and was not touched.
+
+**What was built** (all under `RentalApplicationReviewController`, the
+existing home for this screen — no other lane's file touched):
+
+- `database/migrations/..._create_rental_application_document_highlights_table.php`
+  + `RentalApplicationDocumentHighlight` model — one row per `Document`
+  (`agency_id`, `document_id` unique, `marks_json`, `highlighted_file_path`,
+  `updated_by_user_id`, soft-deletes). `marks_json` is the one addition
+  beyond `viewing_pack_documents`' shape: redaction never needs to show
+  existing boxes back to the agent (nothing to un-redact meaningfully), but
+  a highlighter must let the agent see and edit their own existing marks on
+  reopen — confirmed working by round-trip test below.
+- `RentalApplicationDocumentHighlightService` — same rasterize → GD → GD
+  alpha-blended fill → dompdf-reassemble pipeline as
+  `ViewingPackRedactionService`, translucent colour (`imagealphablending`
+  + `imagecolorallocatealpha`, ~35% opacity) instead of opaque black. Four
+  colours (yellow default, green, pink, blue). Re-applying always
+  re-rasterizes the pristine SOURCE (never a previously-marked copy), so
+  removing a mark and re-applying genuinely removes it — same guarantee
+  redaction gives. An empty mark set clears `highlighted_file_path`
+  entirely rather than leaving a needless artifact — the next viewer then
+  sees the plain original.
+- **Real bug caught by testing, not assumed working:** the first version
+  read the source file via `Storage::disk($doc->disk)->path(...)` (copied
+  from `ViewingPackRedactionService`) and failed with "source document
+  missing" — `App\Models\Document::decryptedContents()` (used correctly by
+  the existing `viewDocumentInline()` on this same controller) is the
+  MANDATORY read path for every `Document`'s bytes per its own doc comment
+  (AT-173 — enveloped/encrypted files are transparently decrypted; every
+  byte-reader must go through it or `downloadResponse()`, never read the
+  raw file directly). The redaction service's raw-path read happens to work
+  for viewing-pack documents but is not the sanctioned pattern; this
+  service was fixed to use `decryptedContents()` (writing to a throwaway
+  temp file for `pdftoppm`, deleted immediately after) before it ever
+  passed real-document testing.
+- Three new routes on the existing `rental-applications` prefix group:
+  `GET .../documents/{document}/highlight-data`,
+  `POST .../documents/{document}/highlight`,
+  `GET .../documents/{document}/highlighted-file` — named
+  `corex.rental-applications.documents.highlight*`, matching the existing
+  `documents.view`/`documents.download` naming.
+- `review.blade.php` — the old `<iframe>` per document is gone entirely,
+  replaced by a "View & Highlight" button opening a modal ported from
+  `redactionTool()` (same drag/undo/redo/remove-mark mechanics, JSON body
+  instead of FormData since there's no non-JS fallback here), plus a small
+  colour picker defaulting to **yellow** (Johan: *"set the default to
+  highlighter with a bright yellow colour as default. agents can reselect
+  if they want something else"*). A "Highlighted" badge shows per document
+  once marks exist — visible proof to any agent opening the list, not just
+  the one who drew them. Scope call, stated not guessed: built rectangle
+  highlight marks only (matching the proven interaction exactly) with a 4-
+  colour picker for "reselect if they want something else" — did **not**
+  build freehand pen/scribble/eraser tools, since that's not part of the
+  reusable pattern and is a materially larger addition than what was asked.
+  Items 1/2/3 from the original list are now moot rather than separately
+  fixed — there is no browser-native PDF viewer left on this screen at all
+  (no iframe, no `#navpanes=0` fragment needed) to have a default tool,
+  default colour, or hidden-panel problem on.
+
+**Verified for real, not asserted** (`storage/app/private` documents don't
+travel with a git worktree, so the one real attached PDF — app 13, document
+2974, "Rental Application Test.pdf," 950,811 bytes, agency 1 — was copied
+into the isolated test worktree read-only for this run):
+
+1. `GET highlight-data` on first open: `200`, 17 real rasterized pages,
+   real dimensions (1241×1755), real PNG data, `marks: []`.
+2. `POST highlight` with one mark on page 0: `200`,
+   `{"ok":true,"has_highlights":true,"mark_count":1}`.
+3. DB: real row created, `marks_json` holds the mark,
+   `highlighted_file_path` set, the artifact file exists on disk
+   (6,777,230 bytes — 17 rasterized pages assembled into one PDF).
+4. `GET highlighted-file`: `200`, `Content-Type: application/pdf`, real
+   `%PDF-` magic bytes, byte count matches the stored file exactly — proves
+   playback actually serves the marked copy, not a stub.
+5. `GET highlight-data` again: returns the SAME saved mark — proves the
+   round-trip (agent reopening sees their own existing highlight, not a
+   blank slate).
+6. `POST highlight` with an empty mark set: `200`,
+   `has_highlights:false`, `highlighted_file_path` cleared to `null` in the
+   DB — confirms "no marks left → next viewer sees the plain original."
+7. Cross-agency scoping: a real agency-17 user against agency-1's
+   application/document — both `highlight-data` and `highlighted-file`
+   returned `404` (route-model-binding never resolves the row across
+   agencies — the same split already documented for every other endpoint
+   on this controller).
+
+**Convention for the next screen that needs to mark up a document:** find
+`RentalApplicationDocumentHighlightService` (translucent, persisted,
+reopenable) or `ViewingPackRedactionService` (opaque, destructive,
+compliance-driven) first — one of those two is almost certainly the right
+base to extend or copy, not a third invention. Never hand a PDF to an
+iframe expecting to save anything drawn in it — the browser's native PDF
+viewer cannot report back to CoreX at all, by design, on every browser.
+
 ---
 
 ## Round 3 (Johan, QA1) — list CRUD, contact email backfill, async document upload

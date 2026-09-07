@@ -7,7 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Document;
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationAssessment;
+use App\Models\RentalApplicationDocumentHighlight;
 use App\Models\RentalApplicationQualifyingSetting;
+use App\Services\RentalApplications\RentalApplicationDocumentHighlightService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -48,10 +50,15 @@ class RentalApplicationReviewController extends Controller
         $multiplier = RentalApplicationQualifyingSetting::multiplierFor((int) $rentalApplication->agency_id);
         $result = $assessment->exists ? $assessment->qualifyingResult($multiplier) : null;
 
-        $documents = $rentalApplication->documents->map(function (Document $document) {
+        $highlightedByDocId = RentalApplicationDocumentHighlight::whereIn('document_id', $rentalApplication->documents->pluck('id'))
+            ->whereNotNull('highlighted_file_path')
+            ->pluck('id', 'document_id');
+
+        $documents = $rentalApplication->documents->map(function (Document $document) use ($highlightedByDocId) {
             return [
                 'document' => $document,
                 'inline_viewable' => $this->isInlineViewable($document->mime_type),
+                'has_highlights' => $highlightedByDocId->has($document->id),
             ];
         });
 
@@ -103,6 +110,102 @@ class RentalApplicationReviewController extends Controller
     }
 
     /**
+     * AT-392 Phase 2 usability round — page previews + any marks already
+     * saved for this document, for the highlight tool. Mirrors
+     * ViewingPackController::redactionData(). Nothing written to disk here —
+     * the unmarked preview only lives in this authenticated response.
+     */
+    public function highlightData(RentalApplication $rentalApplication, Document $document, RentalApplicationDocumentHighlightService $highlights)
+    {
+        $this->guardRentalApplication($rentalApplication);
+        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
+
+        try {
+            return response()->json($highlights->pagePreviews($document));
+        } catch (\Throwable $e) {
+            \Log::error('Rental application document highlight preview failed', ['document' => $document->id, 'error' => $e->getMessage()]);
+
+            return response()->json(['error' => 'This document could not be opened for highlighting.'], 422);
+        }
+    }
+
+    /**
+     * AT-392 Phase 2 usability round — apply the current mark set. Mirrors
+     * ViewingPackController::redactDocument()'s request/response shape
+     * (fetch + FormData, JSON on success/failure) so the frontend pattern
+     * copied from show.blade.php's redactionTool() needs no adaptation here.
+     */
+    public function applyHighlight(Request $request, RentalApplication $rentalApplication, Document $document, RentalApplicationDocumentHighlightService $highlights)
+    {
+        $this->guardRentalApplication($rentalApplication);
+        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
+
+        $validated = $request->validate([
+            'marks' => ['nullable', 'array'],
+            'marks.*' => ['array'],
+            'marks.*.*.x' => ['required', 'numeric'],
+            'marks.*.*.y' => ['required', 'numeric'],
+            'marks.*.*.w' => ['required', 'numeric', 'min:0'],
+            'marks.*.*.h' => ['required', 'numeric', 'min:0'],
+            'marks.*.*.color' => ['nullable', 'string', 'in:' . implode(',', array_keys(RentalApplicationDocumentHighlightService::COLORS))],
+        ]);
+
+        try {
+            $highlight = $highlights->applyMarks(
+                $document,
+                (int) $rentalApplication->agency_id,
+                $request->user()->id,
+                (array) ($validated['marks'] ?? []),
+            );
+        } catch (\Throwable $e) {
+            \Log::error('Rental application document highlight apply failed', ['document' => $document->id, 'error' => $e->getMessage()]);
+
+            return response()->json(['error' => 'Could not save highlights on this document: ' . $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'has_highlights' => $highlight->highlighted_file_path !== null,
+            'mark_count' => collect($highlight->marks_json ?? [])->flatten(1)->count(),
+            'saved_at' => $highlight->updated_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Playback for "the next party" — mirrors ViewingPackController::
+     * redactedFile(). Whoever opens this document next (including the agent
+     * reopening it) is served the marked-up copy automatically once one
+     * exists; 404 if none has been applied yet (the caller falls back to
+     * viewDocumentInline for the plain original).
+     */
+    public function highlightedFile(RentalApplication $rentalApplication, Document $document)
+    {
+        $this->guardRentalApplication($rentalApplication);
+        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
+
+        $highlight = RentalApplicationDocumentHighlight::where('document_id', $document->id)->first();
+        abort_if(!$highlight || !$highlight->highlighted_file_path, 404);
+        abort_unless(\Storage::disk('local')->exists($highlight->highlighted_file_path), 404);
+
+        return response()->streamDownload(
+            function () use ($highlight) {
+                echo \Storage::disk('local')->get($highlight->highlighted_file_path);
+            },
+            $document->original_name,
+            ['Content-Type' => 'application/pdf'],
+            'inline',
+        );
+    }
+
+    private function guardDocumentBelongsToApplication(RentalApplication $rentalApplication, Document $document): void
+    {
+        abort_unless(
+            $document->source_type === 'rental_application' && (int) $document->source_id === $rentalApplication->id,
+            404
+        );
+    }
+
+    /**
      * Inline document view for the left panel — the same scope guard AND the
      * same source_type/source_id defense-in-depth check downloadDocument()
      * already uses, so this can never open a door that action doesn't. PDFs
@@ -114,11 +217,7 @@ class RentalApplicationReviewController extends Controller
     public function viewDocumentInline(RentalApplication $rentalApplication, Document $document)
     {
         $this->guardRentalApplication($rentalApplication);
-
-        abort_unless(
-            $document->source_type === 'rental_application' && (int) $document->source_id === $rentalApplication->id,
-            404
-        );
+        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
 
         if (!$this->isInlineViewable($document->mime_type)) {
             return redirect()->route('corex.rental-applications.documents.download', [
