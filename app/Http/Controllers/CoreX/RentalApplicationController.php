@@ -222,8 +222,15 @@ class RentalApplicationController extends Controller
 
     /**
      * AT-392 spec §4 — one send, two return routes, applicant's choice.
-     * Token/link generation happens in store(), not here — this action is
-     * purely "email it now."
+     * Token/link generation now happens in store() for anything created
+     * through the normal flow — but this action must not assume that: a
+     * legacy record (created before this fix) or any other creation path
+     * can still reach here with no token. Self-healing it here, exactly
+     * as this method always did, is cheap and removes a real failure mode
+     * — found the hard way: with the fallback removed, sending for a
+     * token-less record threw building the public link inside the mail
+     * content, silently swallowed by sendInvite()'s own catch block, so
+     * "could not send" was reported with no clue why.
      *
      * Johan, QA1 — "no email present and resets the form" / "status says
      * sent on something never sent": Send is disabled client-side without
@@ -242,6 +249,12 @@ class RentalApplicationController extends Controller
             return redirect()
                 ->route('corex.rental-applications.show', $rentalApplication)
                 ->with('error', 'Add an email address and save before sending.');
+        }
+
+        if (! $rentalApplication->token) {
+            $rentalApplication->token = $this->generateToken();
+            $rentalApplication->token_expires_at = now()->addDays(14);
+            $rentalApplication->save();
         }
 
         $mailSent = app(RentalApplicationMailer::class)->sendInvite($rentalApplication);
