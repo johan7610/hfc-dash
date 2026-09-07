@@ -802,6 +802,27 @@ class User extends Authenticatable
         return $query->exists();
     }
 
+    /**
+     * AT-392 — rental application authoriser. Mirrors isComplianceOfficer()'s
+     * shape but checks agencies.rental_application_authoriser_user_ids (a
+     * simple multi-select JSON array, matching whistleblow_approver_user_ids)
+     * rather than a dated appointment table — there is no legal appointment-
+     * history requirement here, just "who currently may authorise."
+     */
+    public function isRentalApplicationAuthoriser(?int $agencyId = null): bool
+    {
+        $agencyId = $agencyId ?? $this->effectiveAgencyId();
+        if (! $agencyId) {
+            return false;
+        }
+        $agency = Agency::find($agencyId);
+        if (! $agency) {
+            return false;
+        }
+
+        return in_array($this->id, $agency->rental_application_authoriser_user_ids ?? [], true);
+    }
+
     public function isPrimaryComplianceOfficer(?int $agencyId = null): bool
     {
         $query = Compliance\FicaOfficerAppointment::where('user_id', $this->id)

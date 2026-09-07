@@ -19,6 +19,8 @@
          initialResult: {{ Js::from($result) }},
          initialSavedAt: {{ $assessment->exists ? Js::from($assessment->updated_at->toIso8601String()) : 'null' }},
          initialMarkedUpDocIds: {{ Js::from($documents->filter(fn ($row) => $row['has_highlights'])->pluck('document.id')->values()) }},
+         requestMoreInfoUrl: '{{ route('corex.rental-applications.review.request-more-info', $rentalApplication) }}',
+         submitForApprovalUrl: '{{ route('corex.rental-applications.review.submit-for-approval', $rentalApplication) }}',
      })">
 
     {{-- Sticky header, 2026-09-08 — second time today the same fault: controls
@@ -352,17 +354,101 @@
                     </div>
                 </template>
             </div>
+
+            {{-- Authoriser flow, 2026-09-08 — the agent's own two actions.
+                 Johan: "agent only gets submit? get application, maybe a way
+                 to request more info from applicant? then once everything
+                 received checked etc they submit to auth." Reuses the
+                 applicant's EXISTING token link (no new token/route) — the
+                 applicant can already add documents at any status. --}}
+            <div class="rounded-md p-3 mt-4" style="border: 1px solid var(--border);">
+                @if($isPendingAuthorisation)
+                    <div class="rounded-md px-3 py-2 text-xs mb-3" style="background: var(--ds-blue-soft, #eff6ff); color: var(--ds-blue, #2563eb);">
+                        Submitted for approval {{ $rentalApplication->submitted_for_approval_at->format('d M Y H:i') }} — awaiting the authoriser's decision.
+                    </div>
+                @endif
+                <p class="text-xs font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Next step</p>
+                <textarea x-model="moreInfoNote" rows="2" class="corex-input text-xs w-full mb-2" placeholder="What do you need from the applicant? (for Request more info)"></textarea>
+                <div class="flex flex-col gap-2">
+                    <button type="button" class="corex-btn-outline text-xs w-full" :disabled="moreInfoSending || !moreInfoNote.trim()" @click="requestMoreInfo()" x-text="moreInfoSending ? 'Sending…' : 'Request more info from applicant'"></button>
+                    <button type="button" class="corex-btn-primary text-xs w-full" :disabled="submittingForApproval" @click="submitForApproval()" x-text="submittingForApproval ? 'Submitting…' : ({{ $isPendingAuthorisation ? 'true' : 'false' }} ? 'Re-submit to authoriser' : 'Submit to authoriser')"></button>
+                </div>
+                <p class="text-xs mt-2" x-show="agentActionStatus" x-text="agentActionStatus" :style="agentActionError ? 'color: var(--ds-red, #dc2626);' : 'color: var(--ds-emerald, #059669);'"></p>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initialMarkedUpDocIds }) {
+function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initialMarkedUpDocIds, requestMoreInfoUrl, submitForApprovalUrl }) {
     return {
         // ── Affordability assessment (unchanged) ──────────────────────────
         fields: initial,
         markedUpDocIds: initialMarkedUpDocIds || [],
         result: initialResult ?? { label: 'incomplete' },
+        // ── Authoriser flow — the agent's two actions ─────────────────────
+        moreInfoNote: '',
+        moreInfoSending: false,
+        submittingForApproval: false,
+        agentActionStatus: '',
+        agentActionError: false,
+        async requestMoreInfo() {
+            if (this.moreInfoSending || !this.moreInfoNote.trim()) return;
+            this.moreInfoSending = true;
+            this.agentActionStatus = '';
+            try {
+                const res = await fetch(requestMoreInfoUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ note: this.moreInfoNote }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.ok) {
+                    this.agentActionError = false;
+                    this.agentActionStatus = data.mail_sent ? 'Sent to the applicant.' : 'Logged, but the email could not be sent — check their email address.';
+                    this.moreInfoNote = '';
+                } else {
+                    this.agentActionError = true;
+                    this.agentActionStatus = data.error || 'Could not send — try again.';
+                }
+            } catch (e) {
+                this.agentActionError = true;
+                this.agentActionStatus = 'Could not send — check your connection.';
+            }
+            this.moreInfoSending = false;
+        },
+        async submitForApproval() {
+            if (this.submittingForApproval) return;
+            this.submittingForApproval = true;
+            this.agentActionStatus = '';
+            try {
+                const res = await fetch(submitForApprovalUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                        'Accept': 'application/json',
+                    },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.ok) {
+                    this.agentActionError = false;
+                    this.agentActionStatus = 'Submitted to the authoriser.';
+                    setTimeout(() => window.location.reload(), 900);
+                } else {
+                    this.agentActionError = true;
+                    this.agentActionStatus = data.error || 'Could not submit — try again.';
+                }
+            } catch (e) {
+                this.agentActionError = true;
+                this.agentActionStatus = 'Could not submit — check your connection.';
+            }
+            this.submittingForApproval = false;
+        },
         saveStatus: initialSavedAt ? ('Saved at ' + formatTime(initialSavedAt)) : '',
         saveError: false,
         saveTimer: null,

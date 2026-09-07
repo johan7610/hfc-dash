@@ -29,13 +29,22 @@ class RentalApplication extends Model
      * what it is?" Split deliberately: draft/sent/in_progress/returned are
      * FACTS the system records (nothing typed, sent, or submitted — never
      * hand-settable, or the "status lies" defect this feature already fixed
-     * once comes back). under_assessment/approved/declined/withdrawn are the
-     * agent's own judgement calls once an application has actually been
-     * returned — these are the only values a human may set by hand, and
-     * only once the application is at or past 'returned'.
+     * once comes back). under_assessment/withdrawn are the agent's own
+     * judgement calls once an application has actually been returned.
+     *
+     * AT-392 authoriser flow, 2026-09-08 — approved/declined REMOVED from
+     * this list. Johan, verbatim: "only the auth can accept / reject / ask
+     * for more information etc." An agent may work an application
+     * (highlight, assess, request more info from the applicant) and submit
+     * it to the authoriser, but the accept/reject decision itself belongs
+     * exclusively to whoever is configured as an authoriser
+     * (User::isRentalApplicationAuthoriser()) — enforced server-side on the
+     * authorisation controller's own actions, not by hiding a button here.
+     * Agreed with cc4 (who built this constant): stays additive, no new
+     * status enum value, just this one narrowing.
      */
     public const AGENT_SETTABLE_STATUSES = [
-        'under_assessment', 'approved', 'declined', 'withdrawn',
+        'under_assessment', 'withdrawn',
     ];
 
     /** Statuses at/after which a hand-set judgement call makes sense. */
@@ -93,7 +102,7 @@ class RentalApplication extends Model
 
     protected $fillable = [
         'agency_id', 'branch_id', 'contact_id', 'property_id', 'created_by_user_id',
-        'status', 'delivery_mode', 'token', 'token_expires_at', 'submitted_at',
+        'status', 'delivery_mode', 'token', 'token_expires_at', 'submitted_at', 'submitted_for_approval_at',
         'property_address_override',
         'full_name', 'id_number', 'marital_status', 'spouse_name', 'spouse_id', 'citizenship',
         'current_residential_address', 'email', 'cell', 'work_number',
@@ -108,6 +117,7 @@ class RentalApplication extends Model
     protected $casts = [
         'token_expires_at' => 'datetime',
         'submitted_at' => 'datetime',
+        'submitted_for_approval_at' => 'datetime',
         'current_rental_amount' => 'decimal:2',
         'monthly_salary' => 'decimal:2',
         'current_rental_from' => 'date',
@@ -116,6 +126,17 @@ class RentalApplication extends Model
         'adults' => 'integer',
         'children' => 'integer',
     ];
+
+    /**
+     * AT-392 authoriser flow — the agent has handed this off; awaiting the
+     * authoriser's decision. Deliberately NOT a status value (see
+     * AGENT_SETTABLE_STATUSES comment) — status stays 'under_assessment',
+     * this marker is what actually distinguishes the two states.
+     */
+    public function isPendingAuthorisation(): bool
+    {
+        return $this->status === 'under_assessment' && $this->submitted_for_approval_at !== null;
+    }
 
     public function contact(): BelongsTo
     {
