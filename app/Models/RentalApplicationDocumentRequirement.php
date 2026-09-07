@@ -45,9 +45,15 @@ class RentalApplicationDocumentRequirement extends Model
     }
 
     /**
-     * The effective checklist for one agency + employment type — saved rows
-     * if the agency configured any, otherwise the V8 default. Returns
-     * document_types rows (id, slug, label), never persists a default.
+     * The effective checklist for one agency + employment type.
+     *
+     * Johan, 2026-09-07 — "configured but empty" (deliberately requires
+     * nothing) must never be confused with "never configured" (V8 defaults
+     * apply): both used to mean zero saved rows here, indistinguishably, so
+     * an agency that cleared a list would find it silently reappear.
+     * RentalApplicationChecklistConfig's mere existence for this (agency,
+     * employment_type) pair is now the ONLY signal consulted — never a row
+     * count. See that model's own docblock.
      */
     public static function checklistFor(int $agencyId, string $employmentType): Collection
     {
@@ -55,15 +61,19 @@ class RentalApplicationDocumentRequirement extends Model
         // in request code): every caller passes the ACTING user's own
         // effective agency, which AgencyScope already resolves them to —
         // this is a normal, correctly-scoped read, not a cross-tenant one.
-        $saved = static::query()
+        $isConfigured = RentalApplicationChecklistConfig::query()
             ->where('agency_id', $agencyId)
             ->where('employment_type', $employmentType)
-            ->orderBy('sort_order')
-            ->with('documentType')
-            ->get();
+            ->exists();
 
-        if ($saved->isNotEmpty()) {
-            return $saved->pluck('documentType')->filter()->values();
+        if ($isConfigured) {
+            return static::query()
+                ->where('agency_id', $agencyId)
+                ->where('employment_type', $employmentType)
+                ->orderBy('sort_order')
+                ->with('documentType')
+                ->get()
+                ->pluck('documentType')->filter()->values();
         }
 
         $slugs = self::V8_DEFAULTS[$employmentType] ?? [];

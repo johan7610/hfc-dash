@@ -20,7 +20,14 @@
 
         @foreach(\App\Models\RentalApplication::EMPLOYMENT_TYPES as $type)
         <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
-            <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">{{ str_replace('_', ' ', ucfirst($type)) }}</h2>
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-semibold" style="color: var(--text-primary);">{{ str_replace('_', ' ', ucfirst($type)) }}</h2>
+                @if($isConfigured[$type])
+                    <span class="ds-badge ds-badge-info">Saved{{ empty($checklists[$type]) ? ' — none required' : '' }}</span>
+                @else
+                    <span class="ds-badge ds-badge-default" title="Showing the standard checklist — not yet saved for this agency">Default (not yet saved)</span>
+                @endif
+            </div>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 @foreach($documentTypes as $dt)
                     <label class="flex items-center gap-2 text-sm">
