@@ -158,6 +158,21 @@ class PropertyController extends Controller
             $this->applyRoleScope($query, $user, $dataScope, $canPickAgent, $viewScope);
         }
 
+        if ($search !== '') {
+            // AT-394 — the viewer's OWN listings sort first, ahead of everything else (including
+            // whatever sort the user picked below) — a widened search mixes in colleagues'
+            // listings, and the agent's own book is what they're most likely looking for. "Own"
+            // matches agent_id OR pp_second_agent_id (the same co-listing rule the scope above
+            // uses), against dataIdentityIds() (the agent themselves, or — for an assistant —
+            // the assigned agent).
+            $mineIds = array_map('intval', $user->dataIdentityIds());
+            $placeholders = implode(',', array_fill(0, count($mineIds), '?'));
+            $query->orderByRaw(
+                "CASE WHEN agent_id IN ({$placeholders}) OR pp_second_agent_id IN ({$placeholders}) THEN 0 ELSE 1 END",
+                array_merge($mineIds, $mineIds)
+            );
+        }
+
         // Remember the active filter set for this session (only on an explicit
         // filter interaction — a pure-default visit stays unsaved).
         if ($hasFilterParam) {

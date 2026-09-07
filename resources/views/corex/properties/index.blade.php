@@ -761,13 +761,6 @@
         @php
             // Live-on-a-portal signal drives the "Active" status badge accent.
             $isLiveStatus = in_array($statusKey, ['on_market', 'active', 'live'], true);
-            // AT-394 — even when the viewer CAN fully open it (an admin/owner's 'all' scope, or
-            // a BM's own branch), a search hit belonging to someone else still gets a highlight
-            // so it's obvious at a glance whose listing this is. Only on a search result — every
-            // row in the default "my listings" browse is already known to be the viewer's own.
-            $isOtherAgent = request()->filled('search') && !($property->owned_by_other ?? false)
-                && (int) ($property->agent_id ?? 0) !== (int) auth()->id()
-                && (int) ($property->pp_second_agent_id ?? 0) !== (int) auth()->id();
         @endphp
         @if($property->owned_by_other ?? false)
         {{-- AT-394 — this listing surfaced only because search was widened past the
@@ -894,13 +887,7 @@
                         {{-- Primary agent --}}
                         <div class="flex items-center gap-1.5 min-w-0">
                             <span class="inline-flex items-center justify-center w-5 h-5 rounded-md text-[9px] font-bold flex-shrink-0" style="background:var(--brand-default,#0b2a4a);color:#fff;">{{ strtoupper(substr($property->agent?->name ?? '?', 0, 1)) }}</span>
-                            @if($isOtherAgent)
-                            <span class="text-xs px-1.5 py-0.5 rounded-md font-medium truncate" style="background:color-mix(in srgb, var(--ds-amber) 12%, transparent); color:var(--ds-amber); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);" title="This listing belongs to a different agent">
-                                Agent: {{ $property->agent?->name ?? '—' }}
-                            </span>
-                            @else
                             <span class="text-xs truncate" style="color:var(--text-muted);" title="{{ $property->agent?->name }}">{{ $property->agent?->name ?? '—' }}</span>
-                            @endif
                         </div>
                         {{-- Secondary (co-listing) agent — shown underneath the primary --}}
                         @if($property->secondAgent)
@@ -1002,10 +989,6 @@
                         : ($rowStatusKey === 'sold'
                             ? 'background:var(--ds-crimson, #c41e3a); color:#fff; border:none;'
                             : $rowBrandPillStyle);
-                    // AT-394 — see the grid-view $isOtherAgent comment above.
-                    $rowIsOtherAgent = request()->filled('search') && !($property->owned_by_other ?? false)
-                        && (int) ($property->agent_id ?? 0) !== (int) auth()->id()
-                        && (int) ($property->pp_second_agent_id ?? 0) !== (int) auth()->id();
                 @endphp
                 @if($property->owned_by_other ?? false)
                 {{-- AT-394 — surfaced only by the widened search, outside the agent's own/branch
@@ -1071,13 +1054,7 @@
                     </td>
                     @endif
                     <td class="px-4 py-2.5 text-xs hidden lg:table-cell" style="color:var(--text-muted);">
-                        @if($rowIsOtherAgent)
-                        <span class="px-1.5 py-0.5 rounded-md font-medium whitespace-nowrap" style="background:color-mix(in srgb, var(--ds-amber) 12%, transparent); color:var(--ds-amber); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);" title="This listing belongs to a different agent">
-                            Agent: {{ $property->agent?->name ?? '—' }}
-                        </span>
-                        @else
                         <div>{{ $property->agent?->name ?? '—' }}</div>
-                        @endif
                         @if($property->secondAgent)
                         <div class="mt-0.5" title="Secondary (co-listing) agent">{{ $property->secondAgent->name }}</div>
                         @endif

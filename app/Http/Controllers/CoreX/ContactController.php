@@ -52,7 +52,20 @@ class ContactController extends Controller
         // all breadth exactly as before.
         $isSearching = $request->filled('search');
 
-        $query = Contact::with(['type', 'createdBy', 'agent'])->orderBy('last_name')->orderBy('first_name');
+        $query = Contact::with(['type', 'createdBy', 'agent']);
+
+        if ($isSearching) {
+            // AT-394 — the viewer's OWN contacts sort first, ahead of everything else (including
+            // the existing relevance ordering scopeSearch() adds below) — a widened search mixes
+            // in colleagues' records, and the agent's own book is what they're most likely looking
+            // for. "Own" mirrors dataIdentityIds() (the agent themselves, or — for an assistant —
+            // the assigned agent), same identity basis ContactScope's 'own' rule itself uses.
+            $mineIds = array_map('intval', $user->dataIdentityIds());
+            $placeholders = implode(',', array_fill(0, count($mineIds), '?'));
+            $query->orderByRaw("CASE WHEN COALESCE(agent_id, created_by_user_id) IN ({$placeholders}) THEN 0 ELSE 1 END", $mineIds);
+        }
+
+        $query->orderBy('last_name')->orderBy('first_name');
 
         // AT-91 — an EXPLICIT agent pick keys off contacts.agent_id (the
         // operational responsible agent), NOT created_by_user_id (immutable
