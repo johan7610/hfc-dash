@@ -184,3 +184,50 @@ other filed document uses.
 - Deleting an application soft-deletes it; nothing is hard-deleted.
 - A second agency's data is never visible to this agency, in the list, the
   inbox, or the settings screen.
+
+---
+
+## Deploy requirements (mandatory, every environment — do not skip)
+
+**1. Run the permission sync after every deploy that lands this feature.**
+`config/corex-permissions.php` defines 4 `rental_applications.*` keys, but
+they only take effect once granted to roles in `role_permissions`. This is
+NOT automatic on `migrate` — the sync command must run explicitly:
+
+```
+php artisan corex:sync-permissions --merge-defaults
+```
+
+Root-caused on QA1 2026-09-07 (cc2): after this feature landed, `role_permissions`
+had **zero** grant rows for any of the 4 keys, on any role, for any agency —
+`hasPermission('rental_applications.view')` evaluated false for every user,
+including admin, and the nav entry stayed invisible. Confirmed fixed on QA1
+by running the sync (210 rows inserted, admin role only, every agency).
+**Note when running this:** the command processes every permission key
+missing from the DB, not just this feature's — on QA1 it also caught up one
+unrelated pre-existing key (`view_photo_upload_report`, from an older
+diagnostics feature that had never been synced either). That is expected
+behaviour of `--merge-defaults`, not a side effect of this feature — verify
+the diff on each run rather than assuming it only touches
+`rental_applications.*`.
+
+**2. The nav entry is currently placed inside the "Hidden" panel — system
+owners only.** `resources/views/layouts/corex-sidebar.blade.php`'s existing
+`@permission('view_rentals') @feature('rentals')`-gated "Rentals" drill-down
+(which the AT-392 links were added inside) itself nests inside the sidebar's
+"HIDDEN — pages hidden from agency users, visible to system owners only"
+section (`$isOwner` gate, line ~11/2481 as of this writing). **This means a
+normal per-agency admin — including Johan's own regular admin login,
+`johan@hfcoastal.co.za` (agency-scoped, not a system-owner account) —
+cannot see "Rental Applications" in the sidebar at all, no matter what
+`rental_applications.*` permissions they hold.** Verified on QA1
+2026-09-07: rendered a real authenticated page as that account with all 4
+permissions granted — the anchor does not appear. Rendered the same page as
+a genuine `super_admin`/owner account (with agency context set) — the
+anchor appears correctly. This is not a data/permission problem; it is a
+nav-placement decision inherited from the pre-existing "Rentals" panel, and
+needs an explicit call: either move the AT-392 links out of the "Hidden"
+owner-only group into a normal agency-facing section, or confirm this is
+deliberately staged as owner-only for now. **Not fixed as part of this
+entry — flagged for Johan/cc4 to decide**, per the "report, don't decide
+unilaterally" rule.

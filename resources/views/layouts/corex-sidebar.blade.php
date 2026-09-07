@@ -1908,6 +1908,26 @@
             <span>What's New</span>
         </a>
 
+        {{-- AT-392 — Rental Applications (Phase 1). Moved here 2026-09-07 from the
+             owner-only Hidden section (Johan's decision — this is an agency admin/
+             agent feature, not a system-owner tool). Permission gates unchanged. --}}
+        @permission('rental_applications.view')
+        <a href="{{ route('corex.rental-applications.index') }}" class="corex-nav-item {{ request()->routeIs('corex.rental-applications.index') || request()->routeIs('corex.rental-applications.create') || request()->routeIs('corex.rental-applications.show') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125V21M3 12l1.5-1.5M3 12l9-9 9 9M6 10.5V21a.75.75 0 0 0 .75.75H9m9-11.25L19.5 12M18 10.5V21a.75.75 0 0 1-.75.75H15" />
+            </svg>
+            <span>Rental Applications</span>
+        </a>
+        @endpermission
+        @permission('rental_applications.view_returned')
+        <a href="{{ route('corex.rental-applications.returned') }}" class="corex-nav-item {{ request()->routeIs('corex.rental-applications.returned') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 4.556-3.862 8.25-8.625 8.25a9.337 9.337 0 0 1-4.121-.952L3 20.25l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.556 3.862-8.25 8.625-8.25S21 7.444 21 12Z" />
+            </svg>
+            <span>Returned Applications</span>
+        </a>
+        @endpermission
+
         @endpermission {{-- /sidebar.section.tools --}}
 
         {{-- ═══════════════════════════════════════════
@@ -2563,13 +2583,6 @@
                         @permission('view_rentals')
                         <a href="{{ route('rental.active-leases') }}" class="corex-nav-subitem {{ request()->routeIs('rental.active-leases') ? 'active' : '' }}">Active Leases</a>
                         <a href="{{ route('rental.expired-leases') }}" class="corex-nav-subitem {{ request()->routeIs('rental.expired-leases') ? 'active' : '' }}">Expired Leases</a>
-                        @endpermission
-                        {{-- AT-392 — Rental Applications (Phase 1) --}}
-                        @permission('rental_applications.view')
-                        <a href="{{ route('corex.rental-applications.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.rental-applications.index') || request()->routeIs('corex.rental-applications.create') || request()->routeIs('corex.rental-applications.show') ? 'active' : '' }}">Rental Applications</a>
-                        @endpermission
-                        @permission('rental_applications.view_returned')
-                        <a href="{{ route('corex.rental-applications.returned') }}" class="corex-nav-subitem {{ request()->routeIs('corex.rental-applications.returned') ? 'active' : '' }}">Returned Applications</a>
                         @endpermission
                     </div>
                 </div>
