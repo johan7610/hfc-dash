@@ -803,13 +803,33 @@ class User extends Authenticatable
     }
 
     /**
-     * AT-392 — rental application authoriser. Mirrors isComplianceOfficer()'s
-     * shape but checks agencies.rental_application_authoriser_user_ids (a
-     * simple multi-select JSON array, matching whistleblow_approver_user_ids)
-     * rather than a dated appointment table — there is no legal appointment-
-     * history requirement here, just "who currently may authorise."
+     * AT-392 authoriser flow — RO/CO two-tier, mirroring FICA's own CO/RO
+     * shape (isComplianceOfficer()/isMlro() above) but against
+     * agencies.rental_application_ro_user_ids / _co_user_ids — a simple
+     * multi-select JSON array (matching whistleblow_approver_user_ids),
+     * not a dated appointment table (fica_officer_appointments) — there is
+     * no legal appointment-history requirement here, just "who currently
+     * holds this tier." RO: "selected agents... can approve / decline."
+     * CO: "admin or bm... can override an RO decision... with reasons
+     * required."
      */
+    public function isRentalApplicationRO(?int $agencyId = null): bool
+    {
+        return $this->inRentalApplicationTier('rental_application_ro_user_ids', $agencyId);
+    }
+
+    public function isRentalApplicationCO(?int $agencyId = null): bool
+    {
+        return $this->inRentalApplicationTier('rental_application_co_user_ids', $agencyId);
+    }
+
+    /** Either tier — enough to view the authorisation queue and act, tier-specific rules applied by the controller. */
     public function isRentalApplicationAuthoriser(?int $agencyId = null): bool
+    {
+        return $this->isRentalApplicationRO($agencyId) || $this->isRentalApplicationCO($agencyId);
+    }
+
+    private function inRentalApplicationTier(string $column, ?int $agencyId): bool
     {
         $agencyId = $agencyId ?? $this->effectiveAgencyId();
         if (! $agencyId) {
@@ -820,7 +840,7 @@ class User extends Authenticatable
             return false;
         }
 
-        return in_array($this->id, $agency->rental_application_authoriser_user_ids ?? [], true);
+        return in_array($this->id, $agency->{$column} ?? [], true);
     }
 
     public function isPrimaryComplianceOfficer(?int $agencyId = null): bool

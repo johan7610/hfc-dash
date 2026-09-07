@@ -2803,6 +2803,11 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     // AT-392 authoriser flow, 2026-09-08 — decline email wording, same settings screen.
     Route::post('/settings/rental-applications/decline-email', [\App\Http\Controllers\CoreX\RentalApplicationSettingsController::class, 'updateDeclineEmail'])
         ->middleware('permission:rental_applications.manage_settings')->name('corex.settings.rental-applications.decline-email');
+    // AT-392 authoriser flow, 2026-09-08 — RO/CO tiers, same settings screen.
+    Route::post('/settings/rental-applications/ro', [\App\Http\Controllers\CoreX\RentalApplicationSettingsController::class, 'updateRO'])
+        ->middleware('permission:rental_applications.manage_settings')->name('corex.settings.rental-applications.ro');
+    Route::post('/settings/rental-applications/co', [\App\Http\Controllers\CoreX\RentalApplicationSettingsController::class, 'updateCO'])
+        ->middleware('permission:rental_applications.manage_settings')->name('corex.settings.rental-applications.co');
 
     Route::post('/settings/generate-token', [CoreXSettingsController::class, 'generateApiToken'])->name('corex.settings.generate-token');
     Route::post('/settings/notifications', [CoreXSettingsController::class, 'updateNotificationPreferences'])->middleware('permission:access_settings')->name('corex.settings.notifications.update');
@@ -2811,6 +2816,26 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/settings/syndication-portals', [CoreXSettingsController::class, 'updateSyndicationPortals'])->middleware('permission:access_settings')->name('corex.settings.syndication-portals');
     // Feature Registry — Settings → Features (module on/off). Spec: corex-feature-registry.md §6.4.
     Route::post('/settings/features', [\App\Http\Controllers\CoreX\FeatureSettingsController::class, 'update'])->middleware('permission:agency_features.manage')->name('corex.settings.features.update');
+    // AT-392 authoriser flow, 2026-09-08 — RO/CO decision actions. A
+    // separate prefix/controller, gated on RO/CO tier membership
+    // (User::isRentalApplicationRO()/isRentalApplicationCO()), not the
+    // ordinary rental_applications.view permission every agent already has.
+    // See .ai/specs/rental-applications.md "Authoriser flow". MUST be
+    // registered BEFORE the generic rental-applications/{rentalApplication}
+    // routes below (Laravel matches route-by-route in registration order —
+    // that wildcard would otherwise greedily swallow "/authorisation" as if
+    // it were an application ID and 404 on route-model-binding; caught by
+    // a real dispatch test, not assumed).
+    Route::prefix('rental-applications/authorisation')->group(function () {
+        Route::get('/', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'index'])->name('corex.rental-applications.authorisation.index');
+        Route::get('/{rentalApplication}', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'show'])->name('corex.rental-applications.authorisation.show');
+        Route::get('/{rentalApplication}/documents/{document}/view', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'viewDocumentInline'])->name('corex.rental-applications.authorisation.documents.view');
+        Route::get('/{rentalApplication}/documents/{document}/highlighted-file', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'highlightedFile'])->name('corex.rental-applications.authorisation.documents.highlighted-file');
+        Route::post('/{rentalApplication}/approve', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'approve'])->name('corex.rental-applications.authorisation.approve');
+        Route::post('/{rentalApplication}/decline', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'decline'])->name('corex.rental-applications.authorisation.decline');
+        Route::post('/{rentalApplication}/request-more-info', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'requestMoreInfo'])->name('corex.rental-applications.authorisation.request-more-info');
+    });
+
     // AT-392 — Rental Applications (Phase 1). Dedicated page, not the e-sign
     // wizard — see .ai/specs/rental-applications.md.
     Route::prefix('rental-applications')->middleware('permission:rental_applications.view')->group(function () {

@@ -102,7 +102,7 @@ class RentalApplication extends Model
 
     protected $fillable = [
         'agency_id', 'branch_id', 'contact_id', 'property_id', 'created_by_user_id',
-        'status', 'delivery_mode', 'token', 'token_expires_at', 'submitted_at', 'submitted_for_approval_at',
+        'status', 'delivery_mode', 'token', 'token_expires_at', 'submitted_at', 'submitted_for_approval_at', 'approved_rental_amount',
         'property_address_override',
         'full_name', 'id_number', 'marital_status', 'spouse_name', 'spouse_id', 'citizenship',
         'current_residential_address', 'email', 'cell', 'work_number',
@@ -118,6 +118,7 @@ class RentalApplication extends Model
         'token_expires_at' => 'datetime',
         'submitted_at' => 'datetime',
         'submitted_for_approval_at' => 'datetime',
+        'approved_rental_amount' => 'decimal:2',
         'current_rental_amount' => 'decimal:2',
         'monthly_salary' => 'decimal:2',
         'current_rental_from' => 'date',
@@ -177,6 +178,12 @@ class RentalApplication extends Model
     public function statusHistory(): HasMany
     {
         return $this->hasMany(RentalApplicationStatusHistory::class)->latest('created_at');
+    }
+
+    /** AT-392 authoriser flow — the fuller who/what/when/why/override audit trail, newest first. */
+    public function auditLog(): HasMany
+    {
+        return $this->hasMany(RentalApplicationAuditLog::class)->latest('created_at');
     }
 
     public function declarationSignature(): ?RentalApplicationSignature

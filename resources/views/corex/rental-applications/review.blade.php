@@ -362,18 +362,35 @@
                  applicant's EXISTING token link (no new token/route) — the
                  applicant can already add documents at any status. --}}
             <div class="rounded-md p-3 mt-4" style="border: 1px solid var(--border);">
-                @if($isPendingAuthorisation)
+                {{-- Authoriser decision, 2026-09-08 — "update the agent's
+                     screen to show the applicant approved for that amount."
+                     An override (a CO changing an earlier decision) simply
+                     shows the CURRENT decision here — the full history,
+                     including the override, is on the authoriser's own
+                     screen and the audit trail. --}}
+                @if($rentalApplication->status === 'approved')
+                    <div class="rounded-md px-3 py-2 text-xs mb-3" style="background: var(--ds-emerald-soft, #ecfdf5); color: var(--ds-emerald, #059669);">
+                        &check; Approved for R{{ number_format($rentalApplication->approved_rental_amount, 2) }} a month. The applicant has been notified — you can now start matching them to a property.
+                    </div>
+                @elseif($rentalApplication->status === 'declined')
+                    <div class="rounded-md px-3 py-2 text-xs mb-3" style="background: var(--ds-red-soft, #fef2f2); color: var(--ds-red, #dc2626);">
+                        Declined. The applicant has been notified.
+                    </div>
+                @elseif($isPendingAuthorisation)
                     <div class="rounded-md px-3 py-2 text-xs mb-3" style="background: var(--ds-blue-soft, #eff6ff); color: var(--ds-blue, #2563eb);">
                         Submitted for approval {{ $rentalApplication->submitted_for_approval_at->format('d M Y H:i') }} — awaiting the authoriser's decision.
                     </div>
                 @endif
-                <p class="text-xs font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Next step</p>
-                <textarea x-model="moreInfoNote" rows="2" class="corex-input text-xs w-full mb-2" placeholder="What do you need from the applicant? (for Request more info)"></textarea>
-                <div class="flex flex-col gap-2">
-                    <button type="button" class="corex-btn-outline text-xs w-full" :disabled="moreInfoSending || !moreInfoNote.trim()" @click="requestMoreInfo()" x-text="moreInfoSending ? 'Sending…' : 'Request more info from applicant'"></button>
-                    <button type="button" class="corex-btn-primary text-xs w-full" :disabled="submittingForApproval" @click="submitForApproval()" x-text="submittingForApproval ? 'Submitting…' : ({{ $isPendingAuthorisation ? 'true' : 'false' }} ? 'Re-submit to authoriser' : 'Submit to authoriser')"></button>
-                </div>
-                <p class="text-xs mt-2" x-show="agentActionStatus" x-text="agentActionStatus" :style="agentActionError ? 'color: var(--ds-red, #dc2626);' : 'color: var(--ds-emerald, #059669);'"></p>
+
+                @unless(in_array($rentalApplication->status, ['approved', 'declined'], true))
+                    <p class="text-xs font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Next step</p>
+                    <textarea x-model="moreInfoNote" rows="2" class="corex-input text-xs w-full mb-2" placeholder="What do you need from the applicant? (for Request more info)"></textarea>
+                    <div class="flex flex-col gap-2">
+                        <button type="button" class="corex-btn-outline text-xs w-full" :disabled="moreInfoSending || !moreInfoNote.trim()" @click="requestMoreInfo()" x-text="moreInfoSending ? 'Sending…' : 'Request more info from applicant'"></button>
+                        <button type="button" class="corex-btn-primary text-xs w-full" :disabled="submittingForApproval" @click="submitForApproval()" x-text="submittingForApproval ? 'Submitting…' : ({{ $isPendingAuthorisation ? 'true' : 'false' }} ? 'Re-submit to authoriser' : 'Submit to authoriser')"></button>
+                    </div>
+                    <p class="text-xs mt-2" x-show="agentActionStatus" x-text="agentActionStatus" :style="agentActionError ? 'color: var(--ds-red, #dc2626);' : 'color: var(--ds-emerald, #059669);'"></p>
+                @endunless
             </div>
         </div>
     </div>

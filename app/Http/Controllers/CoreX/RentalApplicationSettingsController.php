@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\DocumentType;
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationChecklistConfig;
 use App\Models\RentalApplicationDeclineEmailSetting;
 use App\Models\RentalApplicationDocumentRequirement;
 use App\Models\RentalApplicationQualifyingSetting;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -40,13 +42,24 @@ class RentalApplicationSettingsController extends Controller
         // Reuses this SAME settings screen rather than a second settings home.
         $qualifyingMultiplier = RentalApplicationQualifyingSetting::multiplierFor($agencyId);
 
+        // AT-392 authoriser flow — Johan: "ro then co approval process...
+        // Both configured as agency settings, multi-select from users,
+        // exactly like the existing CO and RO settings." Same query shape
+        // as settings.blade.php's own FICA MLRO section ($agencyUsers there).
+        $agencyUsers = User::where('agency_id', $agencyId)
+            ->where('is_active', true)->whereNull('deleted_at')
+            ->orderBy('name')->get(['id', 'name', 'email', 'role', 'branch_id']);
+        $agency = Agency::find($agencyId);
+        $roUserIds = $agency?->rental_application_ro_user_ids ?? [];
+        $coUserIds = $agency?->rental_application_co_user_ids ?? [];
+
         // AT-392 authoriser flow — Johan: "each agency will want their own
         // wording on declined." Suggested default shown until the agency
         // saves their own — see RentalApplicationDeclineEmailSetting.
         $declineEmail = RentalApplicationDeclineEmailSetting::forAgency($agencyId);
 
         return view('corex.settings.rental-applications', compact(
-            'documentTypes', 'checklists', 'isConfigured', 'qualifyingMultiplier', 'declineEmail'
+            'documentTypes', 'checklists', 'isConfigured', 'qualifyingMultiplier', 'agencyUsers', 'roUserIds', 'coUserIds', 'declineEmail'
         ));
     }
 
@@ -73,6 +86,51 @@ class RentalApplicationSettingsController extends Controller
 
         return redirect()->route('corex.settings.rental-applications.edit')
             ->with('success', 'Decline email wording saved.');
+    }
+
+    /**
+     * AT-392 authoriser flow — RO tier. Separate route/method, same
+     * reasoning as updateQualifyingFormula() above.
+     */
+    public function updateRO(Request $request)
+    {
+        $agencyId = $request->user()->effectiveAgencyId();
+
+        $validated = $request->validate([
+            'rental_application_ro_user_ids' => ['nullable', 'array'],
+            'rental_application_ro_user_ids.*' => ['integer', 'exists:users,id'],
+        ]);
+
+        $ids = $validated['rental_application_ro_user_ids'] ?? [];
+
+        Agency::whereKey($agencyId)->update([
+            'rental_application_ro_user_ids' => ! empty($ids) ? array_map('intval', $ids) : null,
+        ]);
+
+        return redirect()->route('corex.settings.rental-applications.edit')
+            ->with('success', 'Reviewers saved.');
+    }
+
+    /**
+     * AT-392 authoriser flow — CO tier.
+     */
+    public function updateCO(Request $request)
+    {
+        $agencyId = $request->user()->effectiveAgencyId();
+
+        $validated = $request->validate([
+            'rental_application_co_user_ids' => ['nullable', 'array'],
+            'rental_application_co_user_ids.*' => ['integer', 'exists:users,id'],
+        ]);
+
+        $ids = $validated['rental_application_co_user_ids'] ?? [];
+
+        Agency::whereKey($agencyId)->update([
+            'rental_application_co_user_ids' => ! empty($ids) ? array_map('intval', $ids) : null,
+        ]);
+
+        return redirect()->route('corex.settings.rental-applications.edit')
+            ->with('success', 'Overrides saved.');
     }
 
     /**
