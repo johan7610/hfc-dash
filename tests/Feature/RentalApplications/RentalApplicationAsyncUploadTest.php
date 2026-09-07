@@ -69,6 +69,31 @@ final class RentalApplicationAsyncUploadTest extends TestCase
         ], $attrs));
     }
 
+    public function test_the_public_show_page_actually_renders_with_documents_already_attached(): void
+    {
+        // Regression for a real incident: the Alpine data-seeding line
+        // (`documents: @json($application->documents->map(fn ($d) => [...]))`)
+        // nested a multi-line arrow-function/array literal — including a
+        // route() call taking an array argument — inside @json()'s own
+        // parentheses. Blade::compileString() passed (it only proves the
+        // Blade->PHP string transform succeeds), but the compiled PHP was
+        // genuinely invalid and the page 500'd on every real request once
+        // an application had at least one document. None of the other
+        // tests in this file ever GET the show page itself — they only
+        // hit the JSON endpoints directly — so this shipped to QA1 undetected
+        // until proven live. A real render is the only thing that catches
+        // this class of bug.
+        $application = $this->application();
+        $this->postJson(route('rental-applications.public.documents', $application->token), [
+            'supporting_files' => [UploadedFile::fake()->create('payslip.pdf', 100, 'application/pdf')],
+        ])->assertOk();
+
+        $response = $this->get(route('rental-applications.public.show', $application->token));
+
+        $response->assertOk();
+        $response->assertSee('payslip.pdf');
+    }
+
     public function test_uploading_via_the_json_endpoint_attaches_the_document_before_submit_is_ever_called(): void
     {
         $application = $this->application();
