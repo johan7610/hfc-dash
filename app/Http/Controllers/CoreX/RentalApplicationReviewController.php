@@ -265,9 +265,14 @@ class RentalApplicationReviewController extends Controller
                 (array) ($validated['marks'] ?? []),
             );
         } catch (\Throwable $e) {
+            // RA-06, 2026-09-08 — this previously interpolated $e->getMessage()
+            // straight into the JSON response. For a QueryException that is the
+            // raw SQL and driver error text (a real SQLSTATE reached the
+            // browser). No exception detail is ever user-facing, regardless of
+            // cause — only the log gets the real message.
             \Log::error('Rental application document highlight apply failed', ['document' => $document->id, 'error' => $e->getMessage()]);
 
-            return response()->json(['error' => 'Could not save highlights on this document: ' . $e->getMessage()], 422);
+            return response()->json(['error' => 'Could not save highlights on this document. Please try again.'], 422);
         }
 
         return response()->json([
