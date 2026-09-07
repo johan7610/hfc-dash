@@ -9,42 +9,73 @@
 @endphp
 
 @section('corex-content')
-<div class="w-full space-y-5">
-    <div class="rounded-md px-6 py-5 corex-page-banner">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-                <h1 class="text-base font-bold leading-tight" style="color: var(--text-primary);">
-                    Rental Application — {{ $rentalApplication->contact->full_name ?? '' }}
+<div class="w-full space-y-5" x-data="{ dirty: false }">
+
+    {{--
+        Johan, QA1 — "I would plainly have included the save button into
+        the same header, and further more being a header had that frozen
+        on the screen... a user can scroll through document, edit and
+        update details and get to save / send eventually at the top."
+        Sticky header (shared x-sticky-action-bar component, same one used
+        elsewhere in CoreX) replaces the old static banner. Save moves here
+        (via form="rentalApplicationForm", the big form below) — it no
+        longer lives stranded at the bottom of a long scroll. Send is
+        disabled — never enabled-then-error — until the record has a
+        genuinely saved email AND there are no unsaved edits (`dirty`,
+        set by a single delegated @input/@change on the big form below,
+        so no per-field wiring was needed).
+    --}}
+    <x-sticky-action-bar>
+        <x-slot name="left">
+            <div class="min-w-0">
+                <h1 class="text-sm font-bold leading-tight truncate" style="color: var(--text-primary);">
+                    {{ $rentalApplication->contact->full_name ?? 'Rental Application' }}
                 </h1>
-                <p class="text-xs" style="color: var(--text-muted);">
-                    <span class="ds-badge ds-badge-info">{{ str_replace('_', ' ', $rentalApplication->status) }}</span>
-                    @if($rentalApplication->property)
-                        &middot; {{ $rentalApplication->property?->buildDisplayAddress() }}
-                    @endif
-                </p>
+                <span class="ds-badge {{ $rentalApplication->status === 'draft' ? 'ds-badge-muted' : 'ds-badge-info' }}">
+                    {{ str_replace('_', ' ', $rentalApplication->status) }}
+                </span>
             </div>
-            <div class="flex gap-2">
-                <a href="{{ route('corex.rental-applications.pdf', $rentalApplication) }}" class="corex-btn-outline text-xs">Download PDF</a>
-                @permission('rental_applications.create')
-                <form method="POST" action="{{ route('corex.rental-applications.send', $rentalApplication) }}">
-                    @csrf
-                    <button type="submit" class="corex-btn-primary text-xs">
-                        {{ $rentalApplication->token ? 'Resend' : 'Send' }}
-                    </button>
-                </form>
-                <form method="POST" action="{{ route('corex.rental-applications.destroy', $rentalApplication) }}"
-                      onsubmit="return confirm('Archive this rental application? It can be recovered by an admin.');">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="corex-btn-outline text-xs" style="color: var(--ds-red, #dc2626);">Archive</button>
-                </form>
-                @endpermission
-            </div>
-        </div>
-    </div>
+        </x-slot>
+        <x-slot name="right">
+            <a href="{{ route('corex.rental-applications.pdf', $rentalApplication) }}" class="corex-btn-outline text-xs">Download PDF</a>
+
+            @permission('rental_applications.create')
+            <button type="submit" form="rentalApplicationForm" class="text-xs"
+                    :class="dirty ? 'corex-btn-primary' : 'corex-btn-outline'">
+                Save
+            </button>
+
+            @php($canSend = (bool) $rentalApplication->recipientEmail())
+            <form method="POST" action="{{ route('corex.rental-applications.send', $rentalApplication) }}" class="inline-flex items-center gap-2">
+                @csrf
+                <button type="submit" class="text-xs"
+                        :class="(!dirty && {{ $canSend ? 'true' : 'false' }}) ? 'corex-btn-primary' : 'corex-btn-outline'"
+                        :disabled="dirty || {{ $canSend ? 'false' : 'true' }}"
+                        :title="dirty ? 'Save your changes first' : ({{ $canSend ? 'false' : 'true' }} ? 'Add an email address to send' : '')">
+                    {{ $rentalApplication->status === 'draft' ? 'Send' : 'Resend' }}
+                </button>
+                <span class="text-xs hidden sm:inline" style="color: var(--text-muted);"
+                      x-show="dirty || {{ $canSend ? 'false' : 'true' }}">
+                    <span x-show="dirty">Save your changes first</span>
+                    <span x-show="!dirty" x-cloak>Add an email address to send</span>
+                </span>
+            </form>
+
+            <form method="POST" action="{{ route('corex.rental-applications.destroy', $rentalApplication) }}"
+                  onsubmit="return confirm('Archive this rental application? It can be recovered by an admin.');" class="inline">
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="corex-btn-outline text-xs" style="color: var(--ds-red, #dc2626);">Archive</button>
+            </form>
+            @endpermission
+        </x-slot>
+    </x-sticky-action-bar>
 
     @if(session('success'))
         <div class="rounded-md px-4 py-3 text-sm" style="background: var(--ds-emerald-soft, #ecfdf5); color: var(--ds-emerald, #059669);">{{ session('success') }}</div>
+    @endif
+    @if(session('error'))
+        <div class="rounded-md px-4 py-3 text-sm" style="background: var(--ds-red-soft, #fef2f2); color: var(--ds-red, #dc2626);">{{ session('error') }}</div>
     @endif
 
     @if($errors->any())
@@ -96,7 +127,9 @@
         </div>
     </div>
 
-    <form method="POST" action="{{ route('corex.rental-applications.update', $rentalApplication) }}" class="rounded-md p-6 space-y-6" style="background: var(--surface); border: 1px solid var(--border);">
+    <form id="rentalApplicationForm" method="POST" action="{{ route('corex.rental-applications.update', $rentalApplication) }}"
+          @input="dirty = true" @change="dirty = true"
+          class="rounded-md p-6 space-y-6" style="background: var(--surface); border: 1px solid var(--border);">
         @csrf
         @method('PUT')
 
@@ -195,9 +228,6 @@
             </div>
         </div>
 
-        <div class="flex justify-end">
-            <button type="submit" class="corex-btn-primary text-xs">Save</button>
-        </div>
     </form>
 </div>
 @endsection

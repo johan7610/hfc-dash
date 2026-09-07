@@ -21,7 +21,7 @@ class RentalApplication extends Model
     use BelongsToAgency, SoftDeletes;
 
     public const STATUSES = [
-        'sent', 'in_progress', 'returned', 'under_assessment', 'approved', 'declined', 'withdrawn',
+        'draft', 'sent', 'in_progress', 'returned', 'under_assessment', 'approved', 'declined', 'withdrawn',
     ];
 
     public const EMPLOYMENT_TYPES = [

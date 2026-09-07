@@ -58,8 +58,10 @@ Phase 1 replaces that path with a dedicated page for this one document type.
    documents show as outstanding on the Returned Applications screen; they
    never block submission.
 6. **Returned Applications** — its own menu item for the rental team.
-   Status values: `sent`, `in_progress`, `returned`, `under_assessment`,
-   `approved`, `declined`, `withdrawn`.
+   Status values: `draft`, `sent`, `in_progress`, `returned`,
+   `under_assessment`, `approved`, `declined`, `withdrawn`. `draft` is the
+   true starting state (added 2026-09-07 — see "Status model + sticky
+   header" below); `sent` is set only once mail has genuinely gone out.
 7. **Branding.** No literals. The live template (`template-97.blade.php`)
    hardcodes `letting@hfcoastal.co.za` (`:58`) and `039 315 0857` (`:77`).
    The new build reads agency email/phone/website via the same `$d()`
@@ -1101,3 +1103,136 @@ Added `$this->withoutVite();` to this test class's `setUp()` (the correct
 Laravel testing pattern for exactly this situation, already used in
 `RentalApplicationDocumentLockTest.php`). All 10 tests in this file now
 pass, 73 assertions.
+
+---
+
+## Status model + sticky header (Johan, QA1, retest #2 — "the same fuckup as the rest of CoreX when it comes to flows")
+
+Three real defects plus a design instruction, all found on Johan's own
+real test records (applications 8, 9, 10).
+
+### Defect 1 — status said "sent" on a record that was never sent
+
+**Root cause: the status enum had no value at all for "created, not yet
+sent."** `rental_applications.status` was `ENUM('sent', 'in_progress',
+'returned', 'under_assessment', 'approved', 'declined', 'withdrawn')
+DEFAULT 'sent'` — every brand-new application lied about its own state
+from the instant it was created, before any code even ran. Confirmed on
+Johan's real records: application 8 had `status='sent'` with `token=NULL`
+(proof `send()` was never even called) and `updated_at === created_at`
+(proof nothing happened after creation at all).
+
+**Fix:** migration `2026_09_07_130000_add_draft_status_to_rental_applications.php`
+adds `'draft'` to the enum and changes the column default to `'draft'`.
+`RentalApplicationController::store()` now creates with `status =
+'draft'`. The status badge (`show.blade.php`) renders `draft` with a
+distinct muted badge class so it's visually, not just textually,
+different from `sent`.
+
+A second, related bug in the same class: `send()` used to set `status =
+'sent'` **unconditionally**, including on a **resend** of an application
+the applicant had already progressed past sent (`in_progress`,
+`returned`, etc.) — a resend would have silently regressed a further-
+along application's status back to `sent`. Fixed: status only moves off
+`draft` on the FIRST successful send; a resend of an already-progressed
+application leaves its status untouched.
+
+**Data fix on Johan's own test records** (not a blanket migration of
+historical data — only the specific records his testing produced under
+the broken logic): applications 8 and 10 corrected from `sent` to
+`draft` (neither had ever genuinely sent mail — see Defect 2); token
+backfilled for application 8 (pre-fix records never got one at
+creation). Application 9 — genuinely `returned` via the real public
+submit flow — left untouched.
+
+### Defect 2 — "no email in mailbox arrived" — established which failure mode, not assumed
+
+Checked both the DB and the real Mailpit API before concluding anything.
+Application 8: `token=NULL`, `updated_at=created_at` — `send()` was never
+called at all. Application 10: `token` present (a `send()` call did
+happen) but `email=NULL` on both the application and its contact — the
+attempted send correctly found no recipient and correctly reported "no
+email on file," but (Defect 1's second bug) still flipped `status` to
+`sent` regardless.
+
+**Conclusion: no email was ever actually sent for either record, and
+none should have been — Mailpit confirms no matching message exists.**
+The only real defect here is the misleading `sent` badge (Defect 1). This
+is the *milder* of the two possible causes Johan asked to distinguish;
+the other (mail claimed sent but never left) did not occur.
+
+### Defect 3 — Send discarding typed input — structural fix, not a patch
+
+**Root cause: Send and Save were, and remain, two separate `<form>`
+submissions — the Send form has never carried the big form's fields.**
+When an agent typed an email and clicked Send directly (without Saving
+first), that click submitted a payload with no `email` field in it at
+all; the typed value was never part of any request, so there is no
+`old()` to lose — it simply never reached the server. This is not the
+same class of bug as the earlier validation-failure input-loss fix (that
+was about `old()` on redisplay); this is Send never having access to
+unsaved form state in the first place, by construction.
+
+**Fix — structural, not a patch:** Send is now disabled until the
+application has a genuinely SAVED email (`RentalApplication::
+recipientEmail()`, checked both client-side via Alpine and server-side in
+`send()`). This forces Save-then-Send as the only possible sequence, so
+there is no path left where clicking Send can ever discard a not-yet-
+saved value — the button simply cannot be clicked (and the server refuses
+it even if it is bypassed) until the email is already durably persisted.
+
+### Design instruction — sticky header, Save moved up, Send disabled-with-reason
+
+Built exactly as specified, using the **existing shared
+`<x-sticky-action-bar>` component** (already used elsewhere in CoreX —
+e.g. `docuperfect/signatures/review.blade.php` — reused, not
+reinvented):
+
+- The old static banner is replaced by `<x-sticky-action-bar>`
+  (`position: sticky; top: 0`, confirmed the compiled Tailwind utility
+  classes `.sticky`/`.top-0`/`.z-50` exist in the built CSS bundle before
+  relying on them — the same class of check that caught the earlier
+  invisible-submit-button bug on the public side). Left slot: contact
+  name + status badge. Right slot: Download PDF, Save, Send/Resend,
+  Archive — application name to actions-on-the-right, exactly as
+  described.
+- **Save moved into the header.** The big form gained `id="rentalApplicationForm"`;
+  the header's Save button references it via the HTML5 cross-tree
+  `form="rentalApplicationForm"` attribute (no JS needed) — it is no
+  longer stranded at the bottom of a long scroll. The old bottom Save
+  button was removed, not duplicated.
+- **Send is disabled, never enabled-then-error** (STANDARDS.md "No Silent
+  Locks — Read-Only States Must Explain & Offer A Way Forward"):
+  `:disabled="dirty || !hasEmail"`. A visible reason renders beside the
+  button (not hover-only): "Add an email address to send" when there's no
+  saved email, "Save your changes first" when there are unsaved edits.
+- **The progression Johan described** — no email → Send disabled → type
+  email → Save highlights (`dirty` true) → Save → Send highlights
+  (`dirty` false, email now present) — is driven by one Alpine
+  `x-data="{ dirty: false }"` on the page wrapper and a single delegated
+  `@input="dirty = true" @change="dirty = true"` on the big `<form>` tag
+  itself. This catches every field's changes (three `<textarea>`s, one
+  `<select>`, and every `<x-rental-application-field>` input) without
+  touching any individual field — Alpine's event bubbling does the work,
+  so this scales to any future field added to the form for free.
+
+**Proven end to end, real requests as user 22, live QA1** (fresh
+application, contact with no email): status `draft` on creation (not
+`sent`); Send markup rendered `disabled` with "Add an email address to
+send" visible; a direct POST bypass to `/send` was refused server-side
+(`error` flash, status stayed `draft`, Mailpit confirms nothing sent);
+saved an email via the header-routed Save → persisted, reloaded page
+shows it; Send now succeeds → **Mailpit confirms the real captured
+message**, `status` becomes `sent` only at that point, never before; full
+form filled to distinct values with one deliberately invalid field
+(`adults`) → redirect, nothing saved, **every field including the four
+previously-reverting ones survived redisplay**, status unaffected by the
+failed save. Compiled-CSS check confirmed the sticky header's utility
+classes exist in the built bundle.
+
+**Regression tests**
+(`tests/Feature/RentalApplications/RentalApplicationAgentControllerTest.php`):
+`test_a_brand_new_application_is_draft_not_sent`,
+`test_send_is_refused_server_side_without_a_saved_email`,
+`test_full_send_flow_only_marks_sent_after_mail_actually_leaves`,
+`test_resending_an_in_progress_application_does_not_regress_its_status`.

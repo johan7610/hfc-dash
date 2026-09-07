@@ -166,6 +166,13 @@ class RentalApplicationController extends Controller
 
         $contact = Contact::findOrFail($validated['contact_id']);
 
+        // Johan, QA1 — "have not even sent anything, yet top left shows
+        // sent?" status starts 'draft' (true starting state — nothing has
+        // been sent yet) and the token/link are generated here, not inside
+        // send(): the online/download link must exist immediately (so an
+        // agent can copy and share it manually even for a contact with no
+        // email — the spec's own "share the links below directly" route),
+        // independent of whether the email-gated Send button is ever used.
         $application = RentalApplication::create(array_merge(
             $this->prefillFromContact($contact),
             [
@@ -173,7 +180,9 @@ class RentalApplicationController extends Controller
                 'property_id' => $validated['property_id'] ?? null,
                 'branch_id' => $request->user()->effectiveBranchId(),
                 'created_by_user_id' => $request->user()->id,
-                'status' => 'sent',
+                'status' => 'draft',
+                'token' => $this->generateToken(),
+                'token_expires_at' => now()->addDays(14),
             ],
         ));
 
@@ -212,37 +221,48 @@ class RentalApplicationController extends Controller
     }
 
     /**
-     * AT-392 spec §4 — one send, two return routes, applicant's choice. The
-     * token is generated unconditionally (needed either way: route (a)'s
-     * upload-back link and route (b)'s online link are the SAME token) —
-     * mirrors SignatureService::generateToken()'s shape (Str::random(64),
-     * uniqueness loop) and its 14-day expiry convention.
+     * AT-392 spec §4 — one send, two return routes, applicant's choice.
+     * Token/link generation happens in store(), not here — this action is
+     * purely "email it now."
+     *
+     * Johan, QA1 — "no email present and resets the form" / "status says
+     * sent on something never sent": Send is disabled client-side without
+     * a saved email (show.blade.php), but a direct POST must be refused
+     * the same way server-side — never trust a disabled attribute alone.
+     * And status only ever becomes 'sent' when mail genuinely left
+     * (`$mailSent === true`); a failed/refused send must never claim it.
      */
     public function send(Request $request, RentalApplication $rentalApplication)
     {
         $this->guardRentalApplication($rentalApplication);
 
-        if (! $rentalApplication->token) {
-            $rentalApplication->token = $this->generateToken();
-            $rentalApplication->token_expires_at = now()->addDays(14);
-        }
-        $rentalApplication->status = 'sent';
-        $rentalApplication->save();
-
         $recipientEmail = $rentalApplication->recipientEmail();
 
-        $mailSent = false;
-        if ($recipientEmail) {
-            $mailSent = app(RentalApplicationMailer::class)->sendInvite($rentalApplication);
+        if (! $recipientEmail) {
+            return redirect()
+                ->route('corex.rental-applications.show', $rentalApplication)
+                ->with('error', 'Add an email address and save before sending.');
         }
 
-        $message = $mailSent
-            ? 'Sent to ' . $recipientEmail . '. Both the download link and the online link are on this page too, if you want to share them another way.'
-            : 'This contact has no email on file — share the links below directly (WhatsApp, print, etc).';
+        $mailSent = app(RentalApplicationMailer::class)->sendInvite($rentalApplication);
+
+        if (! $mailSent) {
+            return redirect()
+                ->route('corex.rental-applications.show', $rentalApplication)
+                ->with('error', 'Could not send — please try again.');
+        }
+
+        // A resend of an application the applicant has already progressed
+        // (in_progress/returned/etc.) must not regress its status back to
+        // 'sent' — only the FIRST successful send moves it off 'draft'.
+        if ($rentalApplication->status === 'draft') {
+            $rentalApplication->status = 'sent';
+            $rentalApplication->save();
+        }
 
         return redirect()
             ->route('corex.rental-applications.show', $rentalApplication)
-            ->with('success', $message);
+            ->with('success', 'Sent to ' . $recipientEmail . '. Both the download link and the online link are on this page too, if you want to share them another way.');
     }
 
     public function pdf(RentalApplication $rentalApplication)
