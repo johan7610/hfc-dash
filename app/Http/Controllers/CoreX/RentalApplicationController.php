@@ -92,11 +92,25 @@ class RentalApplicationController extends Controller
         return view('corex.rental-applications.index', compact('applications', 'archived'));
     }
 
+    /**
+     * Johan, 2026-09-07 — real-use bug: uploadDocuments() only ever advances
+     * status sent -> in_progress (it never reaches 'returned', which requires
+     * the full sign-both-declarations submit — see
+     * RentalApplicationSigningController::submit()). This screen's status
+     * filter excluded 'in_progress' entirely, so an applicant who uploaded a
+     * real document without finishing the full signature flow was invisible
+     * here — not because the document was broken (it was correctly filed,
+     * linked, and rendered on show()), but because the APPLICATION never
+     * surfaced on the one screen named for reviewing incoming applicant
+     * activity. 'in_progress' also still shows on index() — deliberately
+     * left there too rather than removed, so nothing an agent currently
+     * relies on seeing disappears as a side effect of this fix.
+     */
     public function returned(Request $request): View
     {
         $query = RentalApplication::visibleTo($request->user())
             ->with(['contact', 'property', 'signatures'])
-            ->whereIn('status', ['returned', 'under_assessment', 'approved', 'declined', 'withdrawn']);
+            ->whereIn('status', ['in_progress', 'returned', 'under_assessment', 'approved', 'declined', 'withdrawn']);
 
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
