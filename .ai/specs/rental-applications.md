@@ -152,6 +152,9 @@ other filed document uses.
 | Public token entry | `GET rental-application/{token}` |
 | Public submit | `POST rental-application/{token}/submit` |
 | Public supporting-doc upload | `POST rental-application/{token}/documents` |
+| Public supporting-doc view | `GET rental-application/{token}/documents/{document}` |
+| Public supporting-doc remove (archive) | `POST rental-application/{token}/documents/{document}/remove` |
+| Public supporting-doc replace | `POST rental-application/{token}/documents/{document}/replace` |
 | PDF download (agent side, any time) | `GET corex/rental-applications/{rentalApplication}/pdf` |
 
 ---
@@ -304,3 +307,108 @@ captured by Mailpit with the correct subject and recipient.
 routes any `returned`-or-later status to the separate
 `already-submitted.blade.php` view before this template is ever reached,
 so the branch could never fire.
+
+---
+
+## Applicant-side document CRUD & access control (Johan, 2026-09-07 — "proper CRUD" standard)
+
+Full CRUD for the applicant's own supporting documents, applied to the
+public token-based side per the box-wide standard: "we always need proper
+CRUD... own / branch / agency levels... design and build correctly from
+the word go." List-screen requirements (search/sort/filter/pagination)
+do not apply here — there is no list screen on the public side, only an
+individual applicant's own small document set.
+
+### Access control mechanism
+
+A `documents.id` is a globally auto-incrementing key on a table shared
+across every agency, every module, and every application — knowing or
+guessing an id proves nothing. Every document action on the public route
+(`view`, `remove`, `replace`) re-derives the application from the URL
+**token** first, then independently verifies the target document's
+`source_type === 'rental_application' AND source_id === $application->id`
+before permitting any read or write
+(`RentalApplicationSigningController::scopedDocument()`). A mismatch
+returns **404, never 403** — a 403 would confirm "this id exists but is
+off-limits," leaking information a 404 does not.
+
+**Verified with real HTTP requests, not asserted:**
+- Fetching Application A's document using Application B's token → 404.
+- Fetching a raw/guessed document id (999999) using a valid but unrelated
+  token → 404.
+- Removing Application A's document using Application B's token → blocked;
+  confirmed via DB that the document's `deleted_at` stayed `NULL` — the
+  blocked attempt did not silently soft-delete anything anyway.
+- A completely invalid/guessed token → 404 (`firstOrFail()` in
+  `findByToken()`), same as any other unknown resource.
+- The identical action with the document's own correct token → 200, real
+  file returned. Confirms the control is a real boundary, not a
+  blanket failure that would also break the legitimate path.
+
+### Token expiry
+
+`token_expires_at` is checked independently on every route that touches
+an application — `show`, `submit`, `uploadDocuments`, `viewDocument`,
+`removeDocument`, `replaceDocument` — not only on the entry page. Verified
+with a genuinely expired test application (`token_expires_at` in the
+past): the entry page renders the "This link has expired" view with no
+form; `viewDocument` on a document that existed before expiry returns 404;
+`uploadDocuments`, `submit`, `removeDocument`, and `replaceDocument` all
+redirect back with "This link has expired" and perform no write (confirmed
+via DB — the application's `status`/`submitted_at` and the document's
+`deleted_at` were unchanged after the blocked attempts).
+
+### Full CRUD, including after submission
+
+The applicant can **view, replace, and remove (archive)** their own
+documents, not just create — "create-and-submit-only is not finished."
+`replaceDocument()` performs the swap atomically inside a `DB::transaction`:
+the new document is filed and the old one archived together, or neither
+happens.
+
+Document actions remain available **after the application is submitted**
+(`status = 'returned'`), matching the pre-existing spec design that
+supporting documents are uploadable "both before signing and after
+signing" (§ Documents). Only the *main application form* is blocked once
+submitted (`submit()`'s own status guard, unchanged) — re-reading Johan's
+"an expired/revoked/already-submitted token cannot be used to read or
+write anything" as applying to the application record itself, not to the
+already-approved post-submission document flow it would otherwise
+contradict. **Flagged for confirmation, not assumed**: if document actions
+should also lock once `status = 'returned'`, that is a one-line status
+check to add to `scopedDocument()` or each action — not done here pending
+Johan's call.
+
+Verified end-to-end against a real, already-submitted application: opened
+the "Application already received" page with its own valid token,
+replaced its one existing document — old document's `deleted_at` set
+(soft delete only, file remains on disk), new document created in the
+same transaction (identical timestamp), `documents()` relationship count
+correctly drops the old doc; then removed the new document — `deleted_at`
+set, file still exists on disk, `documents()` relationship count now `0`,
+and re-fetching the removed document's own view URL correctly 404s.
+
+### No hard deletes
+
+`removeDocument()` and the old-document side of `replaceDocument()` both
+call `Document::delete()` — `Document` already uses `SoftDeletes`, so this
+is always a soft delete; no `forceDelete()` anywhere in this code path.
+Confirmed by DB inspection after every remove/replace test above: the row
+persists with `deleted_at` set, the file remains on disk, and the record
+would be recoverable exactly as with any other soft-deleted document.
+
+### Agent-side visibility
+
+No change needed on the agent side (confirmed with cc3, agent-side lane
+owner): the agent's document listing already reads through the standard
+`documents()` Eloquent relationship, which respects `SoftDeletes`
+automatically — an applicant's replace/remove is reflected there with no
+additional work.
+
+### Routes added
+
+`GET /rental-application/{token}/documents/{document}` (`throttle:30,1`),
+`POST /rental-application/{token}/documents/{document}/remove`
+(`throttle:10,1`), `POST /rental-application/{token}/documents/{document}/replace`
+(`throttle:10,1`) — same throttle convention already used by
+`/sign/{token}`.
