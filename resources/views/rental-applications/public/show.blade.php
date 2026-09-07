@@ -1,3 +1,17 @@
+@php
+    // Computed here, not inline inside @json() in the <script> block below —
+    // a multi-line arrow-function/array literal nested inside a Blade
+    // directive's own parentheses tripped Blade's directive-argument
+    // parser (compiled to invalid PHP: a real ParseError on first render,
+    // NOT caught by Blade::compileString() alone, which only proves the
+    // template transforms — never assume that means the resulting PHP is
+    // valid without also linting the compiled output).
+    $initialDocuments = $application->documents->map(fn ($d) => [
+        'id' => $d->id,
+        'name' => $d->original_name,
+        'view_url' => route('rental-applications.public.documents.view', [$application->token, $d->id]),
+    ]);
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -222,11 +236,7 @@ function rentalApplicationForm() {
     return {
         submitting: false,
         error: '',
-        documents: @json($application->documents->map(fn ($d) => [
-            'id' => $d->id,
-            'name' => $d->original_name,
-            'view_url' => route('rental-applications.public.documents.view', [$application->token, $d->id]),
-        ])),
+        documents: @json($initialDocuments),
         uploading: [],
 
         csrfToken() {
