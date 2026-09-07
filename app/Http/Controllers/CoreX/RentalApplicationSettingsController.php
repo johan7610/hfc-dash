@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DocumentType;
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationChecklistConfig;
+use App\Models\RentalApplicationDeclineEmailSetting;
 use App\Models\RentalApplicationDocumentRequirement;
 use App\Models\RentalApplicationQualifyingSetting;
 use Illuminate\Http\Request;
@@ -39,7 +40,39 @@ class RentalApplicationSettingsController extends Controller
         // Reuses this SAME settings screen rather than a second settings home.
         $qualifyingMultiplier = RentalApplicationQualifyingSetting::multiplierFor($agencyId);
 
-        return view('corex.settings.rental-applications', compact('documentTypes', 'checklists', 'isConfigured', 'qualifyingMultiplier'));
+        // AT-392 authoriser flow — Johan: "each agency will want their own
+        // wording on declined." Suggested default shown until the agency
+        // saves their own — see RentalApplicationDeclineEmailSetting.
+        $declineEmail = RentalApplicationDeclineEmailSetting::forAgency($agencyId);
+
+        return view('corex.settings.rental-applications', compact(
+            'documentTypes', 'checklists', 'isConfigured', 'qualifyingMultiplier', 'declineEmail'
+        ));
+    }
+
+    /**
+     * AT-392 authoriser flow — separate route/method, same reasoning as
+     * updateQualifyingFormula() above.
+     */
+    public function updateDeclineEmail(Request $request)
+    {
+        $agencyId = $request->user()->effectiveAgencyId();
+
+        $validated = $request->validate([
+            'subject' => ['nullable', 'string', 'max:500'],
+            'body' => ['nullable', 'string', 'max:10000'],
+        ]);
+
+        RentalApplicationDeclineEmailSetting::updateOrCreate(
+            ['agency_id' => $agencyId],
+            [
+                'subject' => ($validated['subject'] ?? '') !== '' ? $validated['subject'] : null,
+                'body' => ($validated['body'] ?? '') !== '' ? $validated['body'] : null,
+            ],
+        );
+
+        return redirect()->route('corex.settings.rental-applications.edit')
+            ->with('success', 'Decline email wording saved.');
     }
 
     /**

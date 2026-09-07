@@ -2800,6 +2800,9 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     // form/route so it can never interfere with the existing checklist save above.
     Route::post('/settings/rental-applications/qualifying-formula', [\App\Http\Controllers\CoreX\RentalApplicationSettingsController::class, 'updateQualifyingFormula'])
         ->middleware('permission:rental_applications.manage_settings')->name('corex.settings.rental-applications.qualifying-formula');
+    // AT-392 authoriser flow, 2026-09-08 — decline email wording, same settings screen.
+    Route::post('/settings/rental-applications/decline-email', [\App\Http\Controllers\CoreX\RentalApplicationSettingsController::class, 'updateDeclineEmail'])
+        ->middleware('permission:rental_applications.manage_settings')->name('corex.settings.rental-applications.decline-email');
 
     Route::post('/settings/generate-token', [CoreXSettingsController::class, 'generateApiToken'])->name('corex.settings.generate-token');
     Route::post('/settings/notifications', [CoreXSettingsController::class, 'updateNotificationPreferences'])->middleware('permission:access_settings')->name('corex.settings.notifications.update');

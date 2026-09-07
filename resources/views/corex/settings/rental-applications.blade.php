@@ -68,5 +68,34 @@
             <button type="submit" class="corex-btn-primary text-xs">Save Formula</button>
         </form>
     </div>
+
+    {{-- AT-392 authoriser flow, 2026-09-08 — Johan: "each agency will want
+         their own wording on declined." A suggested default ships until the
+         agency saves their own — same forAgency()-never-writes-on-read
+         pattern as Qualifying Formula above. Merge fields are limited to
+         what this email can always honestly populate — applicant name and
+         agency name — no invented "how to improve" guidance (Johan was
+         explicit that part is still an open idea, not settled). --}}
+    <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
+        <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Decline Email</h2>
+        <p class="text-xs mb-3" style="color: var(--text-muted);">
+            Sent to the applicant if the authoriser declines their application. A suggested wording
+            is shown below — edit it to your own. Available merge fields:
+            <code>@{{applicant_name}}</code>, <code>@{{agency_name}}</code>.
+        </p>
+        <form method="POST" action="{{ route('corex.settings.rental-applications.decline-email') }}" class="space-y-3">
+            @csrf
+            <div>
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Subject</label>
+                <input type="text" name="subject" value="{{ old('subject', $declineEmail['subject']) }}" class="corex-input text-sm w-full">
+            </div>
+            <div>
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Body</label>
+                <textarea name="body" rows="10" class="corex-input text-sm w-full">{{ old('body', $declineEmail['body']) }}</textarea>
+            </div>
+            <button type="submit" class="corex-btn-primary text-xs">Save Decline Email</button>
+        </form>
+    </div>
+
 </div>
 @endsection
