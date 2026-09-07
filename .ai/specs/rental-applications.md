@@ -1480,6 +1480,109 @@ sidebar `w-60` = 240px, main content padding `p-4 lg:p-6` = 24px/side at
 The fix gives the document ~57% more width, and the assessment panel goes
 from 596px down to a fixed, always-narrow 260px — exactly Johan's ask.
 
+### Six usability fixes from Johan's first real test (2026-09-07)
+
+Johan tested the built screen live and gave six specific fixes plus one
+investigate-only item. Verbatim source: his testing session on
+`corex/rental-applications/13/review`.
+
+**PDF annotation toolbar and page-thumbnail panel are the BROWSER's, not
+ours — established definitively, not assumed.** The document is embedded
+as a bare `<iframe src="{route}...">` where the route
+(`RentalApplicationReviewController::viewDocumentInline`) streams the raw
+PDF bytes with `Content-Type: application/pdf` and
+`Content-Disposition: inline`. There is no PDF.js, no canvas, no annotation
+layer anywhere in this codebase for this screen — confirmed by reading both
+the controller and the blade file directly, not inferred. When a browser
+receives raw inline PDF bytes in an iframe it renders them with its OWN
+built-in viewer (Chrome/PDFium) — that viewer's toolbar (pen/highlighter/
+eraser), its left page-thumbnail panel, and its "changes may be lost"
+navigation warning all belong to the browser, not to CoreX. This has three
+direct consequences:
+
+- **Item 2 (default tool = highlighter, bright yellow): NOT buildable at
+  all in the current architecture.** A page cannot set defaults inside the
+  browser's own native PDF viewer UI — there is no API for it. Not "won't
+  persist," genuinely impossible without replacing the viewer itself.
+- **Items 3 and 5 (annotation persistence): confirmed — annotations
+  CANNOT be persisted by CoreX with the current approach.** They live only
+  in that browser tab's PDF viewer instance and vanish on navigation. The
+  "changes may be lost" popup Johan saw is the browser's own warning, not
+  ours — there is no save button because there is nothing of ours to save.
+  No fake save button was added.
+- **Item 1 (left page-thumbnail panel default-collapsed): fixable WITHOUT
+  owning the viewer**, via the standard PDF open-parameter convention
+  Chrome's native viewer honours — appended `#navpanes=0` to the iframe's
+  `src`. This defaults the browser's own thumbnail sidebar closed; its own
+  hamburger/toggle icon still opens it on demand, exactly matching Johan's
+  "clicking hamburger bar to see it" ask. This is a URL-fragment change
+  only — no new dependency, degrades harmlessly if a browser ignores it.
+
+**What it would actually take to own items 2 and 3/5 properly:** replace
+the iframe with a PDF.js-based renderer (canvas pages, our own zoom/scroll/
+pagination), build a custom highlight/freehand-ink toolbar in our own UI,
+add a migration + model for per-document annotations (page, coordinates/
+points, type, colour, author, timestamps), an autosave endpoint for them,
+and re-render stored annotations as an overlay on load. This is comparable
+in size to the Phase 2 assessment-panel build, arguably larger — freehand
+ink capture and highlight-rect hit-testing are real UI engineering, not a
+tweak. **Not started. Needs its own spec and its own decision with Johan**
+before any of it is built — flagged rather than guessed at.
+
+**Item 4 — independent scrolling + collapsible summary, both done.**
+Copied the exact mechanism `docuperfect/signatures/review.blade.php` already
+proved for `#agentAmendPanel` (max-height: calc(100vh − 32px) +
+position:sticky + align-self:stretch on the row, per that file's own
+comment: "align-self:stretch is LOAD-BEARING... a sticky element inside a
+box no taller than itself has ZERO scroll travel"). Applied the same
+values to `.rental-review-main` and `.rental-review-aside` — both now
+independently scroll within their own viewport-height budget. The
+"Submitted Application" summary now collapses (closed by default): every
+field in it also lives on the main application record one click away,
+while the documents below are the one thing this screen adds — so by
+default the freed height goes to the actual point of the screen. One click
+reopens it; nothing is destroyed.
+
+**Item 6 — data source and save visibility, answered factually.** Queried
+directly, not assumed: application 13's assessment row (`monthly_income
+25000.00`, `other_monthly_income 3000.00`, `monthly_expenses 4000.00`,
+notes "Payslips look consistent, employer confirmed telephonically.") was
+created **2026-09-07 13:56:38** by `updated_by_user_id = 22` (Johan
+Reichel). No seeder or factory anywhere in the codebase references
+`RentalApplicationAssessment` — grepped `database/seeders/` and
+`database/factories/`, zero matches. This is Johan's own real test input,
+and autosave DID fire and DID persist — the row's existence and its
+realistic prose content are proof, since nothing else could have created
+it. The actual bug: the save indicator only ever reflected the CURRENT
+session's own save events (`saveStatus: ''` on init, regardless of
+already-saved DB state), so a fresh page load of already-saved data showed
+nothing — indistinguishable from "never saved." Fixed: the indicator now
+seeds from the record's real `updated_at` on page load
+(`initialSavedAt`, already returned by `saveAssessment()` as `saved_at`
+but previously never read by the frontend), reads a live timestamp from
+every save response, and renders as a persistent background+icon badge
+("Saved at HH:MM") instead of small unstyled text that was easy to miss.
+
+**Item 7 — approver/authoriser flow: confirmed NOT built, investigated
+only, per instruction.** Grepped the full QA1 tree, not just this module —
+`RentalApplication.php`, all rental-applications migrations, `routes/web.php`,
+`config/corex-permissions.php`, every controller referencing the `approved`
+status. Findings: `approved`/`declined` are ENUM values on
+`rental_applications.status` only — filterable in the returned-applications
+list, but **no code path anywhere ever sets them** (no controller action
+transitions to `approved`). No `approver`/`authoriser` concept exists for
+rental applications at all: no designated-approver agency setting, no
+submit-for-approval action, no approval permission scoped to this module
+(the `approve_*` permission keys that do exist all belong to other modules —
+leave, RMCP, whistleblowing, FICA, policy, remote access), no approver
+signature step. This matches Johan's own original design-conversation words
+("approver - agency select. sign as well needed") which were already
+flagged as not-built in the Phase 2 entry above — same finding, reconfirmed
+on the current QA1 state after the rebuild. **Not built** — needs its own
+spec conversation with Johan (who selects the approver, per-application or
+per-agency default, what "sign as well" means concretely, what happens to
+status/notifications on approval) before any code is written.
+
 ---
 
 ## Round 3 (Johan, QA1) — list CRUD, contact email backfill, async document upload
