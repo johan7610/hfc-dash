@@ -81,10 +81,20 @@ class RentalApplication extends Model
      * currency prefix before validation ever sees the value — a human
      * writing money the way South Africans actually write it must never
      * be told it's invalid.
+     *
+     * RA-02 follow-up, 2026-09-08 — cc5's re-test found the SAME defect on
+     * fields this sweep never reached: the assessment panel's income/
+     * expense fields (a different model, RentalApplicationAssessment) and
+     * the authoriser's approved_rental_amount. `$fields` now defaults to
+     * `NUMERIC_FIELDS` (every existing caller keeps working unchanged) but
+     * accepts an explicit list so this one sanitizer serves every numeric
+     * money field on this feature, not just the ones that live on this
+     * model — no reason to duplicate the same three lines of string
+     * cleanup in every controller that touches a rand amount.
      */
-    public static function sanitizeNumericInput(array $input): array
+    public static function sanitizeNumericInput(array $input, ?array $fields = null): array
     {
-        foreach (self::NUMERIC_FIELDS as $field) {
+        foreach ($fields ?? self::NUMERIC_FIELDS as $field) {
             if (isset($input[$field]) && is_string($input[$field]) && $input[$field] !== '') {
                 $value = trim($input[$field]);
                 $value = preg_replace('/^R\s*/i', '', $value);
