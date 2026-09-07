@@ -2498,6 +2498,11 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/{mailbox}/edit', [\App\Http\Controllers\Compliance\CommunicationMailboxController::class, 'edit'])->name('edit');
         Route::put('/{mailbox}', [\App\Http\Controllers\Compliance\CommunicationMailboxController::class, 'update'])->name('update');
         Route::delete('/{mailbox}', [\App\Http\Controllers\Compliance\CommunicationMailboxController::class, 'destroy'])->name('destroy');
+        // AT-395 §7.1 — restore from archive (full CRUD floor, CLAUDE.md non-negotiable #8).
+        Route::post('/{mailbox}/restore', [\App\Http\Controllers\Compliance\CommunicationMailboxController::class, 'restore'])
+            ->withTrashed()->name('restore');
+        // AT-395 §6 — Test Connection, both legs.
+        Route::post('/{mailbox}/test-connection', [\App\Http\Controllers\Compliance\CommunicationMailboxController::class, 'testConnection'])->name('test-connection');
     });
 
     // ── WhatsApp capture device registration (AT-34) — agent self-service. ──
@@ -2550,6 +2555,11 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/users/{user}/mailbox', [\App\Http\Controllers\Settings\EmailSetupController::class, 'store'])->name('store');
         Route::put('/mailbox/{mailbox}', [\App\Http\Controllers\Settings\EmailSetupController::class, 'update'])->name('update');
         Route::delete('/mailbox/{mailbox}', [\App\Http\Controllers\Settings\EmailSetupController::class, 'destroy'])->name('destroy');
+        // AT-395 §7.1 — restore from archive.
+        Route::post('/mailbox/{mailbox}/restore', [\App\Http\Controllers\Settings\EmailSetupController::class, 'restore'])
+            ->withTrashed()->name('restore');
+        // AT-395 §6 — Test Connection, both legs.
+        Route::post('/mailbox/{mailbox}/test-connection', [\App\Http\Controllers\Settings\EmailSetupController::class, 'testConnection'])->name('test-connection');
     });
     // The audited reveal — principal-only, separate permission from management.
     Route::middleware(['permission:reveal_mailbox_credential', 'agency.required'])
@@ -2784,6 +2794,10 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->middleware('permission:rental_applications.manage_settings')->name('corex.settings.rental-applications.edit');
     Route::post('/settings/rental-applications', [\App\Http\Controllers\CoreX\RentalApplicationSettingsController::class, 'update'])
         ->middleware('permission:rental_applications.manage_settings')->name('corex.settings.rental-applications.update');
+    // AT-392 Phase 2 — qualifying-formula threshold, same settings screen, separate
+    // form/route so it can never interfere with the existing checklist save above.
+    Route::post('/settings/rental-applications/qualifying-formula', [\App\Http\Controllers\CoreX\RentalApplicationSettingsController::class, 'updateQualifyingFormula'])
+        ->middleware('permission:rental_applications.manage_settings')->name('corex.settings.rental-applications.qualifying-formula');
 
     Route::post('/settings/generate-token', [CoreXSettingsController::class, 'generateApiToken'])->name('corex.settings.generate-token');
     Route::post('/settings/notifications', [CoreXSettingsController::class, 'updateNotificationPreferences'])->middleware('permission:access_settings')->name('corex.settings.notifications.update');
@@ -2814,6 +2828,16 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             ->middleware('permission:rental_applications.create')->name('corex.rental-applications.destroy');
         Route::post('/{rentalApplication}/restore', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'restore'])
             ->middleware('permission:rental_applications.create')->name('corex.rental-applications.restore');
+    });
+
+    // AT-392 Phase 2 — agent review split-screen (RentalApplicationReviewController,
+    // a new file, deliberately separate from RentalApplicationController above,
+    // which is owned by another lane and actively being edited). See
+    // .ai/specs/rental-applications.md "Phase 2 — Agent review split-screen".
+    Route::prefix('rental-applications')->middleware('permission:rental_applications.view')->group(function () {
+        Route::get('/{rentalApplication}/review', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'show'])->name('corex.rental-applications.review');
+        Route::post('/{rentalApplication}/review/assessment', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'saveAssessment'])->name('corex.rental-applications.review.assessment');
+        Route::get('/{rentalApplication}/documents/{document}/view', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'viewDocumentInline'])->name('corex.rental-applications.documents.view');
     });
 
     Route::post('/settings/presentations', [CoreXSettingsController::class, 'updatePresentations'])->middleware('permission:access_settings')->name('corex.settings.presentations.update');

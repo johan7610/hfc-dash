@@ -70,6 +70,8 @@
                     <td class="px-4 py-2">{{ optional($application->submitted_at)->format('d M Y') ?? '—' }}</td>
                     <td class="px-4 py-2 text-right">
                         <a href="{{ route('corex.rental-applications.show', $application) }}" class="corex-btn-outline text-xs">Open</a>
+                        {{-- AT-392 Phase 2 — new file (RentalApplicationReviewController), agreed with cc4 --}}
+                        <a href="{{ route('corex.rental-applications.review', $application) }}" class="corex-btn-outline text-xs">Review</a>
                     </td>
                 </tr>
                 @empty

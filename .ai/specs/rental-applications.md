@@ -1236,3 +1236,175 @@ classes exist in the built bundle.
 `test_send_is_refused_server_side_without_a_saved_email`,
 `test_full_send_flow_only_marks_sent_after_mail_actually_leaves`,
 `test_resending_an_in_progress_application_does_not_regress_its_status`.
+
+---
+
+## Phase 2 — Agent review split-screen (Johan, 2026-09-07)
+
+**Spec-status correction, checked before any code was written, not
+assumed:** the original spec listed this explicitly under "Explicitly OUT
+of Phase 1" — *"Assessment split-screen with agency-configurable
+affordability calculator and approval routing."* It was never built, and
+was never separately communicated to Johan as deferred — he asked "wheres
+the whole open on screen, agent can see in left panel, and do stuff in the
+right panel part of the spec?" believing it should already exist. It was
+correctly scoped out, just never flagged as such at the time. This entry
+is that later phase, now built.
+
+Johan's own words from the original design conversation, verbatim, are the
+requirement this was built to: *"application gets returned, agent open
+application - sees application and supporting docs on left panel of
+screen... then have a place on the right panel to input things like -
+income, salary / etc etc... doing the calcs to the bottom to see if tenant
+qualifies. That would be a cool process and would be the start of the
+rental system being built."*
+
+### Approver concept — checked, not found, not built
+
+Also from that design conversation: *"approver - agency select. sign as
+well needed."* Grepped the entire codebase, not just this spec — no
+`approver` concept exists anywhere for rental applications (one
+false-positive match on the `approved` status enum value, not a role or
+flow). **Not built in this pass**, per instruction — reported, not
+assumed away.
+
+### File boundaries — agreed before writing anything
+
+Coordinated with cc3 and cc4 (both actively working in this module —
+applicant form, list actions, async document upload, a queued late-
+document badge on `show.blade.php`) before any code was written. Entirely
+new files: no edit to `RentalApplicationController.php`,
+`RentalApplication.php` (model), or `show.blade.php`. Two small additions
+to shared files: one new route group appended after the existing
+`rental-applications` prefix group in `routes/web.php` (no existing line
+touched), and one new form section appended to the existing rental
+applications settings screen (see "Qualifying formula" below — reuses the
+existing settings home, does not create a second one).
+
+### What was built
+
+- **`app/Http/Controllers/CoreX/RentalApplicationReviewController.php`**
+  (new) — `show()` (the split screen), `saveAssessment()` (autosave),
+  `viewDocumentInline()`. Uses the exact same
+  `AuthorizesRentalApplicationAccess::guardRentalApplication()` trait
+  every other rental-applications controller action already uses, so this
+  screen can never grant more access than `show()`/`downloadDocument()`
+  already do — not a new authorization mechanism.
+- **`app/Models/RentalApplicationAssessment.php`** (new) + migration
+  `2026_09_07_150000_create_rental_application_assessments_table` — one
+  row per application, every field nullable. `qualifyingResult()` is the
+  calculation itself, kept on the model (not the controller) so it can
+  never be called from two places and drift.
+- **`app/Models/RentalApplicationQualifyingSetting.php`** (new) +
+  migration `2026_09_07_150001_..._qualifying_settings_table` —
+  agency-configurable threshold. `multiplierFor()` follows STANDARDS.md
+  Rule 17's safe pattern exactly (sentinel-guarded, returns an in-memory
+  default of 3.0 for a null/zero agency id, never writes on read, never a
+  hardcoded `?? 1`).
+- **`resources/views/corex/rental-applications/review.blade.php`** (new)
+  — the split screen itself.
+- Settings screen extended (existing file, not a new one): one more
+  `<form>` posting to a new, separate route/method
+  (`updateQualifyingFormula()`) so it can never interfere with the
+  existing document-checklist form's own submission.
+- Three routes appended to the end of the existing `rental-applications`
+  prefix group + one to the settings block — no existing route line
+  edited.
+
+### Left panel — application + documents, viewable on screen
+
+Core V8 fields shown for context (employer, position, self-reported
+salary, current rental amount/landlord, household size), plus every
+supporting document with an inline viewer. PDFs and images render inline
+via `<iframe>`/native browser rendering — the same pattern already used
+elsewhere in CoreX (`tools/evaluation-certificate/authorisations.blade.php`),
+reused, not reinvented. **File types that cannot render inline (`doc`/
+`docx` — both are in the upload allowlist):** no broken embed is
+attempted; the document shows a "No preview" badge and a plain-language
+note ("This file type can't be shown on screen — download it to view
+it."), with a working download link. Determined by `mime_type` prefix
+(`application/pdf`, `image/*`), not file extension.
+
+`viewDocumentInline()` streams with `Content-Disposition: inline` (via
+`streamDownload()`'s existing 4th parameter — no new streaming mechanism)
+and carries the exact same `source_type`/`source_id` defense-in-depth
+check `downloadDocument()` already uses, so a document can never be opened
+inline through a route that the download route itself would refuse.
+
+### Right panel — affordability capture + suggestive calculation
+
+Three numeric fields (monthly income, other monthly income, monthly
+expenses) plus a free-text notes field. **Autosaves on blur, not on a
+single final submit** — "nothing the agent types may ever be lost" is an
+autosave requirement, proven by reload, not a UI nicety (see verification
+below). Every field is nullable and independently optional
+(BUILD_STANDARD §2) — a half-filled assessment is a normal, expected
+state.
+
+**The calculation is suggestive, never a rule.** Johan, verbatim: *"The
+marking is only suggestive to the agent to spot. not rule of thumb."*
+`qualifyingResult()` never blocks anything, never writes a decision
+anywhere, never appears as anything but a labelled suggestion on screen
+("Income appears to cover the rent — worth a closer look either way" /
+"Income may not cover the rent — worth a closer look" — deliberately
+phrased as a prompt to look, not a verdict). When there isn't enough
+input to compute anything (no income entered, or the application's own
+`current_rental_amount` is blank), it shows a plain "enter income..."
+message rather than a misleading zero or blank result presented as
+"passed."
+
+### Qualifying formula — agency-configurable, sensible default
+
+Johan: *"qualifying formula - agency can set this."* One threshold today
+— gross monthly income must be at least N&times; the rent, default 3.0
+(the common SA/international rule of thumb) — added to the **existing**
+rental applications settings screen rather than a second settings home,
+per instruction. `income_to_rent_multiplier`, `decimal(5,2)`, agency-
+scoped, `unique(agency_id)`.
+
+### Verified end-to-end, real requests as user 22, live QA1 (application id 13)
+
+- **Split screen renders**: `GET .../13/review` → 200, both panel
+  headings present, both real documents ("Rental Application Test.pdf",
+  "Property Report - 20 Marina Glen.pdf") listed.
+- **Inline document view is genuinely real, not a placeholder**: `GET
+  .../13/documents/2974/view` → 200, `Content-Type: application/pdf`,
+  `Content-Disposition: inline; filename="Rental Application Test.pdf"`,
+  950,811 bytes streamed, content genuinely starts `%PDF` — the real file,
+  not a stub.
+- **Autosave persists for real**: POST'd `monthly_income=25000,
+  other_monthly_income=3000, monthly_expenses=4000` + notes → 200, JSON
+  result `total_income: 28000, net_income: 24000` (rent was blank on this
+  application, so `label: "incomplete"` — the graceful, correct behaviour,
+  not a bug: no rent figure means no honest suggestion can be computed).
+  Confirmed directly in the database (not just trusting the JSON
+  response) that the row genuinely persisted with those exact values.
+- **Survives a genuinely fresh page load, not just the AJAX round-trip**:
+  re-dispatched a completely fresh `GET .../13/review` (new request, only
+  auth carried over) — the persisted income figure, the notes text, and
+  the calculated total all appear in the freshly rendered HTML, sourced
+  from the database, not from any client-side state.
+- **Scoping — a different agency is blocked, proven with a real user, not
+  asserted**: logged in as a genuine different-agency user (agency 17 vs
+  application 13's agency 1) and dispatched real requests to all three new
+  endpoints — the review screen, the inline document view, and the
+  assessment save — all three returned **404** (route-model-binding never
+  resolves the row across the `BelongsToAgency` global scope, the same
+  behaviour already proven for every other action on this module). The
+  blocked save attempt (`monthly_income=999999`) was confirmed, by direct
+  database check afterward, to have made **no change at all** — the
+  original agent's `25000` was still there.
+- `php -l` and `Blade::compileString()` clean on every new/changed file.
+  `dev-check.ps1` still cannot run on this Linux box (no `pwsh`) —
+  substituted `tests/Feature/Features/FeatureNavGuardCoverageTest.php`
+  again since the sidebar wasn't touched by this build — PASS.
+
+### Navigation — not yet wired, flagged not silently skipped
+
+BUILD_STANDARD §7 requires a navigation entry in the same build. The
+natural entry point is a "Review" link on `returned.blade.php`
+(cc4's file, being actively edited concurrently) — coordinated rather than
+edited directly; a one-line addition once cc4 confirms clear. Until then
+this is reachable only by direct URL
+(`corex/rental-applications/{id}/review`) — reported as an open item, not
+silently left out.

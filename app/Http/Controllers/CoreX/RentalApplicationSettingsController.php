@@ -7,6 +7,7 @@ use App\Models\DocumentType;
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationChecklistConfig;
 use App\Models\RentalApplicationDocumentRequirement;
+use App\Models\RentalApplicationQualifyingSetting;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -34,7 +35,33 @@ class RentalApplicationSettingsController extends Controller
                 ->where('employment_type', $type)->exists();
         }
 
-        return view('corex.settings.rental-applications', compact('documentTypes', 'checklists', 'isConfigured'));
+        // AT-392 Phase 2 — Johan: "qualifying formula - agency can set this."
+        // Reuses this SAME settings screen rather than a second settings home.
+        $qualifyingMultiplier = RentalApplicationQualifyingSetting::multiplierFor($agencyId);
+
+        return view('corex.settings.rental-applications', compact('documentTypes', 'checklists', 'isConfigured', 'qualifyingMultiplier'));
+    }
+
+    /**
+     * AT-392 Phase 2 — separate route/method from update() above so a save
+     * here can never interfere with the document-checklist form's own
+     * all-3-types-at-once submission shape.
+     */
+    public function updateQualifyingFormula(Request $request)
+    {
+        $agencyId = $request->user()->effectiveAgencyId();
+
+        $validated = $request->validate([
+            'income_to_rent_multiplier' => ['required', 'numeric', 'min:0.1', 'max:99.99'],
+        ]);
+
+        RentalApplicationQualifyingSetting::updateOrCreate(
+            ['agency_id' => $agencyId],
+            ['income_to_rent_multiplier' => $validated['income_to_rent_multiplier']],
+        );
+
+        return redirect()->route('corex.settings.rental-applications.edit')
+            ->with('success', 'Qualifying formula saved.');
     }
 
     public function update(Request $request)

@@ -44,5 +44,29 @@
             <button type="submit" class="corex-btn-primary text-xs">Save Checklist</button>
         </div>
     </form>
+
+    {{-- AT-392 Phase 2 — Johan: "qualifying formula - agency can set this."
+         Separate <form>/route so this save can never interfere with the
+         checklist form above. --}}
+    <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
+        <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Qualifying Formula</h2>
+        <p class="text-xs mb-3" style="color: var(--text-muted);">
+            Used on the application review screen to suggest whether a tenant's stated income
+            covers the rent — a prompt for the agent to look closer, never a rule that blocks or
+            decides anything.
+        </p>
+        <form method="POST" action="{{ route('corex.settings.rental-applications.qualifying-formula') }}" class="flex items-end gap-3">
+            @csrf
+            <div>
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
+                    Gross monthly income must be at least this many times the rent
+                </label>
+                <input type="number" name="income_to_rent_multiplier" step="0.01" min="0.1" max="99.99"
+                       value="{{ old('income_to_rent_multiplier', $qualifyingMultiplier) }}"
+                       class="corex-input text-sm" style="width: 100px;">
+            </div>
+            <button type="submit" class="corex-btn-primary text-xs">Save Formula</button>
+        </form>
+    </div>
 </div>
 @endsection
