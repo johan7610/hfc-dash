@@ -1727,6 +1727,107 @@ base to extend or copy, not a third invention. Never hand a PDF to an
 iframe expecting to save anything drawn in it — the browser's native PDF
 viewer cannot report back to CoreX at all, by design, on every browser.
 
+### In-place annotation, stroke marks, notes, and speed (Johan, 2026-09-08)
+
+Five items from Johan's second real test. Answered in his own required
+order — item 5 first, since it changed the shape of everything else.
+
+**5 — the modal was wrong, and he was right.** Verbatim: *"not sure the
+load in a seperate screen is the right option. now although you can
+highlight you lose the right hand panel to capture income etc. until you
+have finished the highlighting... think thats a problem as you have both
+but on separate screens and that means not working as one or integrated as
+one for use?"* The previous round's `fixed inset-0 z-50` modal covered the
+`.rental-review-aside` assessment panel entirely while open — functionally
+a separate screen even without a URL change. **Achievable, not hard, and
+built** — the mark-persistence backend never knew or cared whether its UI
+was a modal or inline; only the wrapping markup moved. The highlighter now
+renders in-place inside each document's own row, inside `.rental-review-main`
+(still its own independently-scrolling column). `.rental-review-aside` is a
+plain flex SIBLING — it was never covered by either shape and stays visible
+and usable the entire time an agent is marking up a document.
+
+**2 — sticky header, matching the existing fix, not inventing one.**
+Verbatim: *"the highlighter buttons are at the top, not in a header... so
+why are we bypassing the standard design again."* Found and reused
+`resources/views/components/sticky-action-bar.blade.php` (`<x-sticky-action-bar>`)
+— the SAME shared component `resources/views/corex/rental-applications/
+show.blade.php` already uses for its own Save-button fix (that file's own
+comment cites Johan's identical complaint about the rental application
+form). The header's right slot now swaps between "Back to application"
+(normal) and the highlighter's own tool picker + colour picker + undo/redo
++ mark count + Save button (while a document is open) — always reachable
+regardless of scroll position, on a document of any length.
+
+**3 — drag-to-mark, not draw-a-box; honest cost of true text-snapping.**
+Verbatim: *"is it difficult to include a highlighter effect - click and
+drag to mark instead of this drawing a box bit?"* The box was inherited
+directly from the redaction tool, where a box is correct (you're blacking
+out a region). Rebuilt as a genuine marker-pen gesture: the drag captures
+the actual pointer path (a point every few px of real movement, not just
+start/end), stored as `points: [{x,y}, ...]`, rendered live and burned as
+a thick translucent stroke following that exact path (SVG `<polyline>`
+in-app; GD `imageline` + `imagefilledellipse` at the joints when burning).
+**What this is NOT, stated plainly rather than silently substituted:** it
+does not snap to actual words or lines the way Adobe/Word's text-highlight
+does — the page is a raster image with no text-position data at all right
+now. True text-snapping needs a real text-and-bounding-box layer per page
+(Poppler's `pdftotext -bbox` is already installed and available, or
+introducing PDF.js's own text layer), then hit-testing the drag path
+against word boxes, then burning per-word rectangles instead of a
+freehand stroke. Rough sizing: a new server extraction step, client-side
+hit-testing logic, and a materially different burn path — comparable to
+or larger than this round's entire rebuild. Not started; flagged as a
+real, buildable option for Johan to greenlight separately, not decided
+unilaterally.
+
+**4 — notes/text pinned to a point on the document.** Verbatim: *"we now
+have the highlight but we dont have the write something, or insert a note
+bit."* Added as a second mark type in the SAME `marks_json` array
+(`{type:'note', x, y, text, color}`) — same storage, same persistence,
+same playback as highlights, per instruction. A small pinned marker with a
+click-to-open popover in the live viewer; burned into the flattened
+playback artifact as a visible marker + its own text (GD `imagestring`,
+word-wrapped) so "the next party" sees the note even in a downloaded copy,
+not only in the live in-app view.
+
+**1 — measured first, not guessed at.** Real numbers, not estimates,
+against a real 17-page/928KB document (app 13, doc 2974):
+`pagePreviews()` took **11,491ms** end-to-end before this round (~676ms/
+page). Broken down with real timers: `pdfinfo` ~17ms (noise); `pdftoppm`
+rendering itself ~512ms/page (**~76% of total** — genuine rasterization
+work at the SAME 150 DPI the proven redaction tool already uses, largely
+irreducible without a quality tradeoff); a redundant GD round-trip
+(`imagecreatefrompng` + `imagepng`, done for NO reason on a passive
+preview) ~120ms/page (**18% of total**, pure waste). Batching all 17 pages
+into one `pdftoppm` process call instead of 17 separate spawns was tested
+and measured too — only ~4% faster (9,041ms vs 8,704ms), so process-spawn
+overhead is NOT the bottleneck here; not worth the complexity on its own,
+but folded in anyway since it was free to do alongside the real fixes.
+**Two changes shipped, both safe (no visual/behavioural tradeoff):**
+(a) skip the GD round-trip — read the rasterized PNG bytes straight off
+disk for previewing; (b) cache rasterized pages on disk per document
+(keyed by document id + its own `updated_at`, so a genuinely replaced file
+rasterizes fresh). **Real before/after, same document:** first open (cold
+cache) **9,129ms** (down ~20% from 11,491ms, the GD-round-trip fix alone);
+second open (warm cache) **23ms** — a ~397× speedup for any repeat view,
+which is the common real case (an agent reopening a document they're
+already annotating, or a second agent opening the same file). **Flagged,
+not built — Johan's call, real tradeoff attached:** lowering DPI below 150
+would cut `pdftoppm`'s own ~76% further (render cost scales roughly with
+pixel count, so 100 DPI ≈ 44% of current pixels) but trades on-screen
+sharpness for speed — the one lever with a real quality cost, not decided
+unilaterally. Lazy-loading (return page 1 immediately, defer the rest)
+would improve PERCEIVED speed on a first-ever open without touching total
+server work — a moderate, well-scoped future addition, not built this
+round since the caching win already resolves the dominant real-world case
+(repeat opens).
+
+**Files the sticky-header pattern was taken from, as instructed:**
+`resources/views/components/sticky-action-bar.blade.php` (the shared
+component) and `resources/views/corex/rental-applications/show.blade.php`
+(the existing usage this round matched, left/right slot shape and all).
+
 ---
 
 ## Round 3 (Johan, QA1) — list CRUD, contact email backfill, async document upload
