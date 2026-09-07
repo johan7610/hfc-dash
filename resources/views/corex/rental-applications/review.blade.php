@@ -76,7 +76,8 @@
                         <span x-text="markCount()"></span> mark<span x-show="markCount() !== 1">s</span>
                     </span>
                     <button type="button" class="corex-btn-primary text-xs" x-show="!loading && !loadError"
-                            :disabled="applying" x-text="applying ? 'Saving…' : 'Save'" @click="applyHighlights()"></button>
+                            :disabled="applying || pagesLoading" :title="pagesLoading ? 'Still loading the rest of this document' : ''"
+                            x-text="applying ? 'Saving…' : (pagesLoading ? 'Loading…' : 'Save')" @click="applyHighlights()"></button>
                     <button type="button" class="corex-btn-outline text-xs" @click="closeHighlighter()">Done</button>
                 </div>
             </template>
@@ -198,7 +199,8 @@
                                             <button type="button" style="color: var(--ds-blue, #2563eb); font-weight: 600;"
                                                     @click="openHighlighter({
                                                         documentId: {{ $document->id }},
-                                                        dataUrl: '{{ route('corex.rental-applications.documents.highlight-data', [$rentalApplication, $document]) }}',
+                                                        firstPageUrl: '{{ route('corex.rental-applications.documents.highlight-data.first', [$rentalApplication, $document]) }}',
+                                                        remainingPagesUrl: '{{ route('corex.rental-applications.documents.highlight-data.remaining', [$rentalApplication, $document]) }}',
                                                         postUrl: '{{ route('corex.rental-applications.documents.highlight', [$rentalApplication, $document]) }}',
                                                         label: {{ Js::from($document->original_name) }},
                                                     })"
@@ -228,6 +230,17 @@
                                         <span x-show="activeTool === 'note'">Click anywhere on the document to pin a note.</span>
                                         Marks are saved for this document — anyone who opens it next sees the same marks.
                                     </p>
+
+                                    {{-- Progressive load, 2026-09-08 — Johan: "the agent must be able to
+                                         SEE that more pages are still coming, and roughly how many. A
+                                         page 1 that looks like the whole document is worse than a slow
+                                         load." Sharpness kept at full quality per his decision — this is
+                                         a one-time cost per document, made LESS painful by showing page 1
+                                         immediately, not made invisible. --}}
+                                    <div class="flex items-center gap-2 text-xs py-2 px-3 rounded-md mb-2" x-show="pagesLoading" x-cloak
+                                         style="background: var(--ds-blue-soft, #eff6ff); color: var(--ds-blue, #2563eb);">
+                                        <span>Page 1 of <span x-text="totalPages"></span> shown — loading the remaining <span x-text="totalPages - pages.length"></span> pages. You can start marking up page 1 now.</span>
+                                    </div>
 
                                     <div class="space-y-4 pt-2" x-show="!loading && !loadError">
                                         <template x-for="page in pages" :key="page.index">
@@ -588,9 +601,19 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
         applying: false,
         justSaved: false,
         label: '',
-        dataUrl: '',
+        firstPageUrl: '',
+        remainingPagesUrl: '',
         postUrl: '',
         pages: [],
+        totalPages: 0,
+        // Progressive load, 2026-09-08 (Johan's decision on the measured 9.2s
+        // cold-open cost) — page 1 loads first, the rest load behind it.
+        // `pagesLoading` drives the "N more pages loading" banner; `_savedByPage`
+        // holds ALL saved marks (raster px, keyed by page index) from the
+        // first-page response so marks for not-yet-loaded pages can still be
+        // restored the moment their page actually arrives — never dropped.
+        pagesLoading: false,
+        _savedByPage: {},
         marks: [],   // FLAT array: {type:'highlight', page, points:[{x,y}], width, color} | {type:'note', page, x, y, text, color}
         dirty: false,
         colors: [
@@ -629,24 +652,28 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
             }
 
             this.activeDocId = detail.documentId;
-            this.dataUrl = detail.dataUrl;
+            this.firstPageUrl = detail.firstPageUrl;
+            this.remainingPagesUrl = detail.remainingPagesUrl;
             this.postUrl = detail.postUrl;
             this.label = detail.label || '';
             this.activeTool = 'highlight';
             this.pages = [];
+            this.totalPages = 0;
             this.marks = [];
+            this._savedByPage = {};
             this.dirty = false;
             this.undoStack = [];
             this.redoStack = [];
             this.loadError = '';
             this.applyError = '';
             this.justSaved = false;
+            this.pagesLoading = false;
             this.openNote = null;
             this.pendingNote = null;
             this.activeColor = 'yellow';
             this.loading = true;
             try {
-                const res = await fetch(this.dataUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
+                const res = await fetch(this.firstPageUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
                 if (!res.ok) {
                     let msg = '';
                     try { msg = (await res.json()).error || ''; } catch (_) {}
@@ -655,37 +682,78 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
                     return;
                 }
                 const data = await res.json();
-                this.pages = data.pages || [];
-                if (!this.pages.length) { this.loadError = 'The document opened but produced no pages.'; }
-                // Existing saved marks come back in RASTER px (page.width space) —
-                // convert to DISPLAY px once the images have laid out.
-                const savedByPage = data.marks || {};
-                this.$nextTick(() => {
-                    for (const pageIndexStr of Object.keys(savedByPage)) {
-                        const pageIndex = parseInt(pageIndexStr, 10);
-                        const page = this.pages.find(p => p.index === pageIndex);
-                        const img = document.querySelector('img.rah-page-img[data-page="' + pageIndex + '"]');
-                        if (!page || !img || !img.clientWidth) continue;
-                        const scaleX = img.clientWidth / page.width;
-                        const scaleY = img.clientHeight / page.height;
-                        (savedByPage[pageIndexStr] || []).forEach(m => {
-                            if (m.type === 'note') {
-                                this.marks.push({ type: 'note', page: pageIndex, x: m.x * scaleX, y: m.y * scaleY, text: m.text, color: m.color || 'yellow' });
-                            } else {
-                                this.marks.push({
-                                    type: 'highlight', page: pageIndex,
-                                    points: (m.points || []).map(p => ({ x: p.x * scaleX, y: p.y * scaleY })),
-                                    width: (m.width || 26) * scaleX,
-                                    color: m.color || 'yellow',
-                                });
-                            }
-                        });
-                    }
-                });
+                if (!data.page) { this.loadError = 'The document opened but produced no pages.'; this.loading = false; return; }
+                this.pages = [data.page];
+                this.totalPages = data.total_pages || 1;
+                // Existing saved marks come back in ONE blob (RASTER px, keyed by
+                // page index) — never split per page, so a mark for a page that
+                // hasn't loaded yet is never at risk of being dropped; it's just
+                // restored later, the moment its page actually arrives (see
+                // fetchRemainingPages() below).
+                this._savedByPage = data.marks || {};
+                this.restoreSavedMarksForPages([0]);
+                this.loading = false;
+
+                if (this.totalPages > 1) {
+                    this.fetchRemainingPages();
+                }
             } catch (e) {
                 this.loadError = 'This document could not be opened: ' + (e && e.message ? e.message : 'network error') + '.';
+                this.loading = false;
             }
-            this.loading = false;
+        },
+        // Progressive load, 2026-09-08 — runs AFTER page 1 is already on
+        // screen; deliberately not awaited by openHighlighter() so the agent
+        // can start reading/marking page 1 immediately. `pagesLoading` drives
+        // the on-screen "N more pages loading" banner (Johan: the agent must
+        // be able to SEE more pages are coming, not just guess).
+        async fetchRemainingPages() {
+            this.pagesLoading = true;
+            try {
+                const res = await fetch(this.remainingPagesUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
+                if (!res.ok) {
+                    let msg = '';
+                    try { msg = (await res.json()).error || ''; } catch (_) {}
+                    this.loadError = msg || ('The rest of this document could not be loaded (HTTP ' + res.status + ').');
+                    this.pagesLoading = false;
+                    return;
+                }
+                const data = await res.json();
+                const newPages = data.pages || [];
+                this.pages = this.pages.concat(newPages);
+                this.restoreSavedMarksForPages(newPages.map(p => p.index));
+            } catch (e) {
+                this.loadError = 'The rest of this document could not be loaded: ' + (e && e.message ? e.message : 'network error') + '.';
+            }
+            this.pagesLoading = false;
+        },
+        // Shared by both the first-page load and the remaining-pages load —
+        // converts saved marks (RASTER px) to DISPLAY px for the given page
+        // indexes, once their images have actually laid out.
+        restoreSavedMarksForPages(pageIndexes) {
+            this.$nextTick(() => {
+                for (const pageIndex of pageIndexes) {
+                    const saved = this._savedByPage[String(pageIndex)] || this._savedByPage[pageIndex];
+                    if (!saved) continue;
+                    const page = this.pages.find(p => p.index === pageIndex);
+                    const img = document.querySelector('img.rah-page-img[data-page="' + pageIndex + '"]');
+                    if (!page || !img || !img.clientWidth) continue;
+                    const scaleX = img.clientWidth / page.width;
+                    const scaleY = img.clientHeight / page.height;
+                    saved.forEach(m => {
+                        if (m.type === 'note') {
+                            this.marks.push({ type: 'note', page: pageIndex, x: m.x * scaleX, y: m.y * scaleY, text: m.text, color: m.color || 'yellow' });
+                        } else {
+                            this.marks.push({
+                                type: 'highlight', page: pageIndex,
+                                points: (m.points || []).map(p => ({ x: p.x * scaleX, y: p.y * scaleY })),
+                                width: (m.width || 26) * scaleX,
+                                color: m.color || 'yellow',
+                            });
+                        }
+                    });
+                }
+            });
         },
         async closeHighlighter() {
             // Same explicit-confirm rule as openHighlighter() above — "Done"
@@ -809,6 +877,16 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
 
         async applyHighlights() {
             if (this.applying || this.activeDocId === null) return;
+            // Progressive load, 2026-09-08 — the save payload is built from
+            // `this.pages` (only the pages loaded so far) and REPLACES the
+            // document's whole mark set server-side. Saving while the
+            // remaining pages are still loading would silently wipe out any
+            // already-saved marks on those not-yet-loaded pages — exactly
+            // the "silently lose it" Johan ruled out. Refuse, don't guess.
+            if (this.pagesLoading) {
+                this.applyError = 'Still loading the rest of this document — wait a moment, then save.';
+                return;
+            }
             this.applyError = '';
             this.justSaved = false;
             this.applying = true;

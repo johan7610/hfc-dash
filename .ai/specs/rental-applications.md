@@ -2637,3 +2637,112 @@ anything.
 **Files touched this round:** `resources/views/corex/rental-applications/
 review.blade.php` only — (c)/(e)/(f) above. (a)/(b)/(d)/(g)/(h) required
 no code change, only re-verification; (i) is report-only.
+
+---
+
+## (i) resolved — progressive load, no quality tradeoff (Johan's decision, 2026-09-08)
+
+Johan's decision on the 9.2s cold-open cost above: build the progressive
+option, NOT the lower-DPI option — verbatim, *"the agent is reading an ID
+document, a payslip, a bank statement. Sharpness is the entire point of
+the screen; a slightly softer image to save a few seconds is a bad trade
+on exactly the documents where detail matters."* Two explicit requirements
+attached: the agent must be able to SEE more pages are coming and roughly
+how many, and marking on a not-yet-rendered page must never be possible
+(silently losing it is worse than not letting it happen).
+
+**What changed.** `RentalApplicationDocumentHighlightService::pagePreviews()`
+(one call, rasterizes and returns every page before anything can render)
+replaced with two methods:
+
+- `firstPagePreview()` — rasterizes ONLY page 1 (`pdftoppm -f 1 -l 1`),
+  returns it plus the real total page count (from `pdfinfo`, cached to a
+  `total-pages.txt` marker in the cache dir so a second request never
+  re-decrypts the source or re-runs `pdfinfo` for a number already known)
+  and the FULL saved-marks blob for the document (not split per page —
+  see "no data loss" below).
+- `remainingPagePreviews()` — rasterizes pages 2..N in ONE further
+  `pdftoppm` call (`-f 2`, no `-l`), same "batch, don't spawn per page"
+  lesson already measured for the full-document path. Both share the
+  exact same on-disk cache directory/versioning as before, so a document
+  that's already fully cached (a repeat open) is exactly as fast as it
+  always was — this only changes the FIRST-ever open of a document.
+
+Two new routes/controller methods (`highlightFirstPage`,
+`highlightRemainingPages`) replace the old single `highlight-data`
+endpoint. The frontend fetches the first page, renders it immediately,
+then fetches the remainder in the background — the agent can read and
+mark up page 1 while pages 2..N are still rendering server-side.
+
+**Real measurement, same 17-page document, genuinely cold cache:**
+first page **670ms** (down from 9.2s to see ANYTHING — a ~14× improvement
+in what the agent actually waits for before the screen is useful), then
+remaining 16 pages **8,694ms** in the background. Total server work
+**9,364ms** — essentially unchanged from the 9.2s single-call cost (as
+expected: it's the same `pdftoppm` rasterization, just split into two
+calls instead of one), confirming this is a genuine PERCEIVED-latency
+fix, not a hidden total-cost regression. Warm-cache repeat opens:
+**125ms** / **136ms** for the two calls — unchanged from before. Full
+150 DPI preserved throughout, page 1 and page 17 both verified at
+1241×1755px — no quality tradeoff of any kind, per instruction.
+
+**Requirement 1 — visible progress, not a silent wait.** A banner
+("Page 1 of 17 shown — loading the remaining 16 pages. You can start
+marking up page 1 now.") shows on screen while the remaining pages load,
+driven by a real `pagesLoading` flag, not a fixed timer.
+
+**Requirement 2 — cannot mark an unrendered page, and cannot lose a
+mark that was already there.** Two separate risks, both closed:
+
+- A page that hasn't loaded yet has no image and no draw-surface `<div>`
+  in the DOM at all (`x-for="page in pages"` only iterates over pages
+  that have actually arrived) — there is nothing for the agent to click
+  or drag on, so marking an unrendered page is not merely discouraged,
+  it's structurally impossible.
+- The more dangerous risk, found while building this (not by testing
+  after the fact): `applyHighlights()` (Save) builds its payload from
+  `this.pages` — if that only contains page 1 because the rest are still
+  loading, and the agent saves anyway, the resulting POST would REPLACE
+  the document's entire mark set server-side with a payload that only
+  covers page 1 — silently wiping any already-saved marks on pages 2..N,
+  exactly the class of loss Johan ruled out, just on OLD marks rather
+  than a mark the agent just drew. Fixed on both sides: `applyHighlights()`
+  now refuses outright while `pagesLoading` is true (a real, tested
+  guard, not just a disabled button — the Save button is ALSO disabled
+  and relabelled "Loading…" for the same duration, so the refusal is
+  never the agent's first sign anything was wrong). Backend
+  defence-in-depth: `cachedOrRasterizedPagePaths()` (used by
+  `applyMarks()` to assemble the final flattened PDF) now verifies the
+  cached page COUNT matches the real page count before trusting the
+  cache — previously it treated "any page file present" as "fully
+  cached," which a partially-loaded document now makes a real, not
+  hypothetical, state. Proved directly: cleared the cache, fetched ONLY
+  the first page (leaving the cache genuinely partial), then POSTed a
+  mark straight to the save endpoint bypassing the frontend guard on
+  purpose — got a real 200, and the resulting flattened PDF was verified
+  at a full **17 pages**, not 1.
+- Existing saved marks for a not-yet-loaded page are never dropped
+  either: the full marks blob comes back with the FIRST page's response
+  (cheap, and page-agnostic), held client-side, and applied to each page
+  the moment that specific page's image actually arrives — proved by
+  saving a note on page 6 and confirming it round-trips through the
+  first-page response's `marks` object correctly before page 6's image
+  has even loaded.
+
+**No cost not accounted for.** Checked before calling this done, per
+instruction to stop and say so if the real cost turned out worse than
+9.2s: total server-side work is unchanged (9.36s vs 9.2s, within normal
+variance), and the one edge case that costs MORE than before (an agent
+saving while pages are still loading) is exactly the scenario now
+prevented at the UI level — the backend safety net exists only to make
+that scenario correct rather than reachable in the first place.
+
+**Files touched:** `app/Services/RentalApplications/
+RentalApplicationDocumentHighlightService.php` (replaced `pagePreviews()`
+with `firstPagePreview()`/`remainingPagePreviews()`, refactored the
+private rasterization helpers to share one page-range rasterizer),
+`app/Http/Controllers/CoreX/RentalApplicationReviewController.php`
+(replaced `highlightData()` with two thin controller methods),
+`routes/web.php` (two routes replacing one), `resources/views/corex/
+rental-applications/review.blade.php` (progressive fetch, loading banner,
+save-guard).

@@ -2876,7 +2876,10 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         // ViewingPack's redaction architecture (own the render, persist
         // marks, play back to the next viewer) with translucent colour
         // instead of destructive black-out.
-        Route::get('/{rentalApplication}/documents/{document}/highlight-data', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'highlightData'])->name('corex.rental-applications.documents.highlight-data');
+        // Progressive load, 2026-09-08 — page 1 fast, the rest behind it (see
+        // RentalApplicationDocumentHighlightService::firstPagePreview()).
+        Route::get('/{rentalApplication}/documents/{document}/highlight-data/first', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'highlightFirstPage'])->name('corex.rental-applications.documents.highlight-data.first');
+        Route::get('/{rentalApplication}/documents/{document}/highlight-data/remaining', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'highlightRemainingPages'])->name('corex.rental-applications.documents.highlight-data.remaining');
         Route::post('/{rentalApplication}/documents/{document}/highlight', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'applyHighlight'])->name('corex.rental-applications.documents.highlight');
         Route::get('/{rentalApplication}/documents/{document}/highlighted-file', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'highlightedFile'])->name('corex.rental-applications.documents.highlighted-file');
         // Authoriser flow, 2026-09-08 — agent-side actions only (request more
