@@ -593,20 +593,25 @@ final class RentalApplicationAgentControllerTest extends TestCase
 
     public function test_every_status_change_is_recorded_with_who_when_from_and_to(): void
     {
+        // Deliberately not approved/declined: a cross-lane authoriser flow
+        // is narrowing AGENT_SETTABLE_STATUSES to remove those two (agent
+        // recommends, a designated authoriser decides) — this test is about
+        // the generic recording mechanism, not about which specific status
+        // is set, so it stays valid regardless of that narrowing.
         $app = $this->application($this->contact(), ['status' => 'returned']);
 
         $this->actingAs($this->agent)->post(
             route('corex.rental-applications.update-status', $app),
-            ['status' => 'approved', 'note' => 'Income qualifies, ID verified.']
+            ['status' => 'withdrawn', 'note' => 'Applicant called to withdraw.']
         );
 
         $this->assertDatabaseHas('rental_application_status_history', [
             'rental_application_id' => $app->id,
             'agency_id' => $this->agency->id,
             'from_status' => 'returned',
-            'to_status' => 'approved',
+            'to_status' => 'withdrawn',
             'changed_by_user_id' => $this->agent->id,
-            'note' => 'Income qualifies, ID verified.',
+            'note' => 'Applicant called to withdraw.',
         ]);
     }
 
@@ -633,7 +638,7 @@ final class RentalApplicationAgentControllerTest extends TestCase
 
         $response = $this->actingAs($this->agent)->post(
             route('corex.rental-applications.update-status', $app),
-            ['status' => 'approved']
+            ['status' => 'under_assessment']
         );
 
         $response->assertSessionHas('error');
@@ -664,7 +669,7 @@ final class RentalApplicationAgentControllerTest extends TestCase
 
         $response = $this->actingAs($otherAdmin)->post(
             route('corex.rental-applications.update-status', $app),
-            ['status' => 'approved']
+            ['status' => 'under_assessment']
         );
 
         $response->assertStatus(404);
@@ -714,11 +719,11 @@ final class RentalApplicationAgentControllerTest extends TestCase
 
         $this->actingAs($this->agent)->post(
             route('corex.rental-applications.update-status', $app),
-            ['status' => 'declined']
+            ['status' => 'withdrawn']
         );
 
         $app->refresh();
-        $this->assertSame('declined', $app->status);
+        $this->assertSame('withdrawn', $app->status);
         $app->delete();
         $this->assertSoftDeleted('rental_applications', ['id' => $app->id]);
         $this->assertDatabaseHas('rental_application_status_history', ['rental_application_id' => $app->id]);
