@@ -17,6 +17,7 @@
              notes: {{ Js::from($assessment->notes) }},
          },
          initialResult: {{ Js::from($result) }},
+         initialSavedAt: {{ $assessment->exists ? Js::from($assessment->updated_at->toIso8601String()) : 'null' }},
      })">
 
     <div class="rounded-md px-6 py-4 corex-page-banner flex items-center justify-between">
@@ -43,13 +44,23 @@
          Same two-region shape here: review-main (dominant, application + documents)
          and review-aside (fixed 260px, the agent's own working inputs). Stacks
          below 1280px, same breakpoint family as the signature review screen. --}}
+    {{-- Independent scrolling, 2026-09-07 — Johan: "the right and left panels
+         should scroll independently... to get more screen for the loaded pdf
+         to show." Copied the same proven mechanism as
+         docuperfect/signatures/review.blade.php's #agentAmendPanel: each
+         column gets its own max-height (viewport minus a fixed margin) and
+         its own scrollbar, so scrolling the document list never drags the
+         assessment panel off-screen and vice versa. align-self:stretch is
+         load-bearing there too — without it a sticky/capped column with no
+         taller sibling has zero scroll travel. --}}
     <style>
         .rental-review-columns { display: flex; flex-direction: column; gap: 20px; }
         .rental-review-main    { flex: 1 1 auto; min-width: 0; }
         .rental-review-aside   { width: 100%; }
         @media (min-width: 1280px) {
-            .rental-review-columns { flex-direction: row; gap: 16px; align-items: flex-start; }
-            .rental-review-aside   { flex: 0 0 260px; width: 260px; align-self: stretch; position: sticky; top: 16px; }
+            .rental-review-columns { flex-direction: row; gap: 16px; align-items: stretch; }
+            .rental-review-main    { max-height: calc(100vh - 32px); overflow-y: auto; }
+            .rental-review-aside   { flex: 0 0 260px; width: 260px; align-self: stretch; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
         }
     </style>
 
@@ -57,17 +68,29 @@
 
         {{-- MAIN — the submitted application + supporting documents, viewable on screen. Dominant column. --}}
         <div class="rental-review-main space-y-4">
-            <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
-                <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Submitted Application</h2>
-                <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                    <dt style="color: var(--text-muted);">Employer</dt><dd>{{ $rentalApplication->employer_name ?? '—' }}</dd>
-                    <dt style="color: var(--text-muted);">Position</dt><dd>{{ $rentalApplication->employer_position ?? '—' }}</dd>
-                    <dt style="color: var(--text-muted);">Monthly salary (self-reported)</dt><dd>{{ $rentalApplication->monthly_salary !== null ? 'R ' . number_format($rentalApplication->monthly_salary, 2) : '—' }}</dd>
-                    <dt style="color: var(--text-muted);">Current rental amount</dt><dd>{{ $rentalApplication->current_rental_amount !== null ? 'R ' . number_format($rentalApplication->current_rental_amount, 2) : '—' }}</dd>
-                    <dt style="color: var(--text-muted);">Current landlord</dt><dd>{{ $rentalApplication->current_landlord_name ?? '—' }}</dd>
-                    <dt style="color: var(--text-muted);">Adults / Children</dt><dd>{{ $rentalApplication->adults ?? '—' }} / {{ $rentalApplication->children ?? '—' }}</dd>
-                </dl>
-                <a href="{{ route('corex.rental-applications.show', $rentalApplication) }}" class="text-xs inline-block mt-3" style="color: var(--ds-blue, #2563eb);">View / edit full application &rarr;</a>
+            {{-- Collapsed by default, 2026-09-07 — Johan: "collapse on the submitted
+                 application section to get extra screen to view on [for the PDF]."
+                 Defaults CLOSED (not just collapsible) because every field here also
+                 lives on the main application record one click away, whereas the
+                 documents below are the one thing this screen adds — so the extra
+                 height goes to the actual point of this screen by default. One click
+                 re-opens it; nothing here is destroyed or hidden permanently. --}}
+            <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);" x-data="{ summaryOpen: false }">
+                <button type="button" class="w-full flex items-center justify-between text-left" @click="summaryOpen = !summaryOpen">
+                    <h2 class="text-sm font-semibold" style="color: var(--text-primary);">Submitted Application</h2>
+                    <span class="text-xs" style="color: var(--ds-blue, #2563eb);" x-text="summaryOpen ? 'Hide' : 'Show'"></span>
+                </button>
+                <div x-show="summaryOpen" x-cloak class="mt-3">
+                    <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                        <dt style="color: var(--text-muted);">Employer</dt><dd>{{ $rentalApplication->employer_name ?? '—' }}</dd>
+                        <dt style="color: var(--text-muted);">Position</dt><dd>{{ $rentalApplication->employer_position ?? '—' }}</dd>
+                        <dt style="color: var(--text-muted);">Monthly salary (self-reported)</dt><dd>{{ $rentalApplication->monthly_salary !== null ? 'R ' . number_format($rentalApplication->monthly_salary, 2) : '—' }}</dd>
+                        <dt style="color: var(--text-muted);">Current rental amount</dt><dd>{{ $rentalApplication->current_rental_amount !== null ? 'R ' . number_format($rentalApplication->current_rental_amount, 2) : '—' }}</dd>
+                        <dt style="color: var(--text-muted);">Current landlord</dt><dd>{{ $rentalApplication->current_landlord_name ?? '—' }}</dd>
+                        <dt style="color: var(--text-muted);">Adults / Children</dt><dd>{{ $rentalApplication->adults ?? '—' }} / {{ $rentalApplication->children ?? '—' }}</dd>
+                    </dl>
+                    <a href="{{ route('corex.rental-applications.show', $rentalApplication) }}" class="text-xs inline-block mt-3" style="color: var(--ds-blue, #2563eb);">View / edit full application &rarr;</a>
+                </div>
             </div>
 
             <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
@@ -95,7 +118,15 @@
                                 </button>
                                 <div x-show="open === {{ $document->id }}" x-cloak class="px-3 pb-3">
                                     @if($row['inline_viewable'])
-                                        <iframe src="{{ route('corex.rental-applications.documents.view', [$rentalApplication, $document]) }}"
+                                        {{-- #navpanes=0 — the browser's OWN native PDF viewer (Chrome/PDFium),
+                                             not ours; this is the standard PDF open-parameter it honours to
+                                             default its page-thumbnail sidebar closed. Johan: "left page panel
+                                             should not load as default... agents will not find that [how to
+                                             close it]." The panel is still reachable via the viewer's own
+                                             hamburger/sidebar-toggle icon — this only changes its default
+                                             state, nothing we control beyond that (see spec: this toolbar and
+                                             its tools are entirely the browser's, not a CoreX surface). --}}
+                                        <iframe src="{{ route('corex.rental-applications.documents.view', [$rentalApplication, $document]) }}#navpanes=0"
                                                 title="{{ $document->original_name }}"
                                                 style="width:100%;height:60vh;border:1px solid var(--border,#e3e8f0);border-radius:8px;background:#f8fafc;"></iframe>
                                     @else
@@ -141,7 +172,22 @@
                 </div>
             </div>
 
-            <div class="text-xs mt-2 h-4" x-show="saveStatus" x-text="saveStatus" :style="saveError ? 'color: var(--ds-red, #dc2626);' : 'color: var(--ds-emerald, #059669);'"></div>
+            {{-- Unmistakable save state, 2026-09-07 — Johan: "no save button visible
+                 anywhere?" and "is that filled in from where? ... no save to save
+                 this." Two real gaps, not one: (1) autosave-on-blur DOES fire and
+                 DOES persist (confirmed against the DB — this is real agent-entered
+                 data, not seeded), but a plain 12px text line with no background is
+                 easy to miss; (2) the indicator only ever reflected THIS session's
+                 own save events — on a fresh page load with already-saved data it
+                 showed nothing at all, which looks identical to "never saved."
+                 Fixed: seeded from the record's real updated_at on load, shown as a
+                 persistent badge (icon + background), not a message that can vanish
+                 unnoticed. --}}
+            <div class="flex items-center gap-1.5 text-xs mt-2 px-2 py-1 rounded-md" x-show="saveStatus"
+                 :style="saveError ? 'background: var(--ds-red-soft, #fef2f2); color: var(--ds-red, #dc2626);' : 'background: var(--ds-emerald-soft, #ecfdf5); color: var(--ds-emerald, #059669);'">
+                <span x-show="!saveError && saveStatus !== 'Saving…'">&check;</span>
+                <span x-text="saveStatus"></span>
+            </div>
 
             {{-- The calculation — SUGGESTIVE ONLY. Johan: "The marking is only
                  suggestive to the agent to spot. not rule of thumb." Never a
@@ -167,11 +213,14 @@
 </div>
 
 <script>
-function rentalReview({ saveUrl, initial, initialResult }) {
+function rentalReview({ saveUrl, initial, initialResult, initialSavedAt }) {
     return {
         fields: initial,
         result: initialResult ?? { label: 'incomplete' },
-        saveStatus: '',
+        // Seeded from the record's real updated_at, not blank — a fresh page
+        // load with already-saved data must say so immediately, not only
+        // after the agent's next edit (see comment above the badge).
+        saveStatus: initialSavedAt ? ('Saved at ' + formatTime(initialSavedAt)) : '',
         saveError: false,
         saveTimer: null,
         save() {
@@ -190,7 +239,7 @@ function rentalReview({ saveUrl, initial, initialResult }) {
                 }).then(r => r.json()).then(data => {
                     if (data.ok) {
                         this.result = data.result;
-                        this.saveStatus = 'Saved';
+                        this.saveStatus = data.saved_at ? ('Saved at ' + formatTime(data.saved_at)) : 'Saved';
                     } else {
                         this.saveError = true;
                         this.saveStatus = 'Could not save — try again';
@@ -205,6 +254,10 @@ function rentalReview({ saveUrl, initial, initialResult }) {
             return v === null || v === undefined ? '—' : 'R ' + Number(v).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         },
     };
+}
+
+function formatTime(iso) {
+    return new Date(iso).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
 }
 </script>
 @endsection
