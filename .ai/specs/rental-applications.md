@@ -214,26 +214,120 @@ behaviour of `--merge-defaults`, not a side effect of this feature — verify
 the diff on each run rather than assuming it only touches
 `rental_applications.*`.
 
-**2. The nav entry is currently placed inside the "Hidden" panel — system
-owners only.** `resources/views/layouts/corex-sidebar.blade.php`'s existing
-`@permission('view_rentals') @feature('rentals')`-gated "Rentals" drill-down
-(which the AT-392 links were added inside) itself nests inside the sidebar's
-"HIDDEN — pages hidden from agency users, visible to system owners only"
-section (`$isOwner` gate, line ~11/2481 as of this writing). **This means a
-normal per-agency admin — including Johan's own regular admin login,
-`johan@hfcoastal.co.za` (agency-scoped, not a system-owner account) —
-cannot see "Rental Applications" in the sidebar at all, no matter what
-`rental_applications.*` permissions they hold.** Verified on QA1
-2026-09-07: rendered a real authenticated page as that account with all 4
-permissions granted — the anchor does not appear. Rendered the same page as
-a genuine `super_admin`/owner account (with agency context set) — the
-anchor appears correctly. This is not a data/permission problem; it is a
-nav-placement decision inherited from the pre-existing "Rentals" panel, and
-needs an explicit call: either move the AT-392 links out of the "Hidden"
-owner-only group into a normal agency-facing section, or confirm this is
-deliberately staged as owner-only for now. **Not fixed as part of this
-entry — flagged for Johan/cc4 to decide**, per the "report, don't decide
-unilaterally" rule.
+**2. RESOLVED 2026-09-07 — the nav entry was inside the owner-only "Hidden"
+panel; it now has its own agency-visible main-menu section.** Originally
+found nested inside the sidebar's `$isOwner`-gated "Hidden" section (via
+the pre-existing "Rentals" drill-down there) — a normal per-agency admin,
+including Johan's own regular login, could not see it no matter what
+permissions they held. See "Rentals main-menu section" below for the full
+build, verification, and the known naming collision this created.
+
+---
+
+## Rentals main-menu section (Johan's decision, 2026-09-07)
+
+Johan: Rental Applications is an agency admin/agent feature, not a
+system-owner tool. Built as a proper top-level "Rentals" main-menu section
+in `resources/views/layouts/corex-sidebar.blade.php` — the container for a
+**growing** section, not a one-off link. Rental Applications is only the
+first child.
+
+**Structure.** Matches the existing "Reports"/"Leave Management" pattern
+exactly — same `corex-nav-item corex-nav-group-toggle` / `corex-nav-panel`
+/ push-pop Alpine markup as every other top-level drill-down group in the
+file. Placed between the "Reports" and "Trust Interest" groups (a natural,
+low-disruption boundary — both neighbours are themselves standalone,
+independently-gated groups, same shape as this one).
+
+**Internal Alpine group key is `rental-applications`, NOT `rentals`.**
+Deliberately distinct from the existing Hidden panel's `rentals` key (see
+below) — two groups sharing one key would corrupt each other's
+open/active panel-stack state via `$groupOpen()`/`$navGroupParents`. This
+is invisible to the user; only the visible label is "Rentals."
+
+**Section-level gate:** `@if($user && $user->hasAnyPermission(['rental_applications.view', 'rental_applications.view_returned']))`
+— no `@feature()` wrap. Two reasons: (1) there is no dedicated
+feature-registry entry for `rental_applications` in
+`config/corex-features.php`, and adding one would be scope creep on a
+nav-only change; (2) this exactly mirrors the "Reports" group immediately
+above it in the file, which is also permission-only for the same reason
+(its own comment: *"Gated by its own existing permission... not a new
+key"*). An agency with neither child permission sees no "Rentals" menu at
+all — not an empty shell.
+
+**Adding the next rentals feature:** one more
+`@permission(...)`/`<a>`/`@endpermission` block inside the panel `<div>`,
+directly after Returned Applications, same shape as the two existing
+children. Documented inline in the blade file's own comment at the same
+spot.
+
+### Known, deliberate, pending reconciliation — two things named "Rentals"
+
+**Not resolved, not ours to resolve.** A second, unrelated "Rentals"
+drill-down still exists, nested inside the sidebar's owner-only "Hidden"
+section (`$isOwner` gate) — lease capture, dashboard, e-signatures, active/
+expired leases. `config/corex-features.php`'s `'rentals'` feature key
+(`sidebar_section: 'hidden.rentals'`) belongs to that panel, not to this
+one. **Both are untouched by this build** — this section only adds the new
+agency-visible "Rentals" menu; the Hidden one is exactly as it was.
+
+Pre-build investigation (reported to Johan before any code was written,
+2026-09-07) established the Hidden panel is real, working, and — on the
+evidence — deliberately hidden rather than abandoned:
+- All 5 of its links resolve (`rentals.index`, `rental.dashboard`,
+  `rental.signatures`, `rental.active-leases`, `rental.expired-leases`),
+  backed by real controllers (`RentalsController`, `Rental\RentalDivisionController`)
+  with substantive query logic, not stubs.
+- All 5 views exist and are substantial (97–1,116 lines).
+- Real production-shaped data exists on QA1 (58 `Rental` rows, 2
+  `LeaseRecord` rows).
+- Dispatching a real authenticated request to all 5 routes returns 200.
+- 28 commits have touched this code, most recently in a 239-page app-wide
+  style sweep (July 2026) — still actively carried along by maintenance,
+  not forgotten.
+- The section's own comment is explicit: *"HIDDEN — pages hidden from
+  agency users, visible to system owners only."*
+
+**What a system owner actually sees, right now, with both sections live**
+(rendered and verified, not inferred): a "Rentals" toggle in the normal,
+agency-visible part of the menu (this build) that expands to "Rental
+Applications" / "Returned Applications" — **and**, separately, further
+down inside "Hidden," a second "Rentals" toggle that expands to a panel
+also titled "Rentals," which itself contains a link whose visible text is
+also just "Rentals" (the `rentals.index` link, labelled identically to its
+own parent group and panel). Three identical "Rentals" labels total, in
+two unrelated places, for the one role that can see both.
+
+**Assessment:** this does not fail or crash — both work independently and
+correctly (confirmed via the distinct Alpine keys) — but it reads as
+confusing or duplicated to a human looking at the sidebar, not as an
+intentional design. An owner encountering both without this context would
+reasonably wonder why "Rentals" appears twice. Flagged for Johan; nothing
+renamed or merged without his explicit call.
+
+### Verification (rendered output, real kernel dispatch — not blade source)
+
+- **User 22** (johan@hfcoastal.co.za, admin, agency 1): "Rentals" section
+  present and expandable (`push('rental-applications')` fires once), both
+  children present with correct hrefs (`corex/rental-applications`,
+  `corex/rental-applications/returned`).
+- **User 24** (agent, no `rental_applications.*` permissions): the entire
+  section — button, panel, both children — is absent. Zero occurrences of
+  "rental-applications" anywhere in the rendered page.
+- **Nothing else broke.** Compared three rendered states (original Hidden
+  placement → intermediate Tools placement → this build) for the same
+  user: every major nav section marker (Agents, Branch Manager, Tools,
+  Admin, System Developer, Dashboard, Properties, Deeds, Compliance,
+  Payroll, Reports, Trust Interest) has an identical count across all
+  three. A full span-by-span diff between the immediately-prior state and
+  this one shows only the expected structural delta (`Rentals` +
+  `Back` labels added for the new panel chrome) — no other label moved,
+  vanished, or duplicated.
+- `php -l` and a full `Blade::compileString()` compile check: both clean.
+- `dev-check.ps1` **cannot run on this box** — `pwsh` is not installed on
+  this Linux QA host. Substituted `tests/Feature/Features/FeatureNavGuardCoverageTest.php`
+  (the structural test that reads the sidebar file directly and checks
+  every feature-registry entry against its actual nav guard) — **PASS**.
 
 ---
 
