@@ -7,7 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\Docuperfect\Document;
 use App\Models\Docuperfect\DocumentType;
-use App\Models\Docuperfect\EsignSettings;
 use App\Models\Docuperfect\Flow;
 use App\Models\Docuperfect\NamedField;
 use App\Models\Docuperfect\Pack;
@@ -2716,7 +2715,7 @@ class ESignWizardController extends Controller
         $this->assertDeceasedRecipientsHaveSubstituteSigner($recipients);
         $this->assertSupplierRepresentativesHaveRegistrationNumber($recipients);
         $this->assertChainPartiesHaveIdNumbers($recipients);
-        $this->assertRecipientsHaveIdentityForSend($recipients, (int) ($user->agency_id ?? 0));
+        $this->assertRecipientsHaveIdentityForSend($recipients);
 
         // GENERATED-DOCUMENT BODY (Johan, 2026-08-25 — cc1's finding on
         // 93a10b6a2 — REVISED 2026-08-26, escalation of cc5's 547863fbb):
@@ -5124,9 +5123,13 @@ class ESignWizardController extends Controller
      * OR a passport number — foreign nationals on the KZN coast routinely
      * hold no SA ID (see the passport_number migration's rationale).
      *
-     * Gated behind EsignSettings::requireIdentityBeforeSend() (default
-     * true) so an agency can turn it off. Applied identically to both send
-     * paths (prepareSigning() and prepareWetInk()) — same reasoning as the
+     * Unconditional (Johan, 2026-09-07): "No, this is not settings but
+     * fixes we are building." Not agency-configurable — there was briefly
+     * an EsignSettings::requireIdentityBeforeSend() toggle here; it was
+     * removed (2026_09_07_025135) because "you may not send a legal
+     * document without identifying the signer" is not a preference an
+     * agency gets to switch off. Applied identically to both send paths
+     * (prepareSigning() and prepareWetInk()) — same reasoning as the
      * sibling asserts above: a wet-ink document has no server-side catch
      * after this point at all.
      *
@@ -5135,12 +5138,8 @@ class ESignWizardController extends Controller
      * with a blank identity; existing blanks on already-sent documents are
      * untouched, per Johan's explicit instruction.
      */
-    private function assertRecipientsHaveIdentityForSend(array &$recipients, int $agencyId): void
+    private function assertRecipientsHaveIdentityForSend(array &$recipients): void
     {
-        if (! EsignSettings::forAgency($agencyId)->requireIdentityBeforeSend()) {
-            return;
-        }
-
         foreach ($recipients as &$r) {
             if (($r['role'] ?? '') === 'agent') {
                 continue;
@@ -7407,7 +7406,7 @@ class ESignWizardController extends Controller
         $this->assertDeceasedRecipientsHaveSubstituteSigner($recipients);
         $this->assertSupplierRepresentativesHaveRegistrationNumber($recipients);
         $this->assertChainPartiesHaveIdNumbers($recipients);
-        $this->assertRecipientsHaveIdentityForSend($recipients, (int) ($user->agency_id ?? 0));
+        $this->assertRecipientsHaveIdentityForSend($recipients);
 
         // GENERATED-DOCUMENT BODY — same reasoning as prepareSigning()
         // (ESignWizardController.php ~2586-2610): the printed document must

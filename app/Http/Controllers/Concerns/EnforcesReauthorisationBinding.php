@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Concerns;
 
-use App\Models\Docuperfect\EsignSettings;
 use App\Models\Docuperfect\SignatureAuditLog;
 use App\Models\Docuperfect\SignatureRequest;
 use App\Models\Docuperfect\SignatureTemplate;
@@ -32,6 +31,13 @@ use App\Models\User;
  * message naming who authorised the original — never a 403." Callers get
  * a plain-language block reason back and redirect with it, exactly like
  * every other user-facing failure in this pipeline.
+ *
+ * Unconditional (Johan, 2026-09-07): "No, this is not settings but fixes
+ * we are building." Not agency-configurable — there was briefly an
+ * EsignSettings::strictReauthorisationBinding() toggle here; it was
+ * removed (2026_09_07_025135) because "the person who authorised it is
+ * the person who re-authorises it" is not a preference an agency gets to
+ * switch off.
  */
 trait EnforcesReauthorisationBinding
 {
@@ -42,11 +48,6 @@ trait EnforcesReauthorisationBinding
      */
     protected function reauthorisationBindingBlockReason(SignatureTemplate $template, User $user, string $attemptedAction): ?string
     {
-        $agencyId = (int) ($user->effectiveAgencyId() ?? $user->agency_id ?? 0);
-        if (! EsignSettings::forAgency($agencyId)->strictReauthorisationBinding()) {
-            return null;
-        }
-
         // The write-once binding record: whichever supervisor/supervisor_final
         // SignatureRequest row actually authorised this document originally.
         // Reused across every amendment round — never recreated — so this
