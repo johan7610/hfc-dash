@@ -32,6 +32,12 @@
                         {{ $rentalApplication->token ? 'Resend' : 'Send' }}
                     </button>
                 </form>
+                <form method="POST" action="{{ route('corex.rental-applications.destroy', $rentalApplication) }}"
+                      onsubmit="return confirm('Archive this rental application? It can be recovered by an admin.');">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="corex-btn-outline text-xs" style="color: var(--ds-red, #dc2626);">Archive</button>
+                </form>
                 @endpermission
             </div>
         </div>
@@ -65,7 +71,7 @@
             @else
                 <ul class="text-xs space-y-1" style="color: var(--text-secondary);">
                     @foreach($rentalApplication->documents as $doc)
-                        <li>✓ {{ $doc->original_name }} @if($doc->documentType) ({{ $doc->documentType->label }}) @endif</li>
+                        <li>✓ <a href="{{ route('corex.rental-applications.documents.download', [$rentalApplication, $doc]) }}" style="color: var(--brand-icon, #2563eb);">{{ $doc->original_name }}</a> @if($doc->documentType) ({{ $doc->documentType->label }}) @endif</li>
                     @endforeach
                 </ul>
             @endif
@@ -89,6 +95,13 @@
         @method('PUT')
 
         <div>
+            <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Property</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <x-rental-application-field name="property_address_override" label="Property address (if not linked above)" :value="$rentalApplication->property_address_override" />
+            </div>
+        </div>
+
+        <div>
             <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Personal Details</h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <x-rental-application-field name="full_name" label="Full name and surname" :value="$rentalApplication->full_name" />
@@ -100,6 +113,30 @@
                 <x-rental-application-field name="email" label="Email address" type="email" :value="$rentalApplication->email" />
                 <x-rental-application-field name="cell" label="Cell number" :value="$rentalApplication->cell" />
                 <x-rental-application-field name="work_number" label="Work number" :value="$rentalApplication->work_number" />
+            </div>
+            <div class="mt-3">
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Current residential address</label>
+                <textarea name="current_residential_address" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">{{ $rentalApplication->current_residential_address }}</textarea>
+            </div>
+        </div>
+
+        <div>
+            <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Emergency Contact (not staying with you)</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <x-rental-application-field name="emergency_contact_name" label="Name" :value="$rentalApplication->emergency_contact_name" />
+                <x-rental-application-field name="emergency_contact_cell" label="Cell number" :value="$rentalApplication->emergency_contact_cell" />
+                <x-rental-application-field name="emergency_contact_work" label="Work number" :value="$rentalApplication->emergency_contact_work" />
+            </div>
+        </div>
+
+        <div>
+            <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Current Landlord / Agent / Owner</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <x-rental-application-field name="current_landlord_name" label="Name" :value="$rentalApplication->current_landlord_name" />
+                <x-rental-application-field name="current_landlord_tel" label="Tel number" :value="$rentalApplication->current_landlord_tel" />
+                <x-rental-application-field name="current_rental_amount" label="Current rental amount (R)" type="number" :value="$rentalApplication->current_rental_amount" />
+                <x-rental-application-field name="current_rental_from" label="From" type="date" :value="optional($rentalApplication->current_rental_from)->format('Y-m-d')" />
+                <x-rental-application-field name="current_rental_to" label="To" type="date" :value="optional($rentalApplication->current_rental_to)->format('Y-m-d')" />
             </div>
         </div>
 
@@ -117,7 +154,26 @@
                 </div>
                 <x-rental-application-field name="employer_name" label="Employer" :value="$rentalApplication->employer_name" />
                 <x-rental-application-field name="employer_position" label="Position" :value="$rentalApplication->employer_position" />
+                <x-rental-application-field name="employer_tel" label="Employer tel number" :value="$rentalApplication->employer_tel" />
                 <x-rental-application-field name="monthly_salary" label="Monthly salary (R)" type="number" :value="$rentalApplication->monthly_salary" />
+            </div>
+            <div class="mt-3">
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Employer address</label>
+                <textarea name="employer_address" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">{{ $rentalApplication->employer_address }}</textarea>
+            </div>
+        </div>
+
+        <div>
+            <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Requirement of Lease</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <x-rental-application-field name="occupation_date" label="Effective date of occupation" type="date" :value="optional($rentalApplication->occupation_date)->format('Y-m-d')" />
+                <x-rental-application-field name="rental_terms" label="Rental terms required" :value="$rentalApplication->rental_terms" />
+                <x-rental-application-field name="adults" label="Number of adults" type="number" :value="$rentalApplication->adults" />
+                <x-rental-application-field name="children" label="Number of children" type="number" :value="$rentalApplication->children" />
+            </div>
+            <div class="mt-3">
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Special conditions</label>
+                <textarea name="special_conditions" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">{{ $rentalApplication->special_conditions }}</textarea>
             </div>
         </div>
 

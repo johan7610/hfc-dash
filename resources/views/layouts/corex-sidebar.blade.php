@@ -1748,6 +1748,71 @@
         </div>
         @endif
 
+        {{-- Rentals (slide-panel group) — AT-392, Johan's decision 2026-09-07:
+             Rental Applications is an agency admin/agent feature, not a
+             system-owner tool, so it gets a real main-menu home instead of
+             living inside the owner-only Hidden section. This is the
+             container for a GROWING section — Rental Applications is only
+             the first child.
+
+             KNOWN, DELIBERATE, PENDING RECONCILIATION: there is a second,
+             unrelated "Rentals" drill-down nested inside the owner-only
+             Hidden section further down this file (lease capture/dashboard/
+             signatures/active+expired leases — config/corex-features.php's
+             'rentals' feature key, sidebar_section 'hidden.rentals'). That
+             panel is untouched by this change — Johan is deciding separately
+             whether/how the two get reconciled. Do NOT fold them together on
+             your own initiative; see .ai/specs/rental-applications.md
+             "Known pending reconciliation" for the full history.
+
+             Gate: hasAnyPermission on this section's own children's
+             permissions (rental_applications.view / .view_returned), no
+             @feature() wrap — there is no dedicated feature-registry entry
+             for rental_applications (would be scope creep on a nav-only
+             change), and this mirrors the Reports group immediately above,
+             which is also permission-only for the same reason. Same
+             corex-nav-group-toggle / push() pattern as every other group in
+             this file.
+
+             Alpine group key is 'rental-applications', NOT 'rentals' —
+             deliberately distinct from the existing Hidden panel's 'rentals'
+             key above to avoid colliding in the $groupOpen()/$navGroupParents
+             panel-stack state (two groups sharing one key would corrupt each
+             other's open/active state).
+
+             TO ADD THE NEXT RENTALS FEATURE: add one more
+             @permission(...)/<a>/@endpermission block inside the panel div
+             below, after Returned Applications, following the exact same
+             shape. --}}
+        @if($user && $user->hasAnyPermission(['rental_applications.view', 'rental_applications.view_returned']))
+        <div>
+            <button type="button" @click="push('rental-applications')"
+                    class="corex-nav-item corex-nav-group-toggle {{ $activeGroup === 'rental-applications' ? 'active' : '' }}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                </svg>
+                <span>Rentals</span>
+                <svg class="corex-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+            </button>
+
+            <div class="corex-nav-panel {{ $activeGroup === 'rental-applications' ? 'is-open' : '' }}" :class="{ 'is-open': inStack('rental-applications') }">
+                <button type="button" @click="pop()" class="corex-nav-back">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+                    <span>Back</span>
+                </button>
+                <div class="corex-nav-panel-title">Rentals</div>
+
+                @permission('rental_applications.view')
+                <a href="{{ route('corex.rental-applications.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.rental-applications.index') || request()->routeIs('corex.rental-applications.create') || request()->routeIs('corex.rental-applications.show') ? 'active' : '' }}">Rental Applications</a>
+                @endpermission
+
+                @permission('rental_applications.view_returned')
+                <a href="{{ route('corex.rental-applications.returned') }}" class="corex-nav-subitem {{ request()->routeIs('corex.rental-applications.returned') ? 'active' : '' }}">Returned Applications</a>
+                @endpermission
+            </div>
+        </div>
+        @endif
+
         {{-- Trust Interest (slide-panel group) --}}
         @if($user && $user->hasAnyPermission(['access_trust_interest', 'access_deposit_calculator', 'access_deposit_calc_history', 'access_calculators']))
         @feature('trust-interest')
@@ -1907,26 +1972,6 @@
             </svg>
             <span>What's New</span>
         </a>
-
-        {{-- AT-392 — Rental Applications (Phase 1). Moved here 2026-09-07 from the
-             owner-only Hidden section (Johan's decision — this is an agency admin/
-             agent feature, not a system-owner tool). Permission gates unchanged. --}}
-        @permission('rental_applications.view')
-        <a href="{{ route('corex.rental-applications.index') }}" class="corex-nav-item {{ request()->routeIs('corex.rental-applications.index') || request()->routeIs('corex.rental-applications.create') || request()->routeIs('corex.rental-applications.show') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125V21M3 12l1.5-1.5M3 12l9-9 9 9M6 10.5V21a.75.75 0 0 0 .75.75H9m9-11.25L19.5 12M18 10.5V21a.75.75 0 0 1-.75.75H15" />
-            </svg>
-            <span>Rental Applications</span>
-        </a>
-        @endpermission
-        @permission('rental_applications.view_returned')
-        <a href="{{ route('corex.rental-applications.returned') }}" class="corex-nav-item {{ request()->routeIs('corex.rental-applications.returned') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 4.556-3.862 8.25-8.625 8.25a9.337 9.337 0 0 1-4.121-.952L3 20.25l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.556 3.862-8.25 8.625-8.25S21 7.444 21 12Z" />
-            </svg>
-            <span>Returned Applications</span>
-        </a>
-        @endpermission
 
         @endpermission {{-- /sidebar.section.tools --}}
 

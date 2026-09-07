@@ -214,26 +214,120 @@ behaviour of `--merge-defaults`, not a side effect of this feature — verify
 the diff on each run rather than assuming it only touches
 `rental_applications.*`.
 
-**2. The nav entry is currently placed inside the "Hidden" panel — system
-owners only.** `resources/views/layouts/corex-sidebar.blade.php`'s existing
-`@permission('view_rentals') @feature('rentals')`-gated "Rentals" drill-down
-(which the AT-392 links were added inside) itself nests inside the sidebar's
-"HIDDEN — pages hidden from agency users, visible to system owners only"
-section (`$isOwner` gate, line ~11/2481 as of this writing). **This means a
-normal per-agency admin — including Johan's own regular admin login,
-`johan@hfcoastal.co.za` (agency-scoped, not a system-owner account) —
-cannot see "Rental Applications" in the sidebar at all, no matter what
-`rental_applications.*` permissions they hold.** Verified on QA1
-2026-09-07: rendered a real authenticated page as that account with all 4
-permissions granted — the anchor does not appear. Rendered the same page as
-a genuine `super_admin`/owner account (with agency context set) — the
-anchor appears correctly. This is not a data/permission problem; it is a
-nav-placement decision inherited from the pre-existing "Rentals" panel, and
-needs an explicit call: either move the AT-392 links out of the "Hidden"
-owner-only group into a normal agency-facing section, or confirm this is
-deliberately staged as owner-only for now. **Not fixed as part of this
-entry — flagged for Johan/cc4 to decide**, per the "report, don't decide
-unilaterally" rule.
+**2. RESOLVED 2026-09-07 — the nav entry was inside the owner-only "Hidden"
+panel; it now has its own agency-visible main-menu section.** Originally
+found nested inside the sidebar's `$isOwner`-gated "Hidden" section (via
+the pre-existing "Rentals" drill-down there) — a normal per-agency admin,
+including Johan's own regular login, could not see it no matter what
+permissions they held. See "Rentals main-menu section" below for the full
+build, verification, and the known naming collision this created.
+
+---
+
+## Rentals main-menu section (Johan's decision, 2026-09-07)
+
+Johan: Rental Applications is an agency admin/agent feature, not a
+system-owner tool. Built as a proper top-level "Rentals" main-menu section
+in `resources/views/layouts/corex-sidebar.blade.php` — the container for a
+**growing** section, not a one-off link. Rental Applications is only the
+first child.
+
+**Structure.** Matches the existing "Reports"/"Leave Management" pattern
+exactly — same `corex-nav-item corex-nav-group-toggle` / `corex-nav-panel`
+/ push-pop Alpine markup as every other top-level drill-down group in the
+file. Placed between the "Reports" and "Trust Interest" groups (a natural,
+low-disruption boundary — both neighbours are themselves standalone,
+independently-gated groups, same shape as this one).
+
+**Internal Alpine group key is `rental-applications`, NOT `rentals`.**
+Deliberately distinct from the existing Hidden panel's `rentals` key (see
+below) — two groups sharing one key would corrupt each other's
+open/active panel-stack state via `$groupOpen()`/`$navGroupParents`. This
+is invisible to the user; only the visible label is "Rentals."
+
+**Section-level gate:** `@if($user && $user->hasAnyPermission(['rental_applications.view', 'rental_applications.view_returned']))`
+— no `@feature()` wrap. Two reasons: (1) there is no dedicated
+feature-registry entry for `rental_applications` in
+`config/corex-features.php`, and adding one would be scope creep on a
+nav-only change; (2) this exactly mirrors the "Reports" group immediately
+above it in the file, which is also permission-only for the same reason
+(its own comment: *"Gated by its own existing permission... not a new
+key"*). An agency with neither child permission sees no "Rentals" menu at
+all — not an empty shell.
+
+**Adding the next rentals feature:** one more
+`@permission(...)`/`<a>`/`@endpermission` block inside the panel `<div>`,
+directly after Returned Applications, same shape as the two existing
+children. Documented inline in the blade file's own comment at the same
+spot.
+
+### Known, deliberate, pending reconciliation — two things named "Rentals"
+
+**Not resolved, not ours to resolve.** A second, unrelated "Rentals"
+drill-down still exists, nested inside the sidebar's owner-only "Hidden"
+section (`$isOwner` gate) — lease capture, dashboard, e-signatures, active/
+expired leases. `config/corex-features.php`'s `'rentals'` feature key
+(`sidebar_section: 'hidden.rentals'`) belongs to that panel, not to this
+one. **Both are untouched by this build** — this section only adds the new
+agency-visible "Rentals" menu; the Hidden one is exactly as it was.
+
+Pre-build investigation (reported to Johan before any code was written,
+2026-09-07) established the Hidden panel is real, working, and — on the
+evidence — deliberately hidden rather than abandoned:
+- All 5 of its links resolve (`rentals.index`, `rental.dashboard`,
+  `rental.signatures`, `rental.active-leases`, `rental.expired-leases`),
+  backed by real controllers (`RentalsController`, `Rental\RentalDivisionController`)
+  with substantive query logic, not stubs.
+- All 5 views exist and are substantial (97–1,116 lines).
+- Real production-shaped data exists on QA1 (58 `Rental` rows, 2
+  `LeaseRecord` rows).
+- Dispatching a real authenticated request to all 5 routes returns 200.
+- 28 commits have touched this code, most recently in a 239-page app-wide
+  style sweep (July 2026) — still actively carried along by maintenance,
+  not forgotten.
+- The section's own comment is explicit: *"HIDDEN — pages hidden from
+  agency users, visible to system owners only."*
+
+**What a system owner actually sees, right now, with both sections live**
+(rendered and verified, not inferred): a "Rentals" toggle in the normal,
+agency-visible part of the menu (this build) that expands to "Rental
+Applications" / "Returned Applications" — **and**, separately, further
+down inside "Hidden," a second "Rentals" toggle that expands to a panel
+also titled "Rentals," which itself contains a link whose visible text is
+also just "Rentals" (the `rentals.index` link, labelled identically to its
+own parent group and panel). Three identical "Rentals" labels total, in
+two unrelated places, for the one role that can see both.
+
+**Assessment:** this does not fail or crash — both work independently and
+correctly (confirmed via the distinct Alpine keys) — but it reads as
+confusing or duplicated to a human looking at the sidebar, not as an
+intentional design. An owner encountering both without this context would
+reasonably wonder why "Rentals" appears twice. Flagged for Johan; nothing
+renamed or merged without his explicit call.
+
+### Verification (rendered output, real kernel dispatch — not blade source)
+
+- **User 22** (johan@hfcoastal.co.za, admin, agency 1): "Rentals" section
+  present and expandable (`push('rental-applications')` fires once), both
+  children present with correct hrefs (`corex/rental-applications`,
+  `corex/rental-applications/returned`).
+- **User 24** (agent, no `rental_applications.*` permissions): the entire
+  section — button, panel, both children — is absent. Zero occurrences of
+  "rental-applications" anywhere in the rendered page.
+- **Nothing else broke.** Compared three rendered states (original Hidden
+  placement → intermediate Tools placement → this build) for the same
+  user: every major nav section marker (Agents, Branch Manager, Tools,
+  Admin, System Developer, Dashboard, Properties, Deeds, Compliance,
+  Payroll, Reports, Trust Interest) has an identical count across all
+  three. A full span-by-span diff between the immediately-prior state and
+  this one shows only the expected structural delta (`Rentals` +
+  `Back` labels added for the new panel chrome) — no other label moved,
+  vanished, or duplicated.
+- `php -l` and a full `Blade::compileString()` compile check: both clean.
+- `dev-check.ps1` **cannot run on this box** — `pwsh` is not installed on
+  this Linux QA host. Substituted `tests/Feature/Features/FeatureNavGuardCoverageTest.php`
+  (the structural test that reads the sidebar file directly and checks
+  every feature-registry entry against its actual nav guard) — **PASS**.
 
 ---
 
@@ -412,3 +506,153 @@ additional work.
 (`throttle:10,1`), `POST /rental-application/{token}/documents/{document}/replace`
 (`throttle:10,1`) — same throttle convention already used by
 `/sign/{token}`.
+
+---
+
+## Agent-side hardening (2026-09-07)
+
+Johan tested the applicant side himself and hit a blocker within minutes;
+the agent side was assumed equally under-tested and every screen was
+re-rendered through the kernel as a real authenticated user (not just
+grepped) to check. It was — four real gaps found and fixed, none of which
+had any test coverage before this pass:
+
+1. **`searchProperties()` returned every listing type.** A rental
+   application's property picker showed for-sale, commercial, and vacant
+   land listings alongside rentals. Fixed with a `listing_type = 'rental'`
+   filter — `RentalApplicationController::searchProperties()`.
+2. **`show.blade.php` rendered only ~40% of the V8 field list.** Missing
+   entirely: `property_address_override`, `current_residential_address`,
+   the whole Emergency Contact block, the whole Current Landlord block,
+   `employer_address`/`employer_tel`, and the whole Requirement of Lease
+   block (`occupation_date`, `rental_terms`, `special_conditions`,
+   `adults`, `children`). An agent opening a submitted application could
+   not see or edit most of what the applicant actually submitted, even
+   though the PDF template (`corex/rental-applications/pdf.blade.php`)
+   already rendered every field correctly — the two views had silently
+   diverged. Fixed by adding the missing sections to the edit form,
+   mirroring the PDF's own field list exactly. Three of the added fields
+   (`current_residential_address`, `employer_address`,
+   `special_conditions`, all `max:2000` per the shared validation rules)
+   use a plain inline `<textarea>` rather than the shared
+   `x-rental-application-field` component — that component is also used by
+   the public applicant view and was being actively edited by the
+   applicant-side lane at the same time, so it was left untouched rather
+   than risk a collision.
+3. **No document-download route existed on the agent side.** Supporting
+   documents were listed by filename only, with no way to open one. Added
+   `GET corex/rental-applications/{rentalApplication}/documents/{document}`
+   → `RentalApplicationController::downloadDocument()`. Both route
+   parameters are agency-scoped by their own model's `BelongsToAgency`
+   global scope (a cross-agency id 404s at route-model-binding, before the
+   method body ever runs); the method additionally checks
+   `source_type`/`source_id` match as defense-in-depth against a
+   same-agency agent guessing a document id belonging to a different
+   application.
+4. **No archive/delete route existed.** `RentalApplication` already had
+   `SoftDeletes`; the destroy action was simply never wired up. Added
+   `DELETE corex/rental-applications/{rentalApplication}` →
+   `RentalApplicationController::destroy()`, gated on
+   `rental_applications.create` (the spec defines no separate delete
+   permission), with a confirm dialog on the Archive button per
+   STANDARDS.md.
+
+Also verified and confirmed already correct (no changes needed): contact
+prefill on create, send + Mailpit-only delivery, agency isolation at both
+the route-model-binding and raw-query level, the settings-screen
+save/reload round-trip, and PDF generation (`RentalApplicationPdfService`,
+shared with the applicant-side `pdf()` route) — a real PDF was generated
+and opened, containing the applicant's actual submitted field values,
+correct agency branding (no hardcoded HFC literals), and rendering
+uploaded signature images correctly.
+
+New test coverage: `tests/Feature/RentalApplications/RentalApplicationAgentControllerTest.php`
+— none existed for this controller before this pass.
+
+---
+
+## CRUD / search / sort / scoping standard (Johan, 2026-09-07 — permanent, applies from the word go)
+
+Johan, verbatim, mid-build: "we always need proper crud? search / sort /
+own / branch / agency levels. that should be the design standard. not me
+asking for it once we get to that stage." This is a correctness/security
+requirement, not a setting — there is no toggle, it just works. Applied
+immediately to the agent side of this module rather than deferred; the
+same standard is being written into BUILD_STANDARD.md/STANDARDS.md/CLAUDE.md
+project-wide (a separate lane's work, not this one's).
+
+**Full CRUD.** Create (`store`), read (`index`/`returned`/`show`), update
+(`update`), archive (`destroy` — soft delete only, `RentalApplication`
+already had `SoftDeletes`), and restore (`restore`, new). A route-model-
+bound `{rentalApplication}` 404s on a soft-deleted row by default, so
+`restore()` explicitly binds `RentalApplication::withTrashed()->findOrFail()`
+— the only action in the controller that needs to.
+
+**Search** (both `index` and `returned`, `?q=`): matches the application
+id itself (an agent quoting "#42"), `property_address_override`, the
+linked contact's `first_name`/`last_name`/`email`, and the linked
+property's `address`/`title`. Both list screens show a real empty state
+("No rental applications match this search" / "No returned applications
+match this filter") when a search/filter combination matches nothing,
+distinct from the true-empty-table state.
+
+**Sort** (`?sort=&direction=`): `contact` (joins `contacts.last_name`),
+`property` (joins `properties.address`), `status`, `date` (`created_at`
+on `index`, `submitted_at` on `returned`). Default: `date desc` (newest
+first) on both screens, unchanged from before this standard, now explicit
+and user-controllable via clickable column headers. **`status` is a MySQL
+`enum`** (`RentalApplication::STATUSES`) — sorting by it orders by
+*declared* index (`sent` → `in_progress` → `returned` → ...), i.e. rough
+workflow order, never alphabetically. This is intentional/more useful
+than alphabetical for a status column, not a defect — documented here so
+a future reader doesn't "fix" it into alphabetical order.
+
+**Date range** (`?date_from=&date_to=`): filters the same date column
+sorting defaults to (`created_at` / `submitted_at`).
+
+**Pagination**: 25 per page on every list (`index`, `returned`, and the
+new archived sub-list), `->withQueryString()` so search/sort/filter
+survive pagination.
+
+**Own / branch / agency scoping — enforced at the query layer, on every
+list, detail view, PDF, and document download, never by hiding a link:**
+
+- `RentalApplication::scopeVisibleTo($query, $user)` (new model method) —
+  the list-query guard, applied in `index()`, `returned()`, and the
+  archived sub-query. Mirrors `Docuperfect\Document::scopeVisibleTo()`
+  EXACTLY: `PermissionService::getDataScope($user, 'rental_applications')`
+  resolves to `'own'` (→ `created_by_user_id` — the creating agent, this
+  module's equivalent of Document's `owner_id`), `'branch'` (→
+  `branch_id`), or `'all'` (agency-wide — the tenant boundary itself is
+  still `BelongsToAgency`'s own global scope underneath this).
+- `AuthorizesRentalApplicationAccess::guardRentalApplication()` (new
+  trait, `app/Http/Controllers/Concerns/`) — the single-record sibling,
+  called at the top of `show()`, `update()`, `send()`, `pdf()`,
+  `destroy()`, `restore()`, and `downloadDocument()`. Mirrors
+  `AuthorizesDocumentAccess::guardDocument()` exactly, so list and
+  single-record access can never disagree.
+- This is the SAME mechanism the Documents module already uses — wiring
+  an existing, established pattern into a new module, not new
+  architecture.
+- Proven with real requests in
+  `tests/Feature/RentalApplications/RentalApplicationCrudStandardTest.php`,
+  not asserted: an `agent`-role user (own scope) sees only applications
+  they created and gets a real 403 opening another agent's; a
+  `branch_manager` (branch scope) sees only their branch's; an `admin`
+  (agency/all scope) sees every branch in the agency; a different
+  agency's admin gets a real 404 on both `show` and `pdf` by direct URL
+  (route-model-binding never resolves a cross-agency id at all, before
+  any scope check runs).
+- **Known gap, not fixed here (deploy/ops, out of this lane's scope):**
+  `corex:sync-permissions --merge-defaults` has so far only granted the 4
+  `rental_applications.*` permission keys to the `admin` role (per cc2's
+  2026-09-07 QA1 fix, see "Deploy requirements" above) — no
+  `rental_applications.view` *scope* row exists for any other role on
+  real QA1 data, so a genuine front-line `agent` account cannot open this
+  feature at all yet (403 at the permission-middleware layer, before
+  `scopeVisibleTo()` is ever reached). The scoping mechanism itself is
+  correct and tested against the `agent`/`branch_manager` roles' own
+  built-in fallback defaults (`PermissionService`'s AT-265 unseeded-grants
+  posture) — what's missing is deciding and granting which roles besides
+  `admin` should hold `rental_applications.*` at all, and at what scope.
+  That is a product/permissions decision for Johan, not a code defect.

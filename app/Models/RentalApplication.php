@@ -147,4 +147,33 @@ class RentalApplication extends Model
     {
         return $this->signatures()->whereIn('kind', ['declaration', 'tpn_consent'])->count() === 2;
     }
+
+    /**
+     * Johan, 2026-09-07 — "we always need proper crud... search / sort /
+     * own / branch / agency levels. that should be the design standard...
+     * from the word go." Own/branch/agency visibility, enforced at the
+     * query layer (never by hiding a link). Mirrors
+     * Docuperfect\Document::scopeVisibleTo() EXACTLY — same
+     * PermissionService::getDataScope() resolution, same three branches —
+     * so LIST and single-record access (see
+     * AuthorizesRentalApplicationAccess) can never disagree. 'own' here is
+     * the CREATING agent (created_by_user_id), this module's equivalent of
+     * Document's owner_id.
+     */
+    public function scopeVisibleTo($query, User $user)
+    {
+        $scope = \App\Services\PermissionService::getDataScope($user, 'rental_applications');
+
+        if ($scope === 'all') {
+            return $query;
+        }
+        if ($scope === 'branch') {
+            return $query->where('branch_id', $user->effectiveBranchId());
+        }
+        if ($scope === 'own') {
+            return $query->whereIn('created_by_user_id', $user->dataIdentityIds());
+        }
+
+        return $query->whereRaw('1 = 0');
+    }
 }
