@@ -231,3 +231,76 @@ owner-only group into a normal agency-facing section, or confirm this is
 deliberately staged as owner-only for now. **Not fixed as part of this
 entry — flagged for Johan/cc4 to decide**, per the "report, don't decide
 unilaterally" rule.
+
+---
+
+## Applicant-facing fixes (Johan, 2026-09-07 — "no submit application button")
+
+Six real defects on the public token-based side, all found by rendering the
+real page for a real token (not inferred) and, for the first one, a
+headless-browser screenshot — not just reading the HTML.
+
+1. **The submit button was invisible, not absent.** Root cause: the button
+   used the raw Tailwind arbitrary-value class `bg-[#0b2a4a]`. Tailwind's
+   JIT compiler only emits a utility class if it can see it in a scanned
+   file AT BUILD TIME — the compiled CSS bundle on this box predates this
+   blade file by ~2 weeks, so the class compiled to nothing. Confirmed with
+   a real headless-browser render: the button had correct dimensions, was
+   Alpine-hydrated, zero console errors — but rendered as white text on an
+   unstyled background against the white card behind it. Fixed with an
+   inline `style="background: var(--brand-default, #0b2a4a);"`, the same
+   var()-with-fallback pattern UI_DESIGN_SYSTEM.md already requires — this
+   can never depend on a Tailwind rebuild, so it can't regress the same way.
+2. **Validation-failure redirects silently discarded the applicant's typed
+   answers.** `<x-rental-application-field>` and three raw textareas/one
+   select read straight from `$application` (the DB row), never `old()`.
+   Laravel's own validate() failure already flashes old input to the
+   session correctly — the views just never read it back. Fixed in the
+   component (fixes every field that uses it in one place) and the four
+   raw fields individually. No error messages were shown anywhere either —
+   added a summary banner plus a per-field `@error()` message.
+3. **No agent notification existed at all** on a successful submission.
+   Added `RentalApplicationNotifier` + `RentalApplicationReturnedMail`
+   (new files, isolated from the agent-side lane's own
+   `RentalApplicationMailer`), fired from `submit()` after the DB
+   transaction commits (a mail failure must never roll back the
+   applicant's already-saved submission). Verified via Mailpit's real HTTP
+   API (`127.0.0.1:8025`) — the notification actually arrived, addressed
+   to the sending agent, nothing sent to a real address (MAIL_HOST is
+   Mailpit's own local listener, port 1025 — structurally cannot escape).
+4. **`submit()`'s writes were not transactional.** The record save and both
+   signature captures could partially land (e.g. a disk failure between
+   the two signature writes) leaving `status='returned'` with only one
+   signature saved — an inconsistent state with no way back. Wrapped in
+   `DB::transaction()`.
+5. **Supporting-document upload was silently unavailable after
+   submission.** `uploadDocuments()` never blocked on status (matching the
+   spec's "before OR after signing" design, mirroring the e-sign
+   precedent) — but `already-submitted.blade.php` never rendered the
+   upload form at all, cutting off a path the backend already supported.
+   Added the same upload section already-submitted.blade.php was missing.
+6. **A rejected upload (wrong file type, too large) showed neither success
+   nor error** — confirmed by deliberately uploading a non-PDF file and
+   getting a silent, message-free redirect. `$errors` was populated but
+   nothing on either page ever displayed `supporting_files` /
+   `supporting_files.*` errors. Added per those keys to both upload
+   sections.
+
+**Verified end-to-end via real HTTP requests** (curl, cookie jar, real
+CSRF, against the actual live QA1 URL) against real application id=1:
+malformed email → redirected back with "Test Applicant XYZ" preserved and
+the exact field error shown; valid submission → DB row shows every field
+persisted, both signature files genuinely exist on disk
+(`Storage::exists()` confirmed); re-opening the token shows "Application
+already received" with no submit form present, and a direct POST replay
+with a valid CSRF for the same session was refused by `submit()`'s own
+status guard (DB row and signature count unchanged, confirmed after);
+document upload confirmed with a real PDF — file exists on disk, `documents`
+row correctly linked to the contact; the agent-notification email was
+captured by Mailpit with the correct subject and recipient.
+
+**Also removed**: a dead, unreachable status-check branch in
+`show.blade.php` — `RentalApplicationSigningController::show()` already
+routes any `returned`-or-later status to the separate
+`already-submitted.blade.php` view before this template is ever reached,
+so the branch could never fire.
