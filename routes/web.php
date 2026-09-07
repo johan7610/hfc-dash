@@ -2809,6 +2809,9 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/{rentalApplication}/send', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'send'])
             ->middleware('permission:rental_applications.create')->name('corex.rental-applications.send');
         Route::get('/{rentalApplication}/pdf', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'pdf'])->name('corex.rental-applications.pdf');
+        Route::get('/{rentalApplication}/documents/{document}', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'downloadDocument'])->name('corex.rental-applications.documents.download');
+        Route::delete('/{rentalApplication}', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'destroy'])
+            ->middleware('permission:rental_applications.create')->name('corex.rental-applications.destroy');
     });
 
     Route::post('/settings/presentations', [CoreXSettingsController::class, 'updatePresentations'])->middleware('permission:access_settings')->name('corex.settings.presentations.update');

@@ -412,3 +412,65 @@ additional work.
 (`throttle:10,1`), `POST /rental-application/{token}/documents/{document}/replace`
 (`throttle:10,1`) — same throttle convention already used by
 `/sign/{token}`.
+
+---
+
+## Agent-side hardening (2026-09-07)
+
+Johan tested the applicant side himself and hit a blocker within minutes;
+the agent side was assumed equally under-tested and every screen was
+re-rendered through the kernel as a real authenticated user (not just
+grepped) to check. It was — four real gaps found and fixed, none of which
+had any test coverage before this pass:
+
+1. **`searchProperties()` returned every listing type.** A rental
+   application's property picker showed for-sale, commercial, and vacant
+   land listings alongside rentals. Fixed with a `listing_type = 'rental'`
+   filter — `RentalApplicationController::searchProperties()`.
+2. **`show.blade.php` rendered only ~40% of the V8 field list.** Missing
+   entirely: `property_address_override`, `current_residential_address`,
+   the whole Emergency Contact block, the whole Current Landlord block,
+   `employer_address`/`employer_tel`, and the whole Requirement of Lease
+   block (`occupation_date`, `rental_terms`, `special_conditions`,
+   `adults`, `children`). An agent opening a submitted application could
+   not see or edit most of what the applicant actually submitted, even
+   though the PDF template (`corex/rental-applications/pdf.blade.php`)
+   already rendered every field correctly — the two views had silently
+   diverged. Fixed by adding the missing sections to the edit form,
+   mirroring the PDF's own field list exactly. Three of the added fields
+   (`current_residential_address`, `employer_address`,
+   `special_conditions`, all `max:2000` per the shared validation rules)
+   use a plain inline `<textarea>` rather than the shared
+   `x-rental-application-field` component — that component is also used by
+   the public applicant view and was being actively edited by the
+   applicant-side lane at the same time, so it was left untouched rather
+   than risk a collision.
+3. **No document-download route existed on the agent side.** Supporting
+   documents were listed by filename only, with no way to open one. Added
+   `GET corex/rental-applications/{rentalApplication}/documents/{document}`
+   → `RentalApplicationController::downloadDocument()`. Both route
+   parameters are agency-scoped by their own model's `BelongsToAgency`
+   global scope (a cross-agency id 404s at route-model-binding, before the
+   method body ever runs); the method additionally checks
+   `source_type`/`source_id` match as defense-in-depth against a
+   same-agency agent guessing a document id belonging to a different
+   application.
+4. **No archive/delete route existed.** `RentalApplication` already had
+   `SoftDeletes`; the destroy action was simply never wired up. Added
+   `DELETE corex/rental-applications/{rentalApplication}` →
+   `RentalApplicationController::destroy()`, gated on
+   `rental_applications.create` (the spec defines no separate delete
+   permission), with a confirm dialog on the Archive button per
+   STANDARDS.md.
+
+Also verified and confirmed already correct (no changes needed): contact
+prefill on create, send + Mailpit-only delivery, agency isolation at both
+the route-model-binding and raw-query level, the settings-screen
+save/reload round-trip, and PDF generation (`RentalApplicationPdfService`,
+shared with the applicant-side `pdf()` route) — a real PDF was generated
+and opened, containing the applicant's actual submitted field values,
+correct agency branding (no hardcoded HFC literals), and rendering
+uploaded signature images correctly.
+
+New test coverage: `tests/Feature/RentalApplications/RentalApplicationAgentControllerTest.php`
+— none existed for this controller before this pass.

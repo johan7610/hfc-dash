@@ -4,6 +4,7 @@ namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use App\Models\Document;
 use App\Models\Property;
 use App\Models\RentalApplication;
 use App\Services\RentalApplications\RentalApplicationMailer;
@@ -61,6 +62,7 @@ class RentalApplicationController extends Controller
         $q = trim((string) $request->query('q', ''));
 
         $properties = Property::query()
+            ->where('listing_type', 'rental')
             ->when($q !== '', fn ($query) => $query->where(function ($w) use ($q) {
                 $w->where('address', 'like', "%{$q}%")->orWhere('title', 'like', "%{$q}%");
             }))
@@ -166,6 +168,38 @@ class RentalApplicationController extends Controller
 
         return response()->download($path, 'Rental Application - ' . ($rentalApplication->full_name ?: $rentalApplication->contact->full_name) . '.pdf')
             ->deleteFileAfterSend(true);
+    }
+
+    /**
+     * BUILD_STANDARD §1 — full CRUD is the floor. No hard deletes anywhere in
+     * CoreX (STANDARDS.md) — RentalApplication already has SoftDeletes, this
+     * is the archive action the index/show screens were missing.
+     */
+    public function destroy(RentalApplication $rentalApplication)
+    {
+        $rentalApplication->delete();
+
+        return redirect()
+            ->route('corex.rental-applications.index')
+            ->with('success', 'Rental application archived.');
+    }
+
+    /**
+     * Supporting-document download for the agent side (spec §5). Both
+     * $rentalApplication and $document implicitly scope via their own
+     * BelongsToAgency global scope (a cross-agency id 404s at route-model-
+     * binding, before this method ever runs) — the explicit source_type/
+     * source_id check below is defense-in-depth against a same-agency
+     * agent guessing a document id that belongs to a DIFFERENT application.
+     */
+    public function downloadDocument(RentalApplication $rentalApplication, Document $document)
+    {
+        abort_unless(
+            $document->source_type === 'rental_application' && (int) $document->source_id === $rentalApplication->id,
+            404
+        );
+
+        return $document->downloadResponse();
     }
 
     /**
