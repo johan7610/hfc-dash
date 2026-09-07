@@ -720,3 +720,148 @@ feature's deploy checklist alongside `deploy:sync-reference-data`
 (CLAUDE.md Non-negotiable #12, BUILD_STANDARD §8) — both exist for the
 same reason: seeder/config-owned data that a plain `migrate` does not
 carry across environments.
+
+### Why cc4 found DB rows the config's git history didn't yet explain
+
+cc4's audit (2026-09-07, correct and independently verified) found that
+`role_permissions` on QA1 already held the `agent`/`branch_manager` grants,
+while `/corex-qa1`'s own checked-out `config/corex-permissions.php` still
+had no `role_defaults` entry for them. **The grants were never written
+into the database by hand** — the sequence was: this fix's config change
+was committed and pushed to `feature/rental-applications`, then
+`corex:sync-permissions --merge-defaults` was run from an isolated
+worktree that HAD that commit (both worktree and `/corex-qa1` share the
+same `corex_qa1` database, but each has its OWN git checkout and
+filesystem) — at that point `/corex-qa1`'s own checkout had not yet merged
+`feature/rental-applications` (its last merge predated this fix), so its
+copy of the config still looked stale even though the actual grants and
+the actual committed config already agreed with each other. Confirmed via
+`git merge-base --is-ancestor` that the fix commit was genuinely not yet
+an ancestor of QA1's `HEAD` at the time. This is a deploy-*sequencing* gap
+(config commit pushed, not yet merged into the environment's own branch),
+not a bypassed-config gap — but it looks identical to one from the
+outside, which is exactly why the stronger clean-state proof below exists
+rather than trusting the DB state alone.
+
+### Proof from a genuinely clean state — not a re-run against pre-existing rows
+
+`tests/Feature/RentalApplications/RentalApplicationPermissionDefaultsTest.php`
+proves the actual claim Johan needed proven: starting from a `role_permissions`
+table with **zero** rows (RefreshDatabase — a real transaction-backed test
+database, never run against real data), calling
+`Artisan::call('corex:sync-permissions', ['--merge-defaults' => true])`
+with no other setup produces exactly: `admin` holds all 4 keys (via
+all-minus-exclude — `manage_settings` included), `branch_manager`/`agent`
+hold the 3 non-settings keys, `rental_applications.view`'s `scope` column
+resolves per `scope_defaults` (`all`/`branch`/`own`), the other three keys
+carry no scope, and a second run inserts nothing new (idempotent). The
+config alone — no manual database step — reproduces the correct grant set.
+This is what makes the feature safe on a fresh agency, a QA1 reset,
+Staging, or live: whoever runs the standard post-deploy sync gets these
+grants back every time, from nothing.
+
+**Found and reported, not fixed (platform-wide, out of this lane's scope):**
+proving this exposed a real, pre-existing limitation in
+`SyncPermissions::mergeRoleDefaults()` itself, unrelated to Rental
+Applications specifically. It resolves template roles via
+`Role::all(['name','is_owner','agency_id'])` wrapped in a `try`/`catch`
+that only falls back to a synthetic template-role list when `Role::all()`
+*throws* (e.g. the table doesn't exist) — but on a genuinely fresh `roles`
+table that exists with zero rows (the real state until Role Manager or a
+seeder creates rows; no seeder currently populates it), `Role::all()`
+returns an empty Collection without throwing, the fallback never fires,
+and `--merge-defaults` silently grants **nothing, for every module**, not
+just this one. The test above works around this by seeding the same
+minimal template `Role` rows a real onboarded environment already has
+(super_admin/admin/branch_manager/agent/viewer/office_admin,
+`agency_id=null`) — a genuinely fresh *grants* table, not a genuinely
+fresh *roles* table, which is the realistic scenario. Fixing
+`SyncPermissions.php`'s empty-vs-throwing distinction is a
+permissions-system-wide concern affecting every module that uses
+`role_defaults`, not a Rental Applications defect — flagged to the
+coordinator, not touched here.
+
+---
+
+## Document-visibility bug (Johan, live on QA1, 2026-09-07)
+
+Johan: "on testing rental applications the uploaded doc do not pull back
+with the rental application." Traced the full chain on real QA1 data
+before changing anything, per instruction:
+
+1. **Application identified:** id=13 (agency 1, contact 16193, status
+   `in_progress`, real 64-char token) — the most recent genuine activity on
+   QA1 at the time, with a real ~1.3MB PDF uploaded. Ruled out ids 14–16 as
+   another lane's audit fixtures (literally named "HACKED BY adminW" /
+   "Audit App owned by AgentX") and ids 1–2 as having zero active documents
+   (consumed by earlier test activity, not a bug).
+2. **File on disk:** clean — exact size match, correct `www-data:www-data`
+   ownership, correct permissions. The historical root-owned-file footgun
+   does not apply here.
+3. **Database row:** clean — `documents` row exists, `deleted_at` is NULL.
+4. **Linkage:** clean — `source_type`/`source_id`/`agency_id`/`branch_id`
+   all match the parent application exactly; the join executes and returns
+   the row.
+5. **Agent view query:** `show()`'s `documents()` relationship carries no
+   extra filter beyond `source_type` — the own/branch/agency scoping work
+   never touched it.
+6. **Rendered and looked** (not grepped): dispatched a real authenticated
+   request as user 22 to `show(13)`, from both an isolated worktree AND
+   directly from `/corex-qa1`'s own live codebase — the document rendered
+   correctly both times. **Not reproducible on this specific application,
+   right now.**
+
+**Root cause, found by reading the code, not by guessing:**
+`RentalApplicationSigningController::uploadDocuments()` only ever advances
+status `sent → in_progress` (it never reaches `returned`, which requires
+the full sign-both-declarations `submit()`). But
+`RentalApplicationController::returned()`'s status filter was
+`['returned','under_assessment','approved','declined','withdrawn']` —
+**`in_progress` was excluded**. An applicant who uploaded a real,
+correctly-filed document without finishing the signature flow was
+invisible on the one screen named for reviewing incoming applicant
+activity — not because the document was broken, but because the
+*application* never surfaced there in that state.
+
+**Why cc2's QA sweep passed while Johan's real use failed:** cc2 almost
+certainly tested the linear happy path — full submit, both signatures,
+*then* a document present, which lands in `returned` and always displayed
+correctly. Real usage doesn't queue up that neatly: Johan uploading a
+document without necessarily finishing signatures first is exactly the
+ordering the happy-path QA sweep never exercised. The lesson generalised:
+a scripted QA pass that only walks the linear/complete path is not
+equivalent to proving what a real, non-linear user does — the gap here
+was in test *coverage of ordering*, not in the document-handling code
+itself, which was correct throughout.
+
+**Fix:** `returned()` now includes `in_progress` in its status filter
+(`app/Http/Controllers/CoreX/RentalApplicationController.php`); the status
+tab bar in `returned.blade.php` gained a matching "In progress" tab.
+`in_progress` deliberately still shows on `index()` too — left there
+rather than removed, so nothing an agent currently relies on seeing there
+disappears as a side effect of this fix.
+
+**Proven end to end, not in isolation**
+(`tests/Feature/RentalApplications/RentalApplicationDocumentVisibilityTest.php`):
+a real multipart file uploaded through the actual public
+`uploadDocuments()` route (black-box — cc4's endpoint, never edited),
+confirmed to leave status at `in_progress`; the application then appears
+on both Returned Applications and the main index; `show()` displays the
+document; the document downloads correctly. Scoping re-confirmed on this
+exact fixture afterward: a same-agency unrelated agent gets 403 on the
+download, a different-branch agent gets 403 on both the download and the
+PDF, a different agency gets 404 on both (route-model-binding never
+resolves it), and the owning agent still succeeds.
+
+**cc4's leftover audit fixtures — reported, not touched (no hard
+deletes):** `qa-audit-{agentx,agenty,bmz,adminw,outsiderv}@test.local`
+users, rental applications 14/15/16, documents 2281/2282. Applications 14
+and 15 are `agency_id=1` (Johan's real agency) with status `sent` and
+full names "Audit App owned by AgentX (branch1)" / "HACKED BY adminW" —
+**these DO currently appear on the real agency-1 index screen** (any
+`admin`/`all`-scope viewer, including Johan's own account, would see them
+mixed in with real applications) — not a data-corruption risk, but
+visibly confusing if left there. Application 16 is a different agency
+(7) and does not interfere with agency 1's view. None of this is mine to
+clean up (cc4's own test data, and the standing no-hard-deletes rule
+means it needs an explicit soft-delete decision, not a unilateral one).
