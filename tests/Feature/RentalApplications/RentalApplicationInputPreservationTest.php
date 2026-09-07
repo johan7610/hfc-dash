@@ -241,4 +241,32 @@ final class RentalApplicationInputPreservationTest extends TestCase
         $response->assertSessionHasErrors('monthly_salary');
         $this->assertNull($app->fresh()->monthly_salary);
     }
+
+    // ── RA-02 follow-up (cc5 re-test): the sweep only reached the fields on
+    // this model. sanitizeNumericInput() is generalized so the same
+    // cleanup can serve the assessment panel's income/expense fields (a
+    // different model, RentalApplicationAssessment) and the authoriser's
+    // approved_rental_amount, without duplicating the string cleanup in
+    // every controller. Those controllers are cc6-owned and not yet wired
+    // up (pending sequencing) — this proves the generalized utility itself
+    // is correct so wiring it in elsewhere is a one-line change. ─────────
+
+    public function test_sanitize_numeric_input_accepts_an_explicit_field_list_beyond_its_own_defaults(): void
+    {
+        $cleaned = \App\Models\RentalApplication::sanitizeNumericInput(
+            ['monthly_income' => 'R 15,000', 'other_monthly_income' => '2 500', 'notes' => 'unaffected'],
+            ['monthly_income', 'other_monthly_income'],
+        );
+
+        $this->assertSame('15000', $cleaned['monthly_income']);
+        $this->assertSame('2500', $cleaned['other_monthly_income']);
+        $this->assertSame('unaffected', $cleaned['notes'], 'A field not in the explicit list must be left untouched.');
+    }
+
+    public function test_sanitize_numeric_input_still_defaults_to_its_own_constant_when_no_list_given(): void
+    {
+        $cleaned = \App\Models\RentalApplication::sanitizeNumericInput(['monthly_salary' => 'R 8,500']);
+
+        $this->assertSame('8500', $cleaned['monthly_salary'], 'Every existing caller (update()/submit()) relies on this default behaviour.');
+    }
 }
