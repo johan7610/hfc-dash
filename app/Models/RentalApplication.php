@@ -276,21 +276,65 @@ class RentalApplication extends Model
      * AuthorizesRentalApplicationAccess) can never disagree. 'own' here is
      * the CREATING agent (created_by_user_id), this module's equivalent of
      * Document's owner_id.
+     *
+     * 2026-09-08 — index-screen scope FILTER (own/branch/agency toggle) added
+     * an optional $requestedScope, clamped to the user's actual permitted
+     * ceiling via clampScope() below — copied verbatim from
+     * DealV2::scopeVisibleTo()/clampScope(), the established pattern for
+     * exactly this ("a user must not be able to widen scope by editing the
+     * URL beyond their permission"). $requestedScope defaults to null, which
+     * preserves every existing caller's behaviour unchanged (ceiling only,
+     * no narrowing) — this is additive, not a behaviour change for anyone
+     * who doesn't pass the new argument.
      */
-    public function scopeVisibleTo($query, User $user)
+    public function scopeVisibleTo($query, User $user, ?string $requestedScope = null)
     {
-        $scope = \App\Services\PermissionService::getDataScope($user, 'rental_applications');
+        $scope = self::clampScope($requestedScope, \App\Services\PermissionService::getDataScope($user, 'rental_applications'));
 
         if ($scope === 'all') {
             return $query;
         }
         if ($scope === 'branch') {
-            return $query->where('branch_id', $user->effectiveBranchId());
+            // 2026-09-08, found while proving the sort columns over real HTTP
+            // (not by reading the blade): unqualified 'branch_id' throws
+            // SQLSTATE 1052 "ambiguous" the moment this query is combined
+            // with a LEFT JOIN to any table that ALSO has a branch_id column
+            // — contacts, users, AND properties all do. That is every join
+            // the index screen's own sort-by-Applicant/Agent/Property
+            // columns already add. Pre-existing for sort=contact/property;
+            // this task's new sort=agent hit the exact same class. Table-
+            // qualified here, once, fixes all of them.
+            return $query->where('rental_applications.branch_id', $user->effectiveBranchId());
         }
         if ($scope === 'own') {
-            return $query->whereIn('created_by_user_id', $user->dataIdentityIds());
+            // Same reasoning — contacts also has created_by_user_id.
+            return $query->whereIn('rental_applications.created_by_user_id', $user->dataIdentityIds());
         }
 
         return $query->whereRaw('1 = 0');
+    }
+
+    /**
+     * Narrow the requested scope to at most the permitted scope. Ranking
+     * own(1) < branch(2) < all(3); "agency" (the UI's label for this
+     * screen's toggle) is an alias for "all". Returns the MIN of requested
+     * and permitted, so a branch manager asking for "agency" via the URL
+     * still gets "branch", and any junk/missing value falls back to
+     * permitted. Copied from DealV2::clampScope() — same ranking, same
+     * fallback shape — deliberately not extracted into a shared trait as
+     * part of this narrowly-scoped build; a future consolidation is a
+     * separate decision.
+     */
+    public static function clampScope(?string $requested, ?string $permitted): string
+    {
+        $rank = ['own' => 1, 'branch' => 2, 'all' => 3, 'agency' => 3, 'company' => 3];
+        $permitted = $permitted ?: 'own';
+        $permRank = $rank[$permitted] ?? 1;
+        if ($requested === null || ! isset($rank[$requested])) {
+            return in_array($permitted, ['agency', 'company'], true) ? 'all' : $permitted;
+        }
+        $effRank = min($rank[$requested], $permRank);
+
+        return array_search($effRank, ['own' => 1, 'branch' => 2, 'all' => 3], true) ?: 'own';
     }
 }

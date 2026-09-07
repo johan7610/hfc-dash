@@ -2383,3 +2383,125 @@ using `Carbon::setTestNow()` with a `tearDown()` backstop so a failed
 assertion never leaks fake time into a later test). Full
 `tests/Feature/RentalApplications/` suite: 73 passed, 402 assertions,
 zero regressions.
+## Round 7 (Johan) — the index screen becomes real CRUD: search, sort, own/branch/agency, archive
+
+Johan, after testing: "off the bat - list of rental applications piling
+up, yet no way to remove / mark as sent / nothing here?" — and his
+permanent standard, stated as applying to every module from now on, not
+per-request: "we always need proper crud? search / sort / own / branch /
+agency levels. that should be the design standard. not me asking for it
+once we get to that stage. so get that going as well that we design and
+build correctly from the word go."
+
+**What was already there (Round 3, cc4) before this round started:**
+search (contact name/email + property + #id), a status filter, date
+range, sort-by-click on contact/property/status/date (no visual
+indicator of which column/direction was active), archive
+(`destroy()`/soft delete) and restore, an "Archived" toggle, pagination.
+No own/branch/agency scope filter existed at all — `scopeVisibleTo()`
+only ever applied the user's permission CEILING, with no narrower,
+user-selectable view.
+
+**Built this round, on top of that:**
+- **Own/branch/agency scope TOGGLE** — `RentalApplication::clampScope()`
+  + `scopeVisibleTo($query, $user, ?string $requestedScope = null)`,
+  copied verbatim from the established CoreX pattern for exactly this
+  (`App\Models\DealV2\DealV2::clampScope()`/`scopeVisibleTo()` — found
+  first, per Johan's "find the existing implementation... do not invent
+  a new one"; the buyer-pipeline board's own "own/branch/agency toggle"
+  — `App\Services\CommandCenter\BuyerPipelineScope` — was checked too but
+  its own controller trusts the raw `?scope=` URL value with no
+  server-side clamp, relying entirely on a separate, unverified upstream
+  restriction; DealV2's pattern is the one that is actually
+  self-contained and provably safe, so that is the one reused).
+  Defaults to **'own'** always (never the ceiling) per Johan's explicit
+  "default to the narrowest scope" instruction. A requested scope wider
+  than the user's actual permitted ceiling is silently clamped down, the
+  same behaviour DealV2 already has. UI: a segmented Own/Branch/Agency
+  link toggle, options above the user's ceiling not rendered at all
+  (`$canSeeBranch`/`$canSeeAgency` in `RentalApplicationController::index()`)
+  — but the clamp in the model is the real boundary, not the hidden
+  button.
+- **Sort** widened to include Agent (`created_by_user_id` → `users.name`)
+  and Last updated (`updated_at`), alongside the existing
+  contact/property/status/created. Column headers now show a ▲/▼
+  indicator for whichever column/direction is actually driving the
+  current order (including the implicit default sort with no `?sort=` in
+  the URL at all).
+- **Search** widened to also match the rental application's OWN captured
+  `full_name`/`email`/`id_number` directly (previously only the LINKED
+  Contact's name/email were searched — an application whose captured
+  data has since diverged from its Contact, or that somehow has none,
+  was invisible to search). No `passport_number` or unit-number column
+  exists on `rental_applications` (checked the migration) — reported,
+  not invented; `id_number` is the only identity field this schema
+  actually carries.
+- **Per-page control** (10/25/50/100, clamped server-side to that range
+  regardless of what a manually-crafted `per_page` value claims).
+- **Empty state** now names the actual reason (no results for this
+  search vs. genuinely nothing in this scope) and, when the user is
+  entitled to a wider scope, says so by name.
+
+**A real, pre-existing bug found and fixed while proving sort actually
+works over real HTTP (not by reading the blade):**
+`RentalApplication::scopeVisibleTo()`'s branch/own clauses used
+unqualified column names (`branch_id`, `created_by_user_id`). The moment
+that query is combined with a LEFT JOIN to `contacts`, `users`, or
+`properties` — which sorting by Applicant, Agent, or Property already
+does — MySQL throws `SQLSTATE[23000]: ... Column 'branch_id' ... is
+ambiguous`, because all three of those tables carry their own columns of
+the same name. This was **already broken** for sort-by-Applicant and
+sort-by-Property before this round touched the file (a branch-scoped or
+own-scoped user clicking either header 500'd); this round's own new
+sort-by-Agent hit the identical class immediately. Fixed by qualifying
+every column reference in `scopeVisibleTo()` and
+`applySearchSortAndDateRange()` (search, status filter, date range, sort
+map) with the `rental_applications.` table prefix. Applied identically
+to `returned()`'s own `whereIn('status', ...)`, since that screen shares
+the same private helper and the same sort-by-Applicant/Property links in
+its own view (`returned.blade.php`) and would otherwise still 500 on the
+exact same query shape.
+
+**Not touched, per explicit boundary:** `RentalApplicationController`'s
+`store()`/`update()` methods and the public applicant form (cc4's
+RA-01/RA-02/RA-05 work, in flight); the review screen, highlight
+service, and authoriser flow (cc6's).
+
+**Proven over real HTTP on QA1** (a local dev server bound to a free
+port against the real `corex_qa1` database, not in-process tests, not by
+reading the blade), logged in via real `POST /login` for a real session
+cookie, as three purpose-built test fixtures (`CC3 Proof BM Branch1` —
+branch_manager, branch 1; `CC3 Proof Agent Branch1` — agent, branch 1;
+`CC3 Proof Agent Branch2` — agent, branch 2 — plus one rental application
+each, both archived again at the end of verification, soft-deleted, not
+hard-deleted, recoverable, same as any other archived row):
+- Search: a unique string in the rental application's OWN `full_name`
+  found it; the SAME string scoped to the wrong branch did not leak
+  across the branch boundary; searching by `id_number` directly found
+  the row.
+- Sort: captured the actual first row before/after toggling direction,
+  for Applicant, Created, Agent, and Updated — each pair showed a
+  genuinely different row, proving the order actually changed (not just
+  that the request succeeded).
+- Scope enforcement: the branch_manager fixture, whose real permission
+  ceiling is 'branch', was served ONLY branch-1 rows even when the URL
+  was edited to `?scope=agency` — branch-2's application never appeared.
+  The agent fixture, whose real ceiling is 'own', was served ONLY their
+  own row even when the URL was edited to `?scope=branch` or
+  `?scope=agency` — the response never contained another branch-1
+  agent's own applications (checked by name, count = 0) despite those
+  genuinely existing in the same branch.
+- Archive/restore: archived over real HTTP (a real 302 redirect, not an
+  in-process call), confirmed absent from the default list, confirmed
+  present under "Show archived", confirmed **in the database directly**
+  via `withTrashed()` that the row still exists with a real `deleted_at`
+  timestamp (not gone, not hard-deleted) and is correctly invisible to a
+  normal query; restored over real HTTP, confirmed visible again with
+  `deleted_at` back to `NULL`.
+
+**Test fixtures left in the database, not real people, agency 1
+(matching the existing precedent of e.g. `CC5 Proof Agent`):**
+`cc3-proof-bm1@example.test`, `cc3-proof-agent1@example.test`,
+`cc3-proof-agent2@example.test` (users, one per branch/role tested), two
+Contact rows, and two RentalApplication rows (both left archived at the
+end of this round's verification — recoverable, not deleted).
