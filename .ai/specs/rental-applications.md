@@ -661,6 +661,28 @@ list, detail view, PDF, and document download, never by hiding a link:**
 
 ## Temporary Rentals-panel visibility (Johan, 2026-09-07 — QA1 only)
 
+> **PARKED, 2026-09-07 — leave exactly as is.** Johan has seen the
+> unhidden panel and said: *"old rental menu back. for now just park it.
+> we will work through it."* **Parked means untouched and still
+> reachable, not reverted.** Do NOT re-hide it, do NOT remove it, do NOT
+> touch any of its 5 screens, do NOT revoke or change any permission.
+> Current state:
+> - The panel is unhidden on QA1 (commit `9a1dedde3`) exactly as
+>   described below, and remains so.
+> - **No permission grants were made.** Checked before granting anything:
+>   user 22 already held all 3 required checks (`view_rentals`,
+>   `access_rental_signatures`, `hasFeature('rentals')`) — nothing needed
+>   to change. `role_permissions` was backed up anyway per instruction
+>   (`/root/db-backups/qa1-role_permissions-20260907-083432.sql`), as a
+>   precaution, not because anything was written to it.
+> - The one-step reversal is documented in full below and inline in the
+>   blade file's own comment at the unhidden block. It has NOT been
+>   applied, and should not be, until Johan has walked through the panel
+>   and decided what stays.
+> - Johan will return to this later to decide what stays and what goes —
+>   nobody should "tidy" this away, merge it with the new AT-392 section,
+>   or rename anything, in the meantime.
+
 Johan's words, verbatim: *"On the rental menu - put it back for me on qa1.
 then let me click through it. but I know already the whole esign is
 redundant. we trashed it when we built the esign part and unless code are
