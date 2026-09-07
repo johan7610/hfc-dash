@@ -656,3 +656,119 @@ list, detail view, PDF, and document download, never by hiding a link:**
   posture) — what's missing is deciding and granting which roles besides
   `admin` should hold `rental_applications.*` at all, and at what scope.
   That is a product/permissions decision for Johan, not a code defect.
+
+---
+
+## Temporary Rentals-panel visibility (Johan, 2026-09-07 — QA1 only)
+
+Johan's words, verbatim: *"On the rental menu - put it back for me on qa1.
+then let me click through it. but I know already the whole esign is
+redundant. we trashed it when we built the esign part and unless code are
+shared we dont need it at all as we will only use the esign going
+forward. the rest once I can see it we can look at what we are keeping
+and what not."*
+
+This is a **visibility change for evaluation only** — not a decision to
+keep anything. The pre-existing "Rentals" drill-down (Rentals / Dashboard
+/ Electronic Signatures / Active Leases / Expired Leases), previously
+nested inside the sidebar's owner-only `$isOwner`-gated "Hidden" section
+(see "Known, deliberate, pending reconciliation" above), was extracted out
+to its own top-level group so a normal agency admin can reach it. Every
+individual `@permission` gate on its 5 links is completely unchanged;
+only its position in the sidebar and its wrapper CSS classes (promoted
+from subgroup to top-level styling to match the new depth) moved.
+
+**Prior state (for the one-step reversal):**
+- The whole block (from `{{-- Rentals — nested drill-down --}}` through its
+  `@endpermission`) sat directly before `{{-- Evaluation — nested
+  drill-down --}}`, inside the `<div>` opened by `push('hidden')`.
+- Its button/panel classes were `corex-nav-subitem corex-nav-group-toggle
+  corex-nav-subgroup-toggle` (no icon).
+- `$navGroupParents` (near the top of the file) included `'rentals' =>
+  'hidden'`.
+- **To reverse:** move the block back to that exact spot, restore those
+  classes, and put `'rentals' => 'hidden'` back in `$navGroupParents`. The
+  live sidebar file's own inline comment at the unhidden block's new
+  location repeats these exact steps.
+
+**Permissions — none were actually missing.** Checked before granting
+anything: user 22 (johan@hfcoastal.co.za, admin, agency 1) already held
+`view_rentals`, `access_rental_signatures`, and `hasFeature('rentals')` —
+all three required checks were already true. Backed up `role_permissions`
+to `/root/db-backups/qa1-role_permissions-20260907-083432.sql` (5.4MB,
+verified valid) before confirming this, per instruction, even though no
+grant turned out to be necessary.
+
+**Verified working for a normal agency admin, not just the system-owner
+account used in earlier rounds.** Dispatched real authenticated requests
+(full kernel, not route:list) to all 5 routes as user 22:
+
+| Route | Status | Response length | Error markers in body |
+|---|---|---|---|
+| `rentals.index` (`/rentals`) | 200 | 315,749 bytes | none |
+| `rental.dashboard` (`/rental`) | 200 | 187,893 bytes | none |
+| `rental.signatures` (`/rental/signatures`) | 200 | 547,388 bytes | none |
+| `rental.active-leases` (`/rental/active-leases`) | 200 | 191,722 bytes | none |
+| `rental.expired-leases` (`/rental/expired-leases`) | 200 | 183,781 bytes | none |
+
+Also scanned every response body for embedded error text (a caught
+exception can still return HTTP 200 with an error view) — clean on all 5.
+Confirmed `storage/logs/laravel.log` gained zero new lines during the
+entire test run. None of these will 500 for Johan.
+
+**What a normal admin now sees, overall — reported plainly, not tidied:**
+two separate "Rentals" toggles, back to back, in the same part of the
+sidebar. The first (this build's new section) expands to "Rental
+Applications" / "Returned Applications." The second (this unhidden panel)
+expands to a panel also titled "Rentals," containing a link also labelled
+"Rentals," plus Dashboard / Electronic Signatures / Active Leases /
+Expired Leases. Deliberately placed adjacent rather than apart, so Johan
+can see and compare both directly. This is the same naming collision
+already flagged, now visible to more than just a system-owner account —
+nothing renamed or merged to resolve it.
+
+### Code-sharing investigation — "Electronic Signatures" vs. current DocuPerfect e-sign
+
+Read-only, per instruction. Answer: **the "Electronic Signatures" screen
+(and the Dashboard screen, which draws from the same query) are not a
+separate system — they are a filtered view over the exact same tables and
+service class the current e-sign module uses.** Removing them later would
+NOT be a clean excision.
+
+**Shared, confirmed by reading the actual code:**
+- `Rental\RentalDivisionController` (`dashboard()` and `signatures()`)
+  both call `App\Services\Docuperfect\SignatureService::getRentalDashboardData()`
+  — the SAME `SignatureService` class DocuPerfect's own e-sign wizard
+  uses for template creation, marker/zone placement, and document-hash
+  verification (`createTemplate()`, `saveMarkers()`, `expandZone()`, etc.
+  all live in this one class).
+- `getRentalDashboardData()` queries `App\Models\Docuperfect\Document`
+  directly (filtering `document_type = 'rental_upload_send'` or
+  `template.template_type = 'rental'`) and
+  `App\Models\Docuperfect\SignatureTemplate` directly
+  (`whereIn('document_id', $documentIds)`) — the exact central tables
+  every other e-sign document in CoreX uses, distinguished only by a
+  type/template-type value, not a separate table.
+- `App\Models\Docuperfect\LeaseRecord` (`lease_records` table) has **hard
+  foreign-key constraints**, not just a runtime query relationship:
+  `document_id` → `docuperfect_documents.id` (`cascadeOnDelete()`) and
+  `signature_template_id` → `signature_templates.id`
+  (`cascadeOnDelete()`) — confirmed directly in
+  `database/migrations/2026_02_26_600007_create_lease_records_table.php`.
+  A `lease_records` row cannot exist without a matching row in both
+  central e-sign tables, and deleting either cascades the lease record
+  away with it.
+
+**Genuinely separate, not shared:** `App\Models\Rental\RentalProperty`
+and `App\Models\Rental\RentalDocumentType` — rental-specific tables with
+no FK or query relationship into `documents`/`signature_templates`. The
+top-level `Rentals`/`rentals.index` screen (`App\Models\Rental` +
+`RentalsController`) also has zero references to
+`Docuperfect`/`SignatureTemplate` anywhere in its model or controller.
+
+**Net:** "Active Leases" and "Expired Leases" (via `LeaseRecord`) and
+"Electronic Signatures"/"Dashboard" (via `SignatureService` +
+`Document`/`SignatureTemplate`) all sit on top of the same e-sign
+infrastructure the DocuPerfect module owns. Only the plain "Rentals" list
+screen and its underlying `Rental`/`RentalProperty`/`RentalDocumentType`
+models are self-contained. Not acted on — reported only, per instruction.
