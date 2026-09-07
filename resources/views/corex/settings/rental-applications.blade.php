@@ -73,15 +73,18 @@
          their own wording on declined." A suggested default ships until the
          agency saves their own — same forAgency()-never-writes-on-read
          pattern as Qualifying Formula above. Merge fields are limited to
-         what this email can always honestly populate — applicant name and
-         agency name — no invented "how to improve" guidance (Johan was
-         explicit that part is still an open idea, not settled). --}}
+         what this email can always honestly populate — applicant name,
+         agency name, and (optionally) the property the application was
+         for — no invented "how to improve" guidance (Johan was explicit
+         that part is still an open idea, not settled). --}}
     <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
         <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Decline Email</h2>
         <p class="text-xs mb-3" style="color: var(--text-muted);">
             Sent to the applicant if the authoriser declines their application. A suggested wording
             is shown below — edit it to your own. Available merge fields:
-            <code>@{{applicant_name}}</code>, <code>@{{agency_name}}</code>.
+            <code>@{{applicant_name}}</code>, <code>@{{agency_name}}</code>,
+            <code>@{{property_reference}}</code> (optional — resolves to nothing if the
+            application has no property linked).
         </p>
         <form method="POST" action="{{ route('corex.settings.rental-applications.decline-email') }}" class="space-y-3">
             @csrf

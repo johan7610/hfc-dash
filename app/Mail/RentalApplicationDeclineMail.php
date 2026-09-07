@@ -29,10 +29,14 @@ class RentalApplicationDeclineMail extends Mailable
         $applicantName = $application->contact->full_name ?: 'there';
         $agencyName = $application->agency->name ?? config('mail.from.name', 'CoreX OS');
 
+        // Same resolution as index/returned/pdf views (RentalApplicationController
+        // and friends) — never rebuild a second "which property is this" lookup.
+        $propertyReference = $application->property?->buildDisplayAddress() ?: $application->property_address_override ?: null;
+
         $wording = RentalApplicationDeclineEmailSetting::forAgency((int) $application->agency_id);
 
-        $this->subject_ = RentalApplicationDeclineEmailSetting::render($wording['subject'], $applicantName, $agencyName);
-        $this->bodyText = RentalApplicationDeclineEmailSetting::render($wording['body'], $applicantName, $agencyName);
+        $this->subject_ = RentalApplicationDeclineEmailSetting::render($wording['subject'], $applicantName, $agencyName, $propertyReference);
+        $this->bodyText = RentalApplicationDeclineEmailSetting::render($wording['body'], $applicantName, $agencyName, $propertyReference);
     }
 
     public function envelope(): Envelope

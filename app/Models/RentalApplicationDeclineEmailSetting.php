@@ -12,9 +12,12 @@ use Illuminate\Database\Eloquent\Model;
  * text until an agency actually saves their own wording.
  *
  * Merge fields are deliberately limited to what a decline email can ALWAYS
- * honestly populate: the applicant's name and the agency's name. No
- * property, no rent figure, no "reasons" — decline doesn't collect any of
- * those the way approve's amount does.
+ * honestly populate: the applicant's name, the agency's name, and
+ * (optionally, 2026-09-08) which property the application was for — an
+ * applicant may have several applications running at once and already
+ * knows what they applied for, so this isn't internal information. No
+ * rent figure, no "reasons" — decline doesn't collect those the way
+ * approve's amount does.
  */
 class RentalApplicationDeclineEmailSetting extends Model
 {
@@ -26,22 +29,24 @@ class RentalApplicationDeclineEmailSetting extends Model
      * Suggested default — Johan asked for "plain, respectful and not cold."
      * Deliberately does NOT include "how to improve your history" guidance
      * — he was explicit that's still an open idea, not settled, not mine to
-     * write.
+     * write. Coordinator-approved wording, 2026-09-08 — two rounds of
+     * review: dropped "if you have any questions about this decision" (it
+     * invites arguing the decision) and "this isn't a reflection of you
+     * personally" (it plants the very doubt it's trying to avoid) — kept
+     * only "we'd welcome an application from you again in future."
      */
     public const DEFAULT_SUBJECT = 'Your rental application — {{agency_name}}';
 
     public const DEFAULT_BODY = <<<'TEXT'
 Dear {{applicant_name}},
 
-Thank you for your interest in renting through {{agency_name}}, and for taking the time to complete your application.
+{{property_reference}}Thank you for applying to rent through {{agency_name}}, and for the time you put into your application.
 
-After reviewing your application, we're sorry to let you know that we're not able to proceed with it on this occasion.
+We're sorry to let you know that we won't be able to proceed with it on this occasion.
 
-This isn't necessarily a reflection of you personally — rental applications are assessed against a number of factors, and sometimes a good match on paper still isn't the right fit for a specific property.
+We'd welcome an application from you again in future, should a suitable property come up.
 
-If you have any questions about this decision, please don't hesitate to contact us.
-
-We wish you the best in finding a home that's right for you.
+We wish you well in your search for a home.
 
 Kind regards,
 {{agency_name}}
@@ -58,12 +63,23 @@ TEXT;
         ];
     }
 
-    /** Only fields this email can ALWAYS honestly populate — see class docblock. */
-    public static function render(string $template, string $applicantName, string $agencyName): string
+    /**
+     * Only fields this email can ALWAYS honestly populate — see class
+     * docblock. $propertyReference is OPTIONAL (2026-09-08 — an applicant
+     * may have several applications running at once and needs to know
+     * which one this is about; that's information they already have, not
+     * an internal detail). Rendered as a self-contained "Re:" line so the
+     * default body reads correctly whether or not it's supplied — when
+     * null/empty the placeholder resolves to nothing, not a dangling label
+     * or blank line, and an agency's own custom wording is free to omit
+     * the placeholder entirely.
+     */
+    public static function render(string $template, string $applicantName, string $agencyName, ?string $propertyReference = null): string
     {
         return strtr($template, [
             '{{applicant_name}}' => $applicantName,
             '{{agency_name}}' => $agencyName,
+            '{{property_reference}}' => $propertyReference ? "Re: {$propertyReference}\n\n" : '',
         ]);
     }
 }
