@@ -254,8 +254,11 @@ final class RentalApplicationAgentControllerTest extends TestCase
         $app = $this->application($contactWithNoEmail);
 
         // Send correctly refuses to mail and says so — the contact has no email.
+        // (Superseded by the later "disable Send, never enabled-then-error"
+        // fix — this is now a hard refusal, not a soft "share links instead"
+        // success message.)
         $this->actingAs($this->agent)->post(route('corex.rental-applications.send', $app))
-            ->assertSessionHas('success', fn ($msg) => str_contains($msg, 'no email on file'));
+            ->assertSessionHas('error', fn ($msg) => str_contains($msg, 'Add an email address'));
         Mail::assertNothingSent();
 
         // The agent types an email into the application's OWN field (the only
