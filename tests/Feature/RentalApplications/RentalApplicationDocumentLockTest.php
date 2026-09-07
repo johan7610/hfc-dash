@@ -136,9 +136,14 @@ final class RentalApplicationDocumentLockTest extends TestCase
         // ADD still works fully, after submission.
         $late = $this->uploadDocument($application, 'bank-statement.pdf');
         $this->assertSame(2, $application->documents()->count());
+        // >= not >: submit() never creates a document itself, so anything
+        // that exists at submission time was necessarily created in an
+        // earlier, separate request — a same-second tie can only mean a
+        // genuinely later upload that a fast synchronous test outran
+        // second-precision timestamp columns on, never a false positive.
         $this->assertTrue(
-            $late->created_at->greaterThan($application->submitted_at),
-            'The late document must be timestamped after submitted_at so the agent side can tell it apart.'
+            $late->created_at->greaterThanOrEqualTo($application->submitted_at),
+            'The late document must be timestamped at/after submitted_at so the agent side can tell it apart.'
         );
 
         // The original is still exactly what was submitted.

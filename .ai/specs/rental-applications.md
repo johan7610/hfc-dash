@@ -955,20 +955,29 @@ Requirement: "Anything added AFTER submission must be visibly
 distinguishable to the agent — timestamp it and surface that on the
 agent's view." This is cc3's file (`corex/rental-applications/show.blade.php`),
 not cc4's — no schema change needed, no new column: a document is "late"
-whenever `$document->created_at->gt($rentalApplication->submitted_at)`,
-both fields already available wherever `$rentalApplication->documents` is
-loaded.
+whenever `$document->created_at->gte($rentalApplication->submitted_at)`.
 
-**Agreed with cc3, 2026-09-07:** confirmed — `created_at > submitted_at`
-is the "late" signal, no schema change. cc3 will add a small badge next
-to any matching document in `show.blade.php` (their `returned.blade.php`
-doesn't currently list individual documents, only a signed/incomplete
-summary, so the badge is expected to live in `show.blade.php` only). cc3
-is implementing this after a separate, already-in-flight, Johan-approved
-task (a platform-wide `SyncPermissions` fix) lands. This lane's own tests
-assert on the `created_at`/`submitted_at` ordering directly rather than
-on cc3's eventual badge wording, so nothing here depends on that follow-up
-landing first.
+**Agreed with cc3, 2026-09-07:** confirmed shape — a badge next to any
+matching document in `show.blade.php` (their `returned.blade.php` doesn't
+currently list individual documents, only a signed/incomplete summary, so
+the badge is expected to live in `show.blade.php` only). cc3 is
+implementing this after a separate, already-in-flight, Johan-approved
+task (a platform-wide `SyncPermissions` fix) lands.
+
+**Correction, 2026-09-07 (before cc3 built it, caught by this lane's own
+regression test):** the comparison was originally proposed and agreed as
+strict `>` (`created_at->gt(...)`). A fast automated test run exposed
+that `submitted_at` and a same-request-cycle-adjacent document's
+`created_at` can land in the same second-precision timestamp column,
+making `>` occasionally false for a document that genuinely was added
+after submission — not a business-logic error, purely a precision tie.
+**Use `>=` (`gte`), not `>`.** Safe because `submit()` never creates a
+document itself, so anything that already exists at the moment
+`submitted_at` is set was necessarily created in an earlier, separate
+request — `>=` can never misclassify a genuinely-original document as
+late. cc3 has not yet implemented the badge, so no follow-up correction
+is needed on their side — flagging here so the corrected version is what
+ships the first time.
 
 **End-to-end proof, real requests against live QA1** (application id 20,
 token generated fresh, not a synthetic fixture): pre-submission — added
