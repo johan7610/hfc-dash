@@ -62,7 +62,19 @@ class ContactController extends Controller
         // responsible agent. The no-pick default-narrowing paths are left on the
         // original created_by basis (and ContactScope's own-row enforcement) so
         // the everyday contacts page is unchanged.
-        if ($canPickAgent) {
+        if ($isSearching) {
+            // AT-394 — a typed search ALWAYS widens to the whole agency, ahead of any agent/
+            // branch filter currently active — including the "Mine" default every canPickAgent
+            // user (admin/BM/owner) also lands on. (First cut of this fix only widened the
+            // plain-agent 'own' path and left canPickAgent users' "Mine" view still narrowed —
+            // that is exactly the case Johan hit testing as an owner on his own "My Contacts".)
+            // Bypasses ONLY the role-based ContactScope — agency isolation via AgencyScope is
+            // untouched, this can never cross an agency boundary. Rows outside the user's
+            // normal own/branch/selected-agent breadth are flagged read-only below and rendered
+            // without edit/delete affordances, mirroring the existing cross-agent duplicate-
+            // warning pattern (ContactDuplicateService).
+            $query->withoutGlobalScope(\App\Models\Scopes\ContactScope::class);
+        } elseif ($canPickAgent) {
             if ($filterAgentId === 'unassigned') {
                 $query->whereNull('agent_id');
             } elseif ($filterAgentId !== '' && $filterAgentId !== 'all') {
@@ -71,13 +83,6 @@ class ContactController extends Controller
                 $query->whereHas('createdBy', fn($q) => $q->where('branch_id', $user->branch_id));
             }
             // 'all' scope with no filter = show all contacts
-        } elseif ($isSearching) {
-            // AT-394 — widen to the whole agency for the duration of this search. Bypasses ONLY
-            // the role-based ContactScope (agency isolation via AgencyScope is untouched — this
-            // can never cross an agency boundary). Rows outside the user's normal own/branch
-            // breadth are flagged read-only below and rendered without edit/delete affordances,
-            // mirroring the existing cross-agent duplicate-warning pattern (ContactDuplicateService).
-            $query->withoutGlobalScope(\App\Models\Scopes\ContactScope::class);
         } else {
             // 'own' scope: agents see only their own (ContactScope also enforces this). For an
             // assistant this is the assigned agent's book — dataIdentityIds() = [agentId, selfId] —
@@ -150,13 +155,14 @@ class ContactController extends Controller
         $contacts     = $query->with(['tags', 'parentTypes'])->paginate($perPage)->withQueryString();
 
         // AT-394 — of THIS page's widened-search results, which ones fall outside the user's
-        // normal own/branch breadth? Re-run the untouched ContactScope (no bypass here) against
-        // just these ids rather than re-implementing its own/branch/bm rules — whatever survives
-        // is exactly what the user could already see without the widened search. The rest render
-        // read-only, tagged with their agent, and never link into show()/destroy() (which still
-        // enforce ContactScope and would 403).
+        // normal breadth (own/branch/selected-agent, admin/owner included)? Re-run the untouched
+        // ContactScope (no bypass here) against just these ids rather than re-implementing its
+        // own/branch/bm/admin rules — whatever survives is exactly what the user could already
+        // see without the widened search (for an admin/owner that's everything, so nothing gets
+        // flagged). The rest render read-only, tagged with their agent, and never link into
+        // show()/destroy() (which still enforce ContactScope and would 403).
         $restrictedContactIds = [];
-        if ($isSearching && !$canPickAgent) {
+        if ($isSearching) {
             $pageIds = $contacts->pluck('id')->all();
             if (!empty($pageIds)) {
                 $inScopeIds = Contact::whereIn('id', $pageIds)->pluck('id')->all();
