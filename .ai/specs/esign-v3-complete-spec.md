@@ -1492,6 +1492,8 @@ Agency Onboarding Setup Wizard entry — there is nothing to configure.
 - Fails open (allows) when no original authoriser was ever recorded — never blocks a document that was never authorised through the candidate/supervisor flow.
 - Verified against real QA1 data: the original authoriser passes, a different agent is blocked with the correctly named message, and the audit row lands with correct metadata. Regression-tested unconditionally in `tests/Feature/Docuperfect/SigningView/AmendmentReauthorisationBindingTest.php`.
 
+**2026-09-07 addendum — a stale branch merge nearly reintroduced the removed toggle.** `feature/esign-whatsapp-send` (AT-385/AT-332 WhatsApp secondary-send, see §22.14) was cut *before* the `require_identity_before_send` toggle was removed above, and still called `assertRecipientsHaveIdentityForSend($recipients, $agencyId)` gated behind `EsignSettings::forAgency($agencyId)->requireIdentityBeforeSend()`. Merging it as-is onto QA1 would have silently reintroduced the exact settings-gate this section documents as removed. Caught at merge time (conflict, not a clean auto-merge) and stopped rather than resolved on the spot; Johan's explicit ruling: **QA1's unconditional version wins outright, the WhatsApp branch's stale hunk is dropped entirely** — the branch was rebased onto current QA1 (not merged as-is) to apply that ruling before landing. Proven post-rebase: `assertRecipientsHaveIdentityForSend()` still takes only `array &$recipients` (no `$agencyId` param), and no call site or `EsignSettings::requireIdentityBeforeSend()` reference remains anywhere in the merged code. Lesson for any other branch cut before 2026-09-07 that touches this method: expect the same conflict, resolve the same way.
+
 ### 22.13 AT-332 — ink is bound to the internal party record id, never to a name (2026-09-07)
 
 **The binding rule, permanently: an ink marker's owner is decided by
@@ -1554,6 +1556,86 @@ key than `data-recipient-identity` provides, add it as a **new, additive**
 stamp read at a **higher-priority step** in `markerBelongsToSigner()` — the
 same pattern this fix used — rather than replacing or reordering the existing
 `data-name` fallback, which real historical documents still depend on.
+
+### 22.14 AT-385 / AT-332 — "Send via WhatsApp" secondary resend, merged onto QA1 (2026-09-07)
+
+Built earlier 2026-09-07 on `feature/esign-whatsapp-send`, approved by Johan as
+a **secondary, manual, agent-clicked** resend method — email stays the
+automatic primary, nothing about routing or auto-advance changes. Sat unmerged
+on GitHub for several hours; Johan tested on QA1 and correctly could not find
+it, because it genuinely was not deployed there yet (see the investigation
+report — code-not-deployed, not a hidden/broken control, confirmed by
+diffing the actual QA1 checkout against the branch before touching anything).
+Merged onto QA1 this same day after resolving the conflict in §22.12's
+addendum above.
+
+**What it is.** A "WhatsApp →" button/link, rendered by one shared partial
+(`resources/views/docuperfect/signatures/partials/_whatsapp-resend-button.blade.php`)
+included in three places:
+- `docuperfect/esign/signing-complete.blade.php` (wizard flow, recipient 1)
+- `docuperfect/signatures/send-confirmation.blade.php` (non-wizard flow, recipient 1)
+- `docuperfect/signatures/partials/_recipient-resend.blade.php` (My E-Sign
+  Documents, per document, whichever recipient is currently pending)
+
+Opens a `wa.me` deep link pre-filled with the recipient's name and the same
+tokenised signing URL the email invitation carries — the agent sends it
+themselves in their own WhatsApp. CoreX cannot confirm delivery (no
+server-side WhatsApp send API exists anywhere in this codebase), so it logs
+only the one true fact — `SignatureAuditLog::ACTION_WHATSAPP_LINK_OPENED`,
+distinct from `ACTION_SENT` — that the agent opened the link.
+
+**The single decision point:** `SigningWhatsAppLinkService::resolveAvailability()`.
+Gated on, in order: `EsignSettings::forAgency($agencyId)->whatsappResendEnabled()`
+(new per-agency toggle, default `true`, fillable/cast added to
+`EsignSettings.php` **additively** — the pre-existing `require_identity_before_send`/
+`strict_reauthorisation_binding` entries were left untouched, not removed,
+per Johan's instruction not to clean up another lane's dead code while
+merging this) → not the agent's own row → recipient status is one of
+PENDING/VIEWED/PARTIALLY_SIGNED → not already signing-blocked → phone number
+present and confidently normalisable to a genuine SA mobile (06x/07x/08x).
+Any failure returns `available: false` with an honest `reason` string
+rendered as plain muted text instead of a button — never a broken link, never
+a silently-missing control. `SigningWhatsAppLinkService::normalizePhone()`
+refuses to guess: empty, malformed, wrong-length, or landline-shaped input
+all resolve to "no button, honest reason," not a wrong-number link.
+
+**Verified after merge, on real QA1 data, as user 22 (Johan, agency 1):**
+- Rendered `signingComplete()` for flows 454 and 455 and both `sendConfirmation()`
+  and `myDocuments()` via direct controller+view execution (real Eloquent
+  queries, real Blade compile, real auth as user 22) — the button/link is
+  present with the correct real recipient name, phone, and token-based
+  signing URL in the returned HTML on all three screens.
+- Checked visibility, not just presence, after today's separate lesson that a
+  correctly-wired control can be invisible if a class never reached compiled
+  CSS: the button uses only pre-existing Tailwind utility classes (`text-xs
+  font-semibold hover:underline transition-colors duration-150`), all
+  confirmed present in the already-built `public/build/assets/*.css`, plus an
+  inline `style="color: var(--ds-green, #059669)"` — a literal fallback baked
+  into the HTML itself, not dependent on any compiled class at all. `--ds-green`
+  is additionally already defined (`#059669`) in the existing, already-built
+  `corex-CkkaXtYZ.css` design-system stylesheet. No asset rebuild was needed
+  or done; the feature ships zero CSS of its own.
+- `whatsapp_resend_enabled` for agency 1: no saved settings row exists yet
+  (agency has never opened E-Sign → Finalisation Settings), so it resolves to
+  the in-memory default `true` — already proven working by the renders above;
+  nothing needed to be set.
+- Confirmed the whole merge is purely additive against QA1's pre-merge tip —
+  `416 insertions(+), 0 deletions(-)` — so the automatic email send path is
+  provably untouched, not merely assumed unchanged.
+- A recipient with no phone, or an unrecognisable/landline number, renders
+  "WhatsApp unavailable — \<honest reason\>" as plain text, never a button,
+  never a broken link.
+
+**Known pre-existing schema quirk, reported not fixed (outside this merge's
+scope):** the original migration
+`2026_09_04_160000_add_whatsapp_resend_enabled_to_docuperfect_esign_settings.php`
+(idempotent, `hasColumn` guarded) and cc2's independent same-day reconstruction
+migration `2026_09_07_100002_reconstruct_whatsapp_resend_enabled_on_docuperfect_esign_settings.php`
+(written during the Staging→QA1 DB restore, before this branch was merged
+back, to backfill a column whose owning migration file didn't exist on disk
+yet) both now exist and are both recorded as run. Harmless — both are
+idempotent, the column exists exactly once — but redundant; not cleaned up
+here as it belongs to the restore/reconstruction work, not this merge.
 
 ---
 
