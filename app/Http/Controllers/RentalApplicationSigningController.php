@@ -114,11 +114,30 @@ class RentalApplicationSigningController extends Controller
      * SigningController::uploadSupportingDocuments() (pdf,jpg,jpeg,png,doc,docx,
      * 15MB/file, max 10 files), filed through the shared `documents` table.
      */
+    /**
+     * Johan, QA1 — "I select docs and click submit... no docs arrive back
+     * because i never clicked upload" / "I complete all the information...
+     * attach a file, click upload and the screen refreshes, and all my
+     * typed info is gone." Root cause of BOTH: this was a synchronous
+     * form-POST-redirect action, so ANY use of it reloaded the whole page —
+     * discarding whatever the applicant had typed into the main form but
+     * not yet submitted (there is no separate "save" step on this public
+     * page; everything lives only in the browser until Submit). Fixed by
+     * making this endpoint respond with JSON when asked (the new
+     * fetch-based upload in show.blade.php) so the file attaches with NO
+     * navigation at all — the old synchronous form-POST path is left
+     * intact for any caller that still wants it (e.g. a no-JS fallback),
+     * unchanged in behaviour.
+     */
     public function uploadDocuments(Request $request, string $token)
     {
         $application = $this->findByToken($token);
 
         if ($application->token_expires_at && $application->token_expires_at->isPast()) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => 'This link has expired.'], 410);
+            }
+
             return redirect()->route('rental-applications.public.show', $token)
                 ->with('error', 'This link has expired.');
         }
@@ -129,7 +148,7 @@ class RentalApplicationSigningController extends Controller
             'document_type_id' => ['nullable', 'integer', 'exists:document_types,id'],
         ]);
 
-        $filed = 0;
+        $filedDocuments = [];
         foreach ($request->file('supporting_files') as $file) {
             $path = $file->store("rental-applications/{$application->id}/documents", 'local');
 
@@ -156,12 +175,24 @@ class RentalApplicationSigningController extends Controller
                 $document->properties()->syncWithoutDetaching([$application->property_id]);
             }
 
-            $filed++;
+            $filedDocuments[] = $document;
         }
 
         if ($application->status === 'sent') {
             $application->status = 'in_progress';
             $application->save();
+        }
+
+        $filed = count($filedDocuments);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'documents' => collect($filedDocuments)->map(fn ($d) => [
+                    'id' => $d->id,
+                    'name' => $d->original_name,
+                    'view_url' => route('rental-applications.public.documents.view', [$token, $d->id]),
+                ]),
+            ]);
         }
 
         return redirect()->route('rental-applications.public.show', $token)
@@ -242,11 +273,15 @@ class RentalApplicationSigningController extends Controller
      * DB row (and therefore its visibility everywhere, including the agent
      * side) is archived.
      */
-    public function removeDocument(string $token, int $document)
+    public function removeDocument(Request $request, string $token, int $document)
     {
         $application = $this->findByToken($token);
 
         if ($application->token_expires_at && $application->token_expires_at->isPast()) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => 'This link has expired.'], 410);
+            }
+
             return redirect()->route('rental-applications.public.show', $token)
                 ->with('error', 'This link has expired.');
         }
@@ -254,10 +289,18 @@ class RentalApplicationSigningController extends Controller
         $doc = $this->scopedDocument($application, $document);
 
         if ($locked = $this->assertDocumentsNotLocked($application, $token)) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => "The documents you submitted with your application are locked and can't be changed."], 423);
+            }
+
             return $locked;
         }
 
         $doc->delete();
+
+        if ($request->wantsJson()) {
+            return response()->json(['message' => 'Document removed.']);
+        }
 
         return redirect()->route('rental-applications.public.show', $token)
             ->with('success', 'Document removed.');
@@ -273,6 +316,10 @@ class RentalApplicationSigningController extends Controller
         $application = $this->findByToken($token);
 
         if ($application->token_expires_at && $application->token_expires_at->isPast()) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => 'This link has expired.'], 410);
+            }
+
             return redirect()->route('rental-applications.public.show', $token)
                 ->with('error', 'This link has expired.');
         }
@@ -280,6 +327,10 @@ class RentalApplicationSigningController extends Controller
         $oldDoc = $this->scopedDocument($application, $document);
 
         if ($locked = $this->assertDocumentsNotLocked($application, $token)) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => "The documents you submitted with your application are locked and can't be changed."], 423);
+            }
+
             return $locked;
         }
 
@@ -287,7 +338,7 @@ class RentalApplicationSigningController extends Controller
             'replacement_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:15360'],
         ]);
 
-        DB::transaction(function () use ($request, $application, $oldDoc) {
+        $newDoc = DB::transaction(function () use ($request, $application, $oldDoc) {
             $file = $request->file('replacement_file');
             $path = $file->store("rental-applications/{$application->id}/documents", 'local');
 
@@ -310,7 +361,20 @@ class RentalApplicationSigningController extends Controller
             }
 
             $oldDoc->delete();
+
+            return $newDoc;
         });
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'document' => [
+                    'id' => $newDoc->id,
+                    'name' => $newDoc->original_name,
+                    'view_url' => route('rental-applications.public.documents.view', [$token, $newDoc->id]),
+                ],
+                'replaced_id' => $oldDoc->id,
+            ]);
+        }
 
         return redirect()->route('rental-applications.public.show', $token)
             ->with('success', 'Document replaced.');
