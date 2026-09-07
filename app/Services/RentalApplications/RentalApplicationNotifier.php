@@ -2,6 +2,7 @@
 
 namespace App\Services\RentalApplications;
 
+use App\Mail\RentalApplicationDecisionMail;
 use App\Mail\RentalApplicationReturnedMail;
 use App\Models\RentalApplication;
 use Illuminate\Support\Facades\Log;
@@ -34,6 +35,33 @@ class RentalApplicationNotifier
         } catch (\Throwable $e) {
             Log::warning('AT-392 rental application returned-notification mail failed', [
                 'rental_application_id' => $application->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * AT-392 authoriser flow — notifies the agent of an authoriser decision
+     * (approved / declined / more info requested). Same best-effort posture
+     * as notifyAgentOfReturn() above.
+     */
+    public function notifyAgentOfDecision(RentalApplication $application, string $decision, ?string $reason = null, bool $isOverride = false): bool
+    {
+        $agentEmail = $application->createdBy?->email;
+        if (! $agentEmail) {
+            return false;
+        }
+
+        try {
+            Mail::to($agentEmail)->send(new RentalApplicationDecisionMail($application, $decision, $reason, $isOverride));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('AT-392 rental application decision-notification mail failed', [
+                'rental_application_id' => $application->id,
+                'decision' => $decision,
                 'error' => $e->getMessage(),
             ]);
 

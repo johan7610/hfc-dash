@@ -92,6 +92,52 @@
     </div>
     @endif
 
+    {{--
+        Johan, QA1 — "on returned applications theres statuses at the top,
+        but theres no way to mark application status to what it is?" Only
+        shown once the application has actually been returned — assessing
+        something the applicant hasn't submitted yet makes no sense.
+        draft/sent/in_progress/returned stay off this control entirely
+        (system-recorded facts, see RentalApplication::AGENT_SETTABLE_STATUSES)
+        — only the agent's own judgement calls are settable here.
+    --}}
+    @permission('rental_applications.create')
+    @if(in_array($rentalApplication->status, \App\Models\RentalApplication::POST_RETURN_STATUSES, true))
+    <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
+        <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Application Status</h2>
+        <form method="POST" action="{{ route('corex.rental-applications.update-status', $rentalApplication) }}" class="flex flex-wrap items-end gap-3">
+            @csrf
+            <div>
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Set status to</label>
+                <select name="status" class="rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
+                    <option value="returned" disabled @selected($rentalApplication->status === 'returned')>Returned (awaiting review)</option>
+                    @foreach(\App\Models\RentalApplication::AGENT_SETTABLE_STATUSES as $s)
+                        <option value="{{ $s }}" @selected($rentalApplication->status === $s)>{{ str_replace('_', ' ', ucfirst($s)) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Note (optional)</label>
+                <input type="text" name="note" maxlength="1000" placeholder="Reason for this decision..." class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
+            </div>
+            <button type="submit" class="corex-btn-primary text-xs">Update Status</button>
+        </form>
+
+        @if($rentalApplication->statusHistory->isNotEmpty())
+        <div class="mt-4 pt-3 text-xs space-y-1" style="border-top: 1px solid var(--border); color: var(--text-muted);">
+            @foreach($rentalApplication->statusHistory as $entry)
+                <div>
+                    {{ optional($entry->from_status)  ? str_replace('_', ' ', $entry->from_status) . ' → ' : '' }}{{ str_replace('_', ' ', $entry->to_status) }}
+                    — {{ $entry->changedBy?->name ?? 'System' }}, {{ $entry->created_at->format('d M Y H:i') }}
+                    @if($entry->note) — "{{ $entry->note }}" @endif
+                </div>
+            @endforeach
+        </div>
+        @endif
+    </div>
+    @endif
+    @endpermission
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
             <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Signatures</h2>
@@ -103,15 +149,38 @@
 
         <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
             <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Supporting Documents</h2>
-            @if($rentalApplication->documents->isEmpty())
-                <p class="text-xs" style="color: var(--text-muted);">None uploaded yet.</p>
-            @else
-                <ul class="text-xs space-y-1" style="color: var(--text-secondary);">
-                    @foreach($rentalApplication->documents as $doc)
-                        <li>✓ <a href="{{ route('corex.rental-applications.documents.download', [$rentalApplication, $doc]) }}" style="color: var(--brand-icon, #2563eb);">{{ $doc->original_name }}</a> @if($doc->documentType) ({{ $doc->documentType->label }}) @endif</li>
-                    @endforeach
-                </ul>
-            @endif
+            <p id="noDocumentsYet" class="text-xs" style="color: var(--text-muted);" @if($rentalApplication->documents->isNotEmpty()) hidden @endif>None uploaded yet.</p>
+            <ul id="supportingDocumentsList" class="text-xs space-y-1" style="color: var(--text-secondary);" @if($rentalApplication->documents->isEmpty()) hidden @endif>
+                @foreach($rentalApplication->documents as $doc)
+                    <li>✓ <a href="{{ route('corex.rental-applications.documents.download', [$rentalApplication, $doc]) }}" style="color: var(--brand-icon, #2563eb);">{{ $doc->original_name }}</a> @if($doc->documentType) ({{ $doc->documentType->label }}) @endif
+                        <span style="color: var(--text-muted);">— {{ $doc->uploaded_by ? 'added by ' . ($doc->uploader->name ?? 'an agent') : 'from applicant' }}</span>
+                    </li>
+                @endforeach
+            </ul>
+
+            {{--
+                Johan — "agent should in any case be able to add docs as
+                client can be in the office so agent scans docs to
+                themselves, or even receive via whatsapp etc." Same
+                Document model/storage/allowlist/soft-delete rule as the
+                applicant's own upload — just a second authenticated entry
+                point, not a second path. Async (no reload) so nothing
+                elsewhere on this page — the big form's unsaved edits — is
+                ever put at risk by attaching a file.
+            --}}
+            @permission('rental_applications.create')
+            <div class="mt-3 pt-3" style="border-top: 1px solid var(--border);" x-data="agentDocumentUpload()">
+                <template x-for="u in uploading" :key="u.tempId">
+                    <p class="text-xs mb-1" :class="u.error ? 'text-red-600' : ''" style="color: var(--text-muted);" x-text="u.error ? (u.name + ': ' + u.error) : ('Uploading ' + u.name + '…')"></p>
+                </template>
+                <label class="text-xs font-medium cursor-pointer" style="color: var(--brand-icon, #2563eb);">
+                    + Add document
+                    <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="hidden"
+                           @change="onFilesSelected($event.target.files); $event.target.value = ''">
+                </label>
+                <p class="text-[11px] mt-1" style="color: var(--text-muted);">Scanned in-office, received by WhatsApp, or anything else — attach it here. This never touches the form above; nothing you've typed is affected.</p>
+            </div>
+            @endpermission
 
             @if($checklist->isNotEmpty())
                 <p class="text-xs font-medium mt-3 mb-1" style="color: var(--text-secondary);">Checklist ({{ str_replace('_', ' ', $rentalApplication->employment_type) }}):</p>
@@ -230,4 +299,64 @@
 
     </form>
 </div>
+
+<script>
+function agentDocumentUpload() {
+    return {
+        uploading: [],
+
+        csrfToken() {
+            return document.querySelector('meta[name="csrf-token"]').content;
+        },
+
+        async uploadFile(file) {
+            const tempId = 'u' + Date.now() + Math.random();
+            this.uploading.push({ tempId, name: file.name, error: null });
+            const formData = new FormData();
+            formData.append('supporting_files[]', file);
+            try {
+                const res = await fetch('{{ route('corex.rental-applications.documents.upload', $rentalApplication) }}', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken() },
+                    body: formData,
+                });
+                const data = await res.json().catch(() => ({}));
+                const item = this.uploading.find(u => u.tempId === tempId);
+                if (!res.ok) {
+                    item.error = (data.errors && Object.values(data.errors)[0]?.[0]) || data.message || 'Upload failed.';
+                    return;
+                }
+                (data.documents || []).forEach(doc => this.appendToList(doc));
+                this.uploading = this.uploading.filter(u => u.tempId !== tempId);
+            } catch (e) {
+                const item = this.uploading.find(u => u.tempId === tempId);
+                if (item) item.error = 'Network error — please try again.';
+            }
+        },
+
+        async onFilesSelected(fileList) {
+            await Promise.all(Array.from(fileList).map(file => this.uploadFile(file)));
+        },
+
+        // Plain DOM insertion, deliberately not Alpine x-for state — the
+        // big form below has its own unsaved-edit tracking (`dirty`) that
+        // this must never interact with or risk reloading past.
+        appendToList(doc) {
+            document.getElementById('noDocumentsYet').hidden = true;
+            const list = document.getElementById('supportingDocumentsList');
+            list.hidden = false;
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.href = doc.view_url;
+            a.style.color = 'var(--brand-icon, #2563eb)';
+            a.textContent = doc.name;
+            const span = document.createElement('span');
+            span.style.color = 'var(--text-muted)';
+            span.textContent = ' — added by ' + @js(auth()->user()->name ?? 'an agent');
+            li.append('✓ ', a, span);
+            list.appendChild(li);
+        },
+    };
+}
+</script>
 @endsection

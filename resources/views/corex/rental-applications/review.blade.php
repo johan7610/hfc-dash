@@ -19,6 +19,8 @@
          initialResult: {{ Js::from($result) }},
          initialSavedAt: {{ $assessment->exists ? Js::from($assessment->updated_at->toIso8601String()) : 'null' }},
          initialMarkedUpDocIds: {{ Js::from($documents->filter(fn ($row) => $row['has_highlights'])->pluck('document.id')->values()) }},
+         requestMoreInfoUrl: '{{ route('corex.rental-applications.review.request-more-info', $rentalApplication) }}',
+         submitForApprovalUrl: '{{ route('corex.rental-applications.review.submit-for-approval', $rentalApplication) }}',
      })">
 
     {{-- Sticky header, 2026-09-08 — second time today the same fault: controls
@@ -169,7 +171,12 @@
                             @php $document = $row['document']; @endphp
                             <div class="rounded-md border" style="border-color: var(--border);">
                                 <div class="flex items-center justify-between px-3 py-2 text-xs">
-                                    <span>{{ $document->original_name }}</span>
+                                    <span>{{ $document->original_name }}
+                                        {{-- Agent-added-documents, 2026-09-08 — cc4's backend
+                                             (RentalApplicationController::uploadDocument()), markup
+                                             handed to me since I own this file. --}}
+                                        <span style="color: var(--text-muted); font-size: 11px;">— {{ $document->uploaded_by ? 'added by ' . ($document->uploader->name ?? 'an agent') : 'from applicant' }}</span>
+                                    </span>
                                     <span class="flex items-center gap-2">
                                         <span class="ds-badge ds-badge-success" x-show="markedUpDocIds.includes({{ $document->id }})" x-cloak title="This document has saved marks — visible to anyone who opens it next.">Marked up</span>
                                         @if($row['inline_viewable'])
@@ -282,6 +289,29 @@
                         @endforeach
                     </div>
                 @endif
+
+                {{-- Agent-added-documents, 2026-09-08 — Johan: "agent should
+                     in any case be able to add docs as client can be in the
+                     office so agent scans docs to themselves, or even
+                     receive via whatsapp etc." Backend built by cc4
+                     (RentalApplicationController::uploadDocument(), same
+                     allowlist/scoping the applicant path already uses).
+                     Widget itself handed to me since I own this file —
+                     own nested x-data, zero shared state with the root
+                     rentalReview() component. Reloads on success (server-
+                     rendered $documents list, not x-for) — safe here since
+                     the assessment panel autosaves on blur, so nothing is
+                     ever sitting unsaved when an agent clicks away to pick
+                     a file. --}}
+                <div class="mt-3 pt-3" style="border-top: 1px solid var(--border);" x-data="agentDocumentUploadReview()">
+                    <template x-for="u in uploading" :key="u.tempId">
+                        <p class="text-xs mb-1" :class="u.error ? 'text-red-600' : ''" style="color: var(--text-muted);" x-text="u.error ? (u.name + ': ' + u.error) : ('Uploading ' + u.name + '…')"></p>
+                    </template>
+                    <label class="text-xs font-medium cursor-pointer" style="color: var(--brand-icon, #2563eb);">
+                        + Add document
+                        <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="hidden" @change="onFilesSelected($event.target.files); $event.target.value = ''">
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -352,17 +382,118 @@
                     </div>
                 </template>
             </div>
+
+            {{-- Authoriser flow, 2026-09-08 — the agent's own two actions.
+                 Johan: "agent only gets submit? get application, maybe a way
+                 to request more info from applicant? then once everything
+                 received checked etc they submit to auth." Reuses the
+                 applicant's EXISTING token link (no new token/route) — the
+                 applicant can already add documents at any status. --}}
+            <div class="rounded-md p-3 mt-4" style="border: 1px solid var(--border);">
+                {{-- Authoriser decision, 2026-09-08 — "update the agent's
+                     screen to show the applicant approved for that amount."
+                     An override (a CO changing an earlier decision) simply
+                     shows the CURRENT decision here — the full history,
+                     including the override, is on the authoriser's own
+                     screen and the audit trail. --}}
+                @if($rentalApplication->status === 'approved')
+                    <div class="rounded-md px-3 py-2 text-xs mb-3" style="background: var(--ds-emerald-soft, #ecfdf5); color: var(--ds-emerald, #059669);">
+                        &check; Approved for R{{ number_format($rentalApplication->approved_rental_amount, 2) }} a month. The applicant has been notified — you can now start matching them to a property.
+                    </div>
+                @elseif($rentalApplication->status === 'declined')
+                    <div class="rounded-md px-3 py-2 text-xs mb-3" style="background: var(--ds-red-soft, #fef2f2); color: var(--ds-red, #dc2626);">
+                        Declined. The applicant has been notified.
+                    </div>
+                @elseif($isPendingAuthorisation)
+                    <div class="rounded-md px-3 py-2 text-xs mb-3" style="background: var(--ds-blue-soft, #eff6ff); color: var(--ds-blue, #2563eb);">
+                        Submitted for approval {{ $rentalApplication->submitted_for_approval_at->format('d M Y H:i') }} — awaiting the authoriser's decision.
+                    </div>
+                @endif
+
+                @unless(in_array($rentalApplication->status, ['approved', 'declined'], true))
+                    <p class="text-xs font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Next step</p>
+                    <textarea x-model="moreInfoNote" rows="2" class="corex-input text-xs w-full mb-2" placeholder="What do you need from the applicant? (for Request more info)"></textarea>
+                    <div class="flex flex-col gap-2">
+                        <button type="button" class="corex-btn-outline text-xs w-full" :disabled="moreInfoSending || !moreInfoNote.trim()" @click="requestMoreInfo()" x-text="moreInfoSending ? 'Sending…' : 'Request more info from applicant'"></button>
+                        <button type="button" class="corex-btn-primary text-xs w-full" :disabled="submittingForApproval" @click="submitForApproval()" x-text="submittingForApproval ? 'Submitting…' : ({{ $isPendingAuthorisation ? 'true' : 'false' }} ? 'Re-submit to authoriser' : 'Submit to authoriser')"></button>
+                    </div>
+                    <p class="text-xs mt-2" x-show="agentActionStatus" x-text="agentActionStatus" :style="agentActionError ? 'color: var(--ds-red, #dc2626);' : 'color: var(--ds-emerald, #059669);'"></p>
+                @endunless
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initialMarkedUpDocIds }) {
+function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initialMarkedUpDocIds, requestMoreInfoUrl, submitForApprovalUrl }) {
     return {
         // ── Affordability assessment (unchanged) ──────────────────────────
         fields: initial,
         markedUpDocIds: initialMarkedUpDocIds || [],
         result: initialResult ?? { label: 'incomplete' },
+        // ── Authoriser flow — the agent's two actions ─────────────────────
+        moreInfoNote: '',
+        moreInfoSending: false,
+        submittingForApproval: false,
+        agentActionStatus: '',
+        agentActionError: false,
+        async requestMoreInfo() {
+            if (this.moreInfoSending || !this.moreInfoNote.trim()) return;
+            this.moreInfoSending = true;
+            this.agentActionStatus = '';
+            try {
+                const res = await fetch(requestMoreInfoUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ note: this.moreInfoNote }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.ok) {
+                    this.agentActionError = false;
+                    this.agentActionStatus = data.mail_sent ? 'Sent to the applicant.' : 'Logged, but the email could not be sent — check their email address.';
+                    this.moreInfoNote = '';
+                } else {
+                    this.agentActionError = true;
+                    this.agentActionStatus = data.error || 'Could not send — try again.';
+                }
+            } catch (e) {
+                this.agentActionError = true;
+                this.agentActionStatus = 'Could not send — check your connection.';
+            }
+            this.moreInfoSending = false;
+        },
+        async submitForApproval() {
+            if (this.submittingForApproval) return;
+            this.submittingForApproval = true;
+            this.agentActionStatus = '';
+            try {
+                const res = await fetch(submitForApprovalUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                        'Accept': 'application/json',
+                    },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.ok) {
+                    this.agentActionError = false;
+                    this.agentActionStatus = 'Submitted to the authoriser.';
+                    setTimeout(() => window.location.reload(), 900);
+                } else {
+                    this.agentActionError = true;
+                    this.agentActionStatus = data.error || 'Could not submit — try again.';
+                }
+            } catch (e) {
+                this.agentActionError = true;
+                this.agentActionStatus = 'Could not submit — check your connection.';
+            }
+            this.submittingForApproval = false;
+        },
         saveStatus: initialSavedAt ? ('Saved at ' + formatTime(initialSavedAt)) : '',
         saveError: false,
         saveTimer: null,
@@ -687,6 +818,37 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
 
 function formatTime(iso) {
     return new Date(iso).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Agent-added-documents, 2026-09-08 — cc4's widget, handed to me for this
+// file. Own component, zero shared state with rentalReview().
+function agentDocumentUploadReview() {
+    return {
+        uploading: [],
+        csrfToken() { return document.querySelector('meta[name="csrf-token"]').content; },
+        async uploadFile(file) {
+            const tempId = 'u' + Date.now() + Math.random();
+            this.uploading.push({ tempId, name: file.name, error: null });
+            const formData = new FormData();
+            formData.append('supporting_files[]', file);
+            try {
+                const res = await fetch('{{ route('corex.rental-applications.documents.upload', $rentalApplication) }}', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken() },
+                    body: formData,
+                });
+                const data = await res.json().catch(() => ({}));
+                const item = this.uploading.find(u => u.tempId === tempId);
+                if (!res.ok) { item.error = (data.errors && Object.values(data.errors)[0]?.[0]) || data.message || 'Upload failed.'; return; }
+                this.uploading = this.uploading.filter(u => u.tempId !== tempId);
+                window.location.reload();
+            } catch (e) {
+                const item = this.uploading.find(u => u.tempId === tempId);
+                if (item) item.error = 'Network error — please try again.';
+            }
+        },
+        async onFilesSelected(fileList) { await Promise.all(Array.from(fileList).map(file => this.uploadFile(file))); },
+    };
 }
 </script>
 @endsection

@@ -65,7 +65,25 @@
                 <tr style="border-bottom: 1px solid var(--border);">
                     <td class="px-4 py-2">{{ $application->contact->full_name ?? '—' }}</td>
                     <td class="px-4 py-2">{{ $application->property?->buildDisplayAddress() ?? $application->property_address_override ?? '—' }}</td>
-                    <td class="px-4 py-2"><span class="ds-badge ds-badge-info">{{ str_replace('_', ' ', $application->status) }}</span></td>
+                    <td class="px-4 py-2">
+                        @permission('rental_applications.create')
+                            @if(in_array($application->status, \App\Models\RentalApplication::POST_RETURN_STATUSES, true))
+                                <form method="POST" action="{{ route('corex.rental-applications.update-status', $application) }}" class="inline">
+                                    @csrf
+                                    <select name="status" onchange="this.form.submit()" class="ds-badge ds-badge-info text-xs" style="border: 1px solid var(--border); cursor: pointer;">
+                                        <option value="returned" disabled @selected($application->status === 'returned')>Returned</option>
+                                        @foreach(\App\Models\RentalApplication::AGENT_SETTABLE_STATUSES as $s)
+                                            <option value="{{ $s }}" @selected($application->status === $s)>{{ str_replace('_', ' ', ucfirst($s)) }}</option>
+                                        @endforeach
+                                    </select>
+                                </form>
+                            @else
+                                <span class="ds-badge ds-badge-info">{{ str_replace('_', ' ', $application->status) }}</span>
+                            @endif
+                        @else
+                            <span class="ds-badge ds-badge-info">{{ str_replace('_', ' ', $application->status) }}</span>
+                        @endpermission
+                    </td>
                     <td class="px-4 py-2">{{ $application->isFullySigned() ? '✓ Both signed' : 'Incomplete' }}</td>
                     <td class="px-4 py-2">{{ optional($application->submitted_at)->format('d M Y') ?? '—' }}</td>
                     <td class="px-4 py-2 text-right">
