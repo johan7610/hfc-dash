@@ -760,26 +760,33 @@ This is what makes the feature safe on a fresh agency, a QA1 reset,
 Staging, or live: whoever runs the standard post-deploy sync gets these
 grants back every time, from nothing.
 
-**Found and reported, not fixed (platform-wide, out of this lane's scope):**
-proving this exposed a real, pre-existing limitation in
-`SyncPermissions::mergeRoleDefaults()` itself, unrelated to Rental
-Applications specifically. It resolves template roles via
-`Role::all(['name','is_owner','agency_id'])` wrapped in a `try`/`catch`
-that only falls back to a synthetic template-role list when `Role::all()`
-*throws* (e.g. the table doesn't exist) — but on a genuinely fresh `roles`
-table that exists with zero rows (the real state until Role Manager or a
-seeder creates rows; no seeder currently populates it), `Role::all()`
-returns an empty Collection without throwing, the fallback never fires,
-and `--merge-defaults` silently grants **nothing, for every module**, not
-just this one. The test above works around this by seeding the same
-minimal template `Role` rows a real onboarded environment already has
+**Found and reported, platform-wide, out of this lane's scope — now FIXED
+(Johan, 2026-09-07: "the platform wide bug - needs attention and get
+fixed. hate silent fails.")** — proving the grant set above exposed a
+real, pre-existing limitation in `SyncPermissions::mergeRoleDefaults()`
+itself, unrelated to Rental Applications specifically. It resolved
+template roles via `Role::all(['name','is_owner','agency_id'])` wrapped in
+a `try`/`catch` that only fell back to a synthetic template-role list when
+`Role::all()` *threw* (e.g. the table doesn't exist) — but on a genuinely
+fresh `roles` table that exists with zero rows (the real state until Role
+Manager or a seeder creates rows; no seeder currently populates it),
+`Role::all()` returns an empty Collection without throwing, the fallback
+never fired, and `--merge-defaults` silently granted **nothing, for every
+module**, not just this one, while still reporting success. The test
+above worked around this by seeding the same minimal template `Role` rows
+a real onboarded environment already has
 (super_admin/admin/branch_manager/agent/viewer/office_admin,
 `agency_id=null`) — a genuinely fresh *grants* table, not a genuinely
-fresh *roles* table, which is the realistic scenario. Fixing
-`SyncPermissions.php`'s empty-vs-throwing distinction is a
-permissions-system-wide concern affecting every module that uses
-`role_defaults`, not a Rental Applications defect — flagged to the
-coordinator, not touched here.
+fresh *roles* table, which is the realistic scenario.
+
+Johan explicitly authorised and directed the fix once this was reported;
+it has since been built, proven, and shipped. Full writeup — the defect,
+the `resolveRolesOrFail()` fix, the loud-reporting/non-zero-exit
+mechanism, the sibling-command check, and the test file — lives in
+`.ai/specs/roles-permissions.md` §10 (that spec, not this one, owns
+`SyncPermissions.php`). The grant set proven above in this file was
+re-confirmed passing unchanged under the fixed command
+(`RentalApplicationPermissionDefaultsTest.php`, 2/2 green).
 
 ---
 
