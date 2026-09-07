@@ -474,3 +474,91 @@ uploaded signature images correctly.
 
 New test coverage: `tests/Feature/RentalApplications/RentalApplicationAgentControllerTest.php`
 — none existed for this controller before this pass.
+
+---
+
+## CRUD / search / sort / scoping standard (Johan, 2026-09-07 — permanent, applies from the word go)
+
+Johan, verbatim, mid-build: "we always need proper crud? search / sort /
+own / branch / agency levels. that should be the design standard. not me
+asking for it once we get to that stage." This is a correctness/security
+requirement, not a setting — there is no toggle, it just works. Applied
+immediately to the agent side of this module rather than deferred; the
+same standard is being written into BUILD_STANDARD.md/STANDARDS.md/CLAUDE.md
+project-wide (a separate lane's work, not this one's).
+
+**Full CRUD.** Create (`store`), read (`index`/`returned`/`show`), update
+(`update`), archive (`destroy` — soft delete only, `RentalApplication`
+already had `SoftDeletes`), and restore (`restore`, new). A route-model-
+bound `{rentalApplication}` 404s on a soft-deleted row by default, so
+`restore()` explicitly binds `RentalApplication::withTrashed()->findOrFail()`
+— the only action in the controller that needs to.
+
+**Search** (both `index` and `returned`, `?q=`): matches the application
+id itself (an agent quoting "#42"), `property_address_override`, the
+linked contact's `first_name`/`last_name`/`email`, and the linked
+property's `address`/`title`. Both list screens show a real empty state
+("No rental applications match this search" / "No returned applications
+match this filter") when a search/filter combination matches nothing,
+distinct from the true-empty-table state.
+
+**Sort** (`?sort=&direction=`): `contact` (joins `contacts.last_name`),
+`property` (joins `properties.address`), `status`, `date` (`created_at`
+on `index`, `submitted_at` on `returned`). Default: `date desc` (newest
+first) on both screens, unchanged from before this standard, now explicit
+and user-controllable via clickable column headers. **`status` is a MySQL
+`enum`** (`RentalApplication::STATUSES`) — sorting by it orders by
+*declared* index (`sent` → `in_progress` → `returned` → ...), i.e. rough
+workflow order, never alphabetically. This is intentional/more useful
+than alphabetical for a status column, not a defect — documented here so
+a future reader doesn't "fix" it into alphabetical order.
+
+**Date range** (`?date_from=&date_to=`): filters the same date column
+sorting defaults to (`created_at` / `submitted_at`).
+
+**Pagination**: 25 per page on every list (`index`, `returned`, and the
+new archived sub-list), `->withQueryString()` so search/sort/filter
+survive pagination.
+
+**Own / branch / agency scoping — enforced at the query layer, on every
+list, detail view, PDF, and document download, never by hiding a link:**
+
+- `RentalApplication::scopeVisibleTo($query, $user)` (new model method) —
+  the list-query guard, applied in `index()`, `returned()`, and the
+  archived sub-query. Mirrors `Docuperfect\Document::scopeVisibleTo()`
+  EXACTLY: `PermissionService::getDataScope($user, 'rental_applications')`
+  resolves to `'own'` (→ `created_by_user_id` — the creating agent, this
+  module's equivalent of Document's `owner_id`), `'branch'` (→
+  `branch_id`), or `'all'` (agency-wide — the tenant boundary itself is
+  still `BelongsToAgency`'s own global scope underneath this).
+- `AuthorizesRentalApplicationAccess::guardRentalApplication()` (new
+  trait, `app/Http/Controllers/Concerns/`) — the single-record sibling,
+  called at the top of `show()`, `update()`, `send()`, `pdf()`,
+  `destroy()`, `restore()`, and `downloadDocument()`. Mirrors
+  `AuthorizesDocumentAccess::guardDocument()` exactly, so list and
+  single-record access can never disagree.
+- This is the SAME mechanism the Documents module already uses — wiring
+  an existing, established pattern into a new module, not new
+  architecture.
+- Proven with real requests in
+  `tests/Feature/RentalApplications/RentalApplicationCrudStandardTest.php`,
+  not asserted: an `agent`-role user (own scope) sees only applications
+  they created and gets a real 403 opening another agent's; a
+  `branch_manager` (branch scope) sees only their branch's; an `admin`
+  (agency/all scope) sees every branch in the agency; a different
+  agency's admin gets a real 404 on both `show` and `pdf` by direct URL
+  (route-model-binding never resolves a cross-agency id at all, before
+  any scope check runs).
+- **Known gap, not fixed here (deploy/ops, out of this lane's scope):**
+  `corex:sync-permissions --merge-defaults` has so far only granted the 4
+  `rental_applications.*` permission keys to the `admin` role (per cc2's
+  2026-09-07 QA1 fix, see "Deploy requirements" above) — no
+  `rental_applications.view` *scope* row exists for any other role on
+  real QA1 data, so a genuine front-line `agent` account cannot open this
+  feature at all yet (403 at the permission-middleware layer, before
+  `scopeVisibleTo()` is ever reached). The scoping mechanism itself is
+  correct and tested against the `agent`/`branch_manager` roles' own
+  built-in fallback defaults (`PermissionService`'s AT-265 unseeded-grants
+  posture) — what's missing is deciding and granting which roles besides
+  `admin` should hold `rental_applications.*` at all, and at what scope.
+  That is a product/permissions decision for Johan, not a code defect.

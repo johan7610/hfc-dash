@@ -21,25 +21,88 @@ use Illuminate\View\View;
  */
 class RentalApplicationController extends Controller
 {
+    use \App\Http\Controllers\Concerns\AuthorizesRentalApplicationAccess;
+
+    /**
+     * Search fields (spec §"Agent-side hardening"): contact full name,
+     * contact email, property address (both the linked Property's own
+     * address and the free-text property_address_override), and the
+     * application id itself as the "reference" (an agent quoting "#42").
+     * Sortable columns: contact name, property, status, sent date. Default
+     * sort: created_at desc (newest first) — unchanged from before this
+     * standard, now explicit and user-controllable.
+     */
+    private function applySearchSortAndDateRange($query, Request $request, string $dateColumn, string $defaultSort)
+    {
+        if ($request->filled('q')) {
+            $q = trim((string) $request->string('q'));
+            $query->where(function ($w) use ($q) {
+                $w->where('id', 'like', "%{$q}%")
+                    ->orWhere('property_address_override', 'like', "%{$q}%")
+                    ->orWhereHas('contact', fn ($c) => $c->where('first_name', 'like', "%{$q}%")
+                        ->orWhere('last_name', 'like', "%{$q}%")
+                        ->orWhere('email', 'like', "%{$q}%"))
+                    ->orWhereHas('property', fn ($p) => $p->where('address', 'like', "%{$q}%")
+                        ->orWhere('title', 'like', "%{$q}%"));
+            });
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate($dateColumn, '>=', $request->date('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate($dateColumn, '<=', $request->date('date_to'));
+        }
+
+        $sortable = ['contact' => 'contacts.last_name', 'property' => 'properties.address', 'status' => 'status', 'date' => $dateColumn];
+        $sort = $sortable[$request->string('sort')->toString()] ?? $defaultSort;
+        $direction = $request->string('direction')->toString() === 'asc' ? 'asc' : 'desc';
+
+        if (in_array($sort, ['contacts.last_name', 'properties.address'], true)) {
+            $query->leftJoin($sort === 'contacts.last_name' ? 'contacts' : 'properties', $sort === 'contacts.last_name' ? 'contacts.id' : 'properties.id', '=', $sort === 'contacts.last_name' ? 'rental_applications.contact_id' : 'rental_applications.property_id')
+                ->orderBy($sort, $direction)
+                ->select('rental_applications.*');
+        } else {
+            $query->orderBy($sort, $direction);
+        }
+
+        return $query;
+    }
+
     public function index(Request $request): View
     {
-        $applications = RentalApplication::with(['contact', 'property'])
-            ->whereNotIn('status', ['returned', 'under_assessment', 'approved', 'declined'])
-            ->orderByDesc('created_at')
-            ->paginate(25);
+        $query = RentalApplication::visibleTo($request->user())
+            ->with(['contact', 'property'])
+            ->whereNotIn('status', ['returned', 'under_assessment', 'approved', 'declined']);
 
-        return view('corex.rental-applications.index', compact('applications'));
+        $this->applySearchSortAndDateRange($query, $request, 'created_at', 'created_at');
+
+        $applications = $query->paginate(25)->withQueryString();
+
+        $archived = null;
+        if ($request->boolean('archived')) {
+            $archived = RentalApplication::visibleTo($request->user())
+                ->onlyTrashed()
+                ->with(['contact', 'property'])
+                ->orderByDesc('deleted_at')
+                ->paginate(25, ['*'], 'archived_page')
+                ->withQueryString();
+        }
+
+        return view('corex.rental-applications.index', compact('applications', 'archived'));
     }
 
     public function returned(Request $request): View
     {
-        $query = RentalApplication::with(['contact', 'property', 'signatures'])
-            ->whereIn('status', ['returned', 'under_assessment', 'approved', 'declined', 'withdrawn'])
-            ->orderByDesc('submitted_at');
+        $query = RentalApplication::visibleTo($request->user())
+            ->with(['contact', 'property', 'signatures'])
+            ->whereIn('status', ['returned', 'under_assessment', 'approved', 'declined', 'withdrawn']);
 
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
         }
+
+        $this->applySearchSortAndDateRange($query, $request, 'submitted_at', 'submitted_at');
 
         $applications = $query->paginate(25)->withQueryString();
 
@@ -105,8 +168,9 @@ class RentalApplicationController extends Controller
             ->with('success', 'Rental application created. Review it, then send.');
     }
 
-    public function show(RentalApplication $rentalApplication): View
+    public function show(Request $request, RentalApplication $rentalApplication): View
     {
+        $this->guardRentalApplication($rentalApplication);
         $rentalApplication->load(['contact', 'property', 'signatures', 'documents.documentType']);
 
         return view('corex.rental-applications.show', compact('rentalApplication'));
@@ -114,6 +178,8 @@ class RentalApplicationController extends Controller
 
     public function update(Request $request, RentalApplication $rentalApplication)
     {
+        $this->guardRentalApplication($rentalApplication);
+
         $validated = $request->validate(array_merge(RentalApplication::fieldValidationRules(), [
             'property_id' => ['nullable', 'integer', 'exists:properties,id'],
         ]));
@@ -140,6 +206,8 @@ class RentalApplicationController extends Controller
      */
     public function send(Request $request, RentalApplication $rentalApplication)
     {
+        $this->guardRentalApplication($rentalApplication);
+
         if (! $rentalApplication->token) {
             $rentalApplication->token = $this->generateToken();
             $rentalApplication->token_expires_at = now()->addDays(14);
@@ -163,6 +231,8 @@ class RentalApplicationController extends Controller
 
     public function pdf(RentalApplication $rentalApplication)
     {
+        $this->guardRentalApplication($rentalApplication);
+
         $service = app(\App\Services\RentalApplications\RentalApplicationPdfService::class);
         $path = $service->generate($rentalApplication);
 
@@ -177,11 +247,31 @@ class RentalApplicationController extends Controller
      */
     public function destroy(RentalApplication $rentalApplication)
     {
+        $this->guardRentalApplication($rentalApplication);
+
         $rentalApplication->delete();
 
         return redirect()
             ->route('corex.rental-applications.index')
             ->with('success', 'Rental application archived.');
+    }
+
+    /**
+     * Johan, 2026-09-07 — full CRUD includes "restore from archive," not
+     * just archive. Route-model-binding on a soft-deleted row 404s by
+     * default, so the {rentalApplication} parameter is bound explicitly
+     * withTrashed() here — the only action in this controller that needs to.
+     */
+    public function restore(Request $request, int $rentalApplication)
+    {
+        $application = RentalApplication::withTrashed()->findOrFail($rentalApplication);
+        $this->guardRentalApplication($application);
+
+        $application->restore();
+
+        return redirect()
+            ->route('corex.rental-applications.index', ['archived' => 1])
+            ->with('success', 'Rental application restored.');
     }
 
     /**
@@ -191,9 +281,13 @@ class RentalApplicationController extends Controller
      * binding, before this method ever runs) — the explicit source_type/
      * source_id check below is defense-in-depth against a same-agency
      * agent guessing a document id that belongs to a DIFFERENT application.
+     * The own/branch/agency guard below covers the finer-grained visibility
+     * tier on top of that agency-level check.
      */
     public function downloadDocument(RentalApplication $rentalApplication, Document $document)
     {
+        $this->guardRentalApplication($rentalApplication);
+
         abort_unless(
             $document->source_type === 'rental_application' && (int) $document->source_id === $rentalApplication->id,
             404
