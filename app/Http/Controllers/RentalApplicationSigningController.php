@@ -179,6 +179,115 @@ class RentalApplicationSigningController extends Controller
         return response()->download($path, 'Rental Application.pdf')->deleteFileAfterSend(true);
     }
 
+    /**
+     * Johan, 2026-09-07 — full CRUD for the applicant's OWN documents, not
+     * just create. Every action here re-derives the application from the
+     * TOKEN first, then checks the document's source_type/source_id match
+     * THIS application before touching it — a document id is a globally
+     * auto-incrementing key on the shared `documents` table, shared across
+     * every agency and every application, so the id alone proves nothing.
+     * A document belonging to a DIFFERENT application (or found via a
+     * different/no token at all) 404s exactly like it doesn't exist —
+     * never a 403 that would confirm the id is valid but off-limits.
+     */
+    private function scopedDocument(RentalApplication $application, int $documentId): \App\Models\Document
+    {
+        $document = \App\Models\Document::where('id', $documentId)
+            ->where('source_type', 'rental_application')
+            ->where('source_id', $application->id)
+            ->first();
+
+        abort_unless($document, 404);
+
+        return $document;
+    }
+
+    public function viewDocument(string $token, int $document)
+    {
+        $application = $this->findByToken($token);
+
+        if ($application->token_expires_at && $application->token_expires_at->isPast()) {
+            abort(404);
+        }
+
+        $doc = $this->scopedDocument($application, $document);
+
+        return $doc->downloadResponse();
+    }
+
+    /**
+     * Archive only — Document already uses SoftDeletes, so delete() here is
+     * never destructive (CLAUDE.md Non-negotiable #1: no hard deletes,
+     * anywhere, no exceptions). The file itself is left on disk; only the
+     * DB row (and therefore its visibility everywhere, including the agent
+     * side) is archived.
+     */
+    public function removeDocument(string $token, int $document)
+    {
+        $application = $this->findByToken($token);
+
+        if ($application->token_expires_at && $application->token_expires_at->isPast()) {
+            return redirect()->route('rental-applications.public.show', $token)
+                ->with('error', 'This link has expired.');
+        }
+
+        $doc = $this->scopedDocument($application, $document);
+
+        $doc->delete();
+
+        return redirect()->route('rental-applications.public.show', $token)
+            ->with('success', 'Document removed.');
+    }
+
+    /**
+     * Replace = the old document is archived and a new one filed, together,
+     * atomically — never a window where the old is gone and the new hasn't
+     * landed yet, and never a hard delete of the old row.
+     */
+    public function replaceDocument(Request $request, string $token, int $document)
+    {
+        $application = $this->findByToken($token);
+
+        if ($application->token_expires_at && $application->token_expires_at->isPast()) {
+            return redirect()->route('rental-applications.public.show', $token)
+                ->with('error', 'This link has expired.');
+        }
+
+        $oldDoc = $this->scopedDocument($application, $document);
+
+        $validated = $request->validate([
+            'replacement_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:15360'],
+        ]);
+
+        DB::transaction(function () use ($request, $application, $oldDoc) {
+            $file = $request->file('replacement_file');
+            $path = $file->store("rental-applications/{$application->id}/documents", 'local');
+
+            $newDoc = \App\Models\Document::withoutAgencyStamping(fn () => \App\Models\Document::create([
+                'original_name' => $file->getClientOriginalName(),
+                'storage_path' => $path,
+                'disk' => 'local',
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+                'document_type_id' => $oldDoc->document_type_id,
+                'source_type' => 'rental_application',
+                'source_id' => $application->id,
+                'agency_id' => $application->agency_id,
+                'branch_id' => $application->branch_id,
+            ]));
+
+            $newDoc->contacts()->syncWithoutDetaching([$application->contact_id]);
+            if ($application->property_id) {
+                $newDoc->properties()->syncWithoutDetaching([$application->property_id]);
+            }
+
+            $oldDoc->delete();
+        });
+
+        return redirect()->route('rental-applications.public.show', $token)
+            ->with('success', 'Document replaced.');
+    }
+
     private function storeSignature(RentalApplication $application, string $kind, string $dataUrl, Request $request): void
     {
         // Signature pad payload is a data: URI (image/png;base64,...) — same

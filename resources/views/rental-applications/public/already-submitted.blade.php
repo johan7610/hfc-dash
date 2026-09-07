@@ -41,13 +41,7 @@
         <h2 class="font-semibold text-slate-700 mb-2">Supporting Documents</h2>
         <p class="text-xs text-slate-500 mb-3">Upload payslips, bank statements, ID or proof of residence — whatever you have.</p>
 
-        @if($application->documents->isNotEmpty())
-        <ul class="text-sm text-slate-600 mb-3 space-y-1">
-            @foreach($application->documents as $doc)
-                <li>✓ {{ $doc->original_name }}</li>
-            @endforeach
-        </ul>
-        @endif
+        @include('rental-applications.public._document-list', ['application' => $application])
 
         @error('supporting_files')
             <p class="text-xs text-red-600 mb-2">{{ $message }}</p>

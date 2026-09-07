@@ -4671,6 +4671,12 @@ Route::prefix('rental-application')->group(function () {
     Route::post('/{token}/submit', [\App\Http\Controllers\RentalApplicationSigningController::class, 'submit'])->middleware('throttle:10,1')->name('rental-applications.public.submit');
     Route::post('/{token}/documents', [\App\Http\Controllers\RentalApplicationSigningController::class, 'uploadDocuments'])->middleware('throttle:10,1')->name('rental-applications.public.documents');
     Route::get('/{token}/pdf', [\App\Http\Controllers\RentalApplicationSigningController::class, 'pdf'])->middleware('throttle:30,1')->name('rental-applications.public.pdf');
+    // Johan, 2026-09-07 — full CRUD for the applicant's own documents, not
+    // just create. {document} is scoped inside the controller against the
+    // TOKEN's own application — a bare id proves nothing on its own.
+    Route::get('/{token}/documents/{document}', [\App\Http\Controllers\RentalApplicationSigningController::class, 'viewDocument'])->middleware('throttle:30,1')->name('rental-applications.public.documents.view');
+    Route::post('/{token}/documents/{document}/remove', [\App\Http\Controllers\RentalApplicationSigningController::class, 'removeDocument'])->middleware('throttle:10,1')->name('rental-applications.public.documents.remove');
+    Route::post('/{token}/documents/{document}/replace', [\App\Http\Controllers\RentalApplicationSigningController::class, 'replaceDocument'])->middleware('throttle:10,1')->name('rental-applications.public.documents.replace');
 });
 
 // ===== SALES DOCUMENT RETURN (public, no auth, token-based) =====
