@@ -2076,3 +2076,159 @@ plus two real-render regression tests
 thing that proves a Blade change actually compiles and executes, and
 `php -l` on a `.blade.php` file does not exercise the compiled directives
 at all.
+
+## Round 5 (Johan, QA1) — the input-loss sweep, done as a class
+
+Johan, end of day: three real defects on this one feature — the agent
+form reverting four fields on validation failure, the applicant email
+not persisting, the public form wiping everything on upload — were each
+found by him personally and fixed as instances. The rule he set: **no
+user action on either rental application form may EVER discard typed
+input** — not on validation failure, upload, navigation, partial save,
+or any button that posts. This round sweeps both forms exhaustively
+against that rule rather than waiting for a fourth instance.
+
+### The complete sweep — every action checked, verdict for each
+
+**Agent-side (`RentalApplicationController` + its 3 views):**
+
+| Action | Route | Verdict before this round | Fix |
+|---|---|---|---|
+| Create application | `POST .store` | **FAIL** — `create.blade.php`'s contact/property picker is Alpine state seeded from nothing; a failed store() (e.g. a stale property id) wiped the agent's search-and-select work even though `old()` had the ids the whole time | `create()` now resolves `old('contact_id')`/`old('property_id')` server-side (agency-scoped, so a stale/foreign id just resolves to null, never leaks) and seeds the Alpine component's initial state with them |
+| Edit application | `PUT .update` | PASS — already fixed in an earlier round (`<x-rental-application-field>` uses `old($name, $value)`, all 3 textareas and the `employment_type` select do too); re-verified individually, all 29 fields | none needed |
+| Set status | `POST .update-status` | **FAIL** — the note `<input>` had no `old()` and the status `<select>`'s `@selected` only ever checked the DB value, never `old('status')`; a rejected status change (fake system status, or an over-length note) silently dropped the note the agent had typed | Added `old('note')` to the input and `old('status', $rentalApplication->status)` to the select's `@selected` checks; added `->withInput()` to the one custom (non-`validate()`) rejection branch too |
+| Send / Resend | `POST .send` | PASS — button-only action, no typed fields; already prevented from firing while the big form has unsaved edits (`dirty` gate from an earlier round) | none needed |
+| Archive | `DELETE .destroy` | PASS — confirm-dialog only, no typed fields; soft delete, not a data-loss concern in this sense | none needed |
+| Restore | `POST .restore` | PASS — no typed fields | none needed |
+| Search contacts/properties | `GET .search-properties`, global contact search | N/A — these are live AJAX lookups behind the create-page picker, not a save/submit path; nothing persists across a request to lose | none needed |
+| List filters/sort/pagination | `GET .index`, `GET .returned` | N/A — GET requests, no posted input | none needed |
+| Document download | `GET .documents.download` | N/A — GET, no input | none needed |
+
+**Public applicant-side (`RentalApplicationSigningController` + its 4 views):**
+
+| Action | Route | Verdict before this round | Fix |
+|---|---|---|---|
+| Submit application | `POST .submit` | **FAIL (new find)** — every typed text field already used `old()` (an earlier round's fix), but the two signature-pad hidden inputs had no `old()` at all and nothing redrew the canvas; a validation failure on ANY unrelated field (e.g. a bad phone number) silently wiped both hand-drawn signatures, forcing the applicant to re-sign | Hidden inputs now carry `value="{{ old($field) }}"`; the canvas init script draws the old signature back via `Image()`/`drawImage()` on load if present, so the applicant sees their own signature still there, not a blank pad |
+| Every text field on submit | (same route) | PASS, individually re-verified across all field types (component-based, raw textareas, the `employment_type` select) — confirmed via a real request exercising all of them at once | none needed |
+| Upload document (pre-submission) | `POST .documents` | PASS — already fully async since the earlier round (no page reload at all); re-verified | none needed |
+| Replace / remove document (pre-submission) | `POST .documents.replace` / `.remove` | PASS — already fully async; re-verified, still correctly locked once submitted | none needed |
+| Upload document (post-submission, "add more") | `POST .documents` from `already-submitted.blade.php` | **FAIL (new find)** — this page was missed entirely by the earlier async rewrite; it still used a plain synchronous `<form enctype="multipart/form-data">` that reloaded the whole page on every upload, and a multi-file selection with one rejected file would have forced reselecting the ones that were fine | Rewritten to the same Alpine `fetch()` pattern as `show.blade.php` — `alreadySubmittedDocuments()`, own `uploadFile()`/`onFilesSelected()`. The now-fully-unused shared `_document-list.blade.php` partial (its own docblock claimed it was "shared... so the two never drift" — the drift had already silently happened when `show.blade.php` got its own inline Alpine markup in an earlier round) was deleted rather than left as dead code. |
+| Expired-token submit attempt | `POST .submit` (token past `token_expires_at`) | **Checked, not the same defect class, no fix applied** — `submit()`'s expired-token redirect has no `withInput()`, but the target page (`show()` → `rental-applications.public.unavailable`) is a static "this link has expired" page with no form fields at all; there is nothing to redisplay input INTO regardless of what's flashed. A 14-day token window expiring mid-fill is not the scenario Johan hit personally. Flagging the reasoning rather than silently skipping it. |
+| Re-submit an already-returned application | `POST .submit` when already `returned`+ | N/A — redirects straight to `show()`, which renders `already-submitted.blade.php` (a different page entirely, not the form) — nothing on the submit form to lose since it's never shown again |
+| View document | `GET .documents.view` | N/A — GET, no input | none needed |
+| Navigation between sections/tabs | both forms | **Checked, not applicable** — neither form has a JS tab/step/wizard mechanism (confirmed by grep); both are single-page, single-scroll forms with visually separated sections, so there is no unmount/remount to lose state to | none needed |
+| Partial save / autosave | both forms | **Checked, not applicable** — neither of these two forms has an autosave mechanism (the separate Phase 2 assessment split-screen does, but that is a different feature/file, out of this scope) | none needed |
+
+### Proof
+
+Every fix above proven with real HTTP requests (kernel-dispatched, real
+session/CSRF, real DB), not assertions:
+- Failed `store()` with a stale property id → `create()` redisplay
+  confirmed to carry the correct `contactId`/`propertyName` in the
+  Alpine seed data.
+- Failed `submit()` with every field filled and one deliberately broken
+  → redisplay confirmed to show every single typed value AND both
+  signature `data:image/png;...` payloads intact in the hidden inputs.
+- `already-submitted.blade.php` confirmed to no longer contain
+  `enctype="multipart/form-data"` (the old sync form) and to upload via
+  the JSON endpoint with no redirect.
+- Rejected `updateStatus()` confirmed to still show the agent's typed
+  note on redisplay.
+
+**Regression tests** — new file
+`tests/Feature/RentalApplications/RentalApplicationInputPreservationTest.php`:
+`test_create_form_redisplays_the_selected_contact_and_property_after_a_validation_failure`,
+`test_a_validation_failure_on_an_unrelated_field_preserves_both_signatures`,
+`test_every_typed_field_on_the_public_form_survives_a_validation_failure`,
+`test_the_status_note_survives_a_rejected_status_change`. Added to
+`RentalApplicationAsyncUploadTest.php`:
+`test_the_already_submitted_page_renders_and_uploads_via_the_json_endpoint_with_no_redirect`,
+`test_the_already_submitted_page_lists_existing_documents_as_locked`.
+Full `tests/Feature/RentalApplications/` directory re-run clean: 56
+passed, 339 assertions, zero regressions.
+
+### Outstanding items confirmed still correct (re-checked this round, not re-fixed)
+
+- **Auto-upload on submit, blocked on failure**: `beforeSubmit()` still
+  uploads anything left in the file picker and waits for in-flight
+  uploads before allowing submit; a failure still blocks submit and
+  names the file. Unchanged, re-verified.
+- **Submit below documents**: still true, `form=` attribute unchanged.
+- **Contact email backfill**: fill-only, never-overwrite, agency-scoped —
+  unchanged, re-verified.
+- **List actions (archive/restore/resend) + search/sort/filter/pagination
+  + empty state**: unchanged, re-verified via
+  `RentalApplicationCrudStandardTest`.
+- **Status setting with an audit trail**: unchanged from Round 4, note
+  field bug above is the only thing that needed fixing.
+
+## Round 6 (Johan) — agent-added documents
+
+Johan: "agent should in any case be able to add docs as client can be in
+the office so agent scans docs to themselves, or even receive via
+whatsapp etc." The applicant's token-based upload path already existed;
+the agent had no way to attach anything themselves.
+
+**Not a second document path** — same `Document` model, same storage
+convention (`rental-applications/{id}/documents`), same allowlist
+(pdf/jpg/jpeg/png/doc/docx, 15MB, up to 10 files), same soft-delete rule.
+Just a second, authenticated entry point onto the one path.
+
+**Who added it** — `documents.uploaded_by` and `Document::uploader()`
+already existed; the applicant's own public/token upload never sets it
+(no authenticated user in that context), so it was already the natural
+"who added this" signal with zero new columns needed. The agent upload
+sets it to `auth()->id()`. Screens show "from applicant" (null) vs.
+"added by {name}" (set).
+
+**Built:**
+- `RentalApplicationController::uploadDocument()` —
+  `POST /corex/rental-applications/{rentalApplication}/documents`, route
+  `corex.rental-applications.documents.upload`. Scoped via the existing
+  `guardRentalApplication()` guard, gated on `rental_applications.create`
+  (same permission every other action on this screen already uses).
+  Responds JSON on success/failure, matching the applicant-side contract.
+- **`show.blade.php`** (my own detail page) — attribution line added to
+  the existing document list, plus a self-contained async upload widget
+  (its own nested `x-data`, own `<script>`) below it. Deliberately NOT a
+  `window.location.reload()` on success: this page's big edit form has
+  its own unsaved-edit (`dirty`) tracking from an earlier round, and a
+  reload would violate today's input-loss rule for whoever has unsaved
+  edits at the moment they attach a file. Uses plain DOM insertion
+  (`appendToList()`) into the existing list instead — no reload, ever,
+  on this page.
+- **`review.blade.php`** (cc6's split-screen review page) — NOT edited
+  directly (coordinated: cc6 owns that file, is mid-build on the RO/CO
+  authoriser flow on the same Alpine component). Handed cc6 the exact
+  markup/JS for a self-contained upload widget there too, plus the
+  one-line attribution addition to their existing document loop. That
+  screen's document list is server-rendered (not reactive), and its
+  existing autosave (`saveAssessment()` on blur/change) means nothing
+  should be unsaved when a file is attached — so a plain page reload on
+  success was the agreed approach there, unlike `show.blade.php`.
+  cc6 to apply when their in-flight edit reaches a safe point.
+
+**Scoping:** `Document::create()` auto-stamps `agency_id` from the
+authenticated acting user via its own `BelongsToAgency` trait — no
+`withoutAgencyStamping()` needed here (that escape hatch is only for the
+public, unauthenticated applicant path). Cross-agency upload attempt
+confirmed blocked (404, via `guardRentalApplication()` + route-model
+binding's own agency scope) with a real request.
+
+**No hard deletes:** agent-added documents are ordinary `Document` rows
+— already soft-deletable via the existing mechanism, nothing new needed.
+
+**Regression tests**, added to `RentalApplicationAgentControllerTest.php`:
+`test_agent_can_upload_a_document_and_it_is_attributed_to_them`,
+`test_a_rejected_agent_upload_reports_why_and_never_attaches`,
+`test_agent_upload_respects_agency_scoping`,
+`test_the_detail_page_distinguishes_applicant_documents_from_agent_added_ones`,
+`test_agent_added_documents_are_never_hard_deleted`. Full file re-run:
+34 passed, 174 assertions.
+
+**Proven live** with real requests against real data: agent upload
+attributed correctly (`uploaded_by` set), a rejected file type reports
+why and attaches nothing, the detail page shows both an applicant
+document ("from applicant") and an agent-added one ("added by Johan
+Reichel") side by side, the upload widget itself renders, and a
+cross-agency attempt is blocked with a 404.
