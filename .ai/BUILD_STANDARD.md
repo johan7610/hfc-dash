@@ -132,6 +132,51 @@ paths were tested. "12 tests pass" means nothing. "Tests pass for:
 all-fields, no-last-name, email-only, malformed-phone-rejected,
 deleted-contact-renders" means something.
 
+### 5a. Verification has two independent axes — vary both
+
+A "verified working" report can still miss a real bug if it only varies
+one axis of how a test is run. AT-392's RA-04/RA-06 pair (2026-09-08) is
+the concrete case this rule is written from: a highlight-save endpoint was
+re-verified over real HTTP — real login, real CSRF, real curl, a real
+database read — specifically because in-process dispatch was suspected of
+producing false positives. That re-verification passed cleanly and was
+correct as far as it went. Minutes later, adversarial testing against a
+document whose highlight row had already been through a soft-delete/
+recreate cycle threw a raw SQLSTATE error straight to the browser. The
+real-HTTP re-verification could not have caught it, for a specific
+mechanical reason, not a rigor gap.
+
+The two axes:
+
+- **Transport** — real HTTP request vs. in-process dispatch.
+- **Data state** — a clean/fresh fixture vs. an already-touched record.
+
+These are ORTHOGONAL. Upgrading transport rigor says nothing about
+data-state rigor, and vice versa. A test that varies only the axis that
+was under suspicion and then reports the feature "proven end to end" is
+a false positive waiting to happen. **Verify both axes, not just the one
+someone doubted.**
+
+- A clean-fixture, single-pass test only proves a table's CREATE path.
+  It proves nothing about what happens the second time a record with
+  that same key comes back into existence.
+- Any table combining a UNIQUE constraint with SoftDeletes requires an
+  explicit **create → soft-delete → recreate** pass before it is called
+  verified. MySQL's unique index has no soft-delete awareness — it
+  enforces uniqueness across ALL rows, trashed or not — while Eloquent's
+  default query scope (used by `firstOrNew`, `find`, `where`, etc.) hides
+  trashed rows from the very query that would otherwise find and restore
+  them instead of colliding with them. A naive `firstOrNew()`-then-
+  `save()` on a key that was ever soft-deleted throws a raw duplicate-key
+  exception, not a graceful restore, unless the code explicitly queries
+  `withTrashed()` and calls `restore()`.
+- Adversarial testing deliberately reuses already-touched records as
+  standard practice, not just fresh fixtures. Production data is never
+  clean — a real agency database has records that were created, edited,
+  cleared, and re-entered many times over. A test suite that only ever
+  exercises brand-new rows is testing a database that does not exist in
+  production.
+
 ---
 
 ## 6. Fix the class, not the instance

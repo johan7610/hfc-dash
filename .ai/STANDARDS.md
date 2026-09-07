@@ -257,6 +257,8 @@ Before any code changes, read CLAUDE.md, STANDARDS.md, and the relevant spec fro
 ### Rule 16: Functional Verification Required
 php -l and dev-check are necessary but not sufficient. Every feature must be verified via Tinker or equivalent to confirm it actually works end-to-end, not just compiles.
 
+Verification has two independent axes — transport (real HTTP vs. in-process dispatch) and data state (clean fixture vs. already-touched record) — and varying one proves nothing about the other. See BUILD_STANDARD.md §5a for the full rule and why a real-HTTP re-verification against a fresh fixture still missed a soft-delete/unique-index collision (AT-392 RA-06, 2026-09-08).
+
 ---
 
 ## Known Limitations
