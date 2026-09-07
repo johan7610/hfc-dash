@@ -229,13 +229,15 @@ class RentalApplicationController extends Controller
         $rentalApplication->status = 'sent';
         $rentalApplication->save();
 
+        $recipientEmail = $rentalApplication->recipientEmail();
+
         $mailSent = false;
-        if ($rentalApplication->contact->email) {
+        if ($recipientEmail) {
             $mailSent = app(RentalApplicationMailer::class)->sendInvite($rentalApplication);
         }
 
         $message = $mailSent
-            ? 'Sent to ' . $rentalApplication->contact->email . '. Both the download link and the online link are on this page too, if you want to share them another way.'
+            ? 'Sent to ' . $recipientEmail . '. Both the download link and the online link are on this page too, if you want to share them another way.'
             : 'This contact has no email on file — share the links below directly (WhatsApp, print, etc).';
 
         return redirect()

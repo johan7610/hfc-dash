@@ -12,8 +12,10 @@ use App\Models\Property;
 use App\Models\RentalApplication;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
+use App\Mail\RentalApplicationInviteMail;
 
 /**
  * AT-392 — agent-facing Rental Applications. Spec: .ai/specs/rental-applications.md
@@ -42,6 +44,11 @@ final class RentalApplicationAgentControllerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // This worktree has no built frontend bundle (no npm install/build
+        // run here) — irrelevant to what these tests assert (rendered HTML
+        // text, DB state), so fake Vite rather than requiring an asset
+        // build just to exercise this controller.
+        $this->withoutVite();
         $this->agency = Agency::create(['name' => 'Home Finders Coastal', 'slug' => 'hfc-' . uniqid()]);
         $this->branch = Branch::create(['agency_id' => $this->agency->id, 'name' => 'Ramsgate']);
         $this->agent = User::factory()->create(['agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'role' => 'admin']);
@@ -229,5 +236,118 @@ final class RentalApplicationAgentControllerTest extends TestCase
         $this->actingAs($otherAdmin)->get(route('corex.rental-applications.show', $app))->assertStatus(404);
         $this->actingAs($otherAdmin)->get(route('corex.rental-applications.index'))
             ->assertDontSee(route('corex.rental-applications.show', $app), false);
+    }
+
+    // ── Bug 5: "moans no email correctly, but adding and saving do not
+    // persist" (Johan, QA1) — the email genuinely persisted the whole time;
+    // send()/sendInvite() just never read the field this screen lets the
+    // agent edit. See RentalApplication::recipientEmail(). ─────────────────
+
+    public function test_editing_the_applications_own_email_field_is_what_send_actually_uses(): void
+    {
+        Mail::fake();
+
+        $contactWithNoEmail = Contact::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'first_name' => 'No', 'last_name' => 'Email', 'email' => null,
+        ]);
+        $app = $this->application($contactWithNoEmail);
+
+        // Send correctly refuses to mail and says so — the contact has no email.
+        $this->actingAs($this->agent)->post(route('corex.rental-applications.send', $app))
+            ->assertSessionHas('success', fn ($msg) => str_contains($msg, 'no email on file'));
+        Mail::assertNothingSent();
+
+        // The agent types an email into the application's OWN field (the only
+        // one this screen offers) and saves.
+        $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'email' => 'corrected@example.com',
+        ])->assertRedirect(route('corex.rental-applications.show', $app));
+
+        $app->refresh();
+        $this->assertSame('corrected@example.com', $app->email, 'The email must actually persist — it always did; this asserts it still does.');
+
+        // Sending again must now use exactly that address — not the still-empty contact email.
+        $this->assertNull($contactWithNoEmail->fresh()->email, 'This fix must not write back to the contact record — out of scope for this bug.');
+        $this->actingAs($this->agent)->post(route('corex.rental-applications.send', $app))
+            ->assertSessionHas('success', fn ($msg) => str_contains($msg, 'Sent to corrected@example.com'));
+
+        Mail::assertSent(RentalApplicationInviteMail::class, function ($mail) {
+            return $mail->hasTo('corrected@example.com');
+        });
+    }
+
+    // ── Regression: validation fails, user corrects, save persists — and
+    // every OTHER field on the form survives too, not just the one being
+    // fixed. Root cause: three <textarea> fields and one <select> read
+    // straight from the DB value on redisplay instead of old(), so ANY
+    // validation failure elsewhere on this one-big-form silently reverted
+    // them (while old()-aware fields correctly kept what was typed). ──────
+
+    public function test_every_field_on_the_form_survives_a_validation_failure_not_just_the_corrected_one(): void
+    {
+        $app = $this->application($this->contact(), [
+            'full_name' => 'Original Name',
+            'current_residential_address' => 'Original Address',
+            'employer_address' => 'Original Employer Address',
+            'special_conditions' => 'Original Conditions',
+            'employment_type' => 'permanently_employed',
+        ]);
+
+        // Fill the whole form with new values, but deliberately break ONE
+        // field (adults must be an integer) to force a validation failure.
+        $response = $this->actingAs($this->agent)->from(route('corex.rental-applications.show', $app))
+            ->put(route('corex.rental-applications.update', $app), [
+                'full_name' => 'New Name',
+                'email' => 'new@example.com',
+                'current_residential_address' => 'New Address',
+                'employer_address' => 'New Employer Address',
+                'special_conditions' => 'New Conditions',
+                'employment_type' => 'business_owner_personal_account',
+                'adults' => 'not-a-number',
+            ]);
+
+        $response->assertRedirect(route('corex.rental-applications.show', $app));
+        $response->assertSessionHasErrors('adults');
+
+        // Nothing was written to the DB — this is an all-or-nothing form save.
+        $app->refresh();
+        $this->assertSame('Original Name', $app->full_name);
+        $this->assertSame('Original Address', $app->current_residential_address);
+
+        // Every field the agent typed — including the three raw <textarea>s
+        // and the <select> that had no old() at all — must still show what
+        // was typed on the redisplayed page, not the stale DB value.
+        $show = $this->actingAs($this->agent)->get(route('corex.rental-applications.show', $app));
+        $show->assertSee('New Name');
+        $show->assertSee('new@example.com');
+        $show->assertSee('New Address');
+        $show->assertSee('New Employer Address');
+        $show->assertSee('New Conditions');
+        $show->assertSee('business_owner_personal_account', false);
+        $show->assertDontSee('Original Address');
+        $show->assertDontSee('Original Employer Address');
+        $show->assertDontSee('Original Conditions');
+
+        // The agent then fixes the one broken field and saves again —
+        // everything, including the previously-reverting fields, must land.
+        $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'full_name' => 'New Name',
+            'email' => 'new@example.com',
+            'current_residential_address' => 'New Address',
+            'employer_address' => 'New Employer Address',
+            'special_conditions' => 'New Conditions',
+            'employment_type' => 'business_owner_personal_account',
+            'adults' => 3,
+        ])->assertSessionDoesntHaveErrors();
+
+        $app->refresh();
+        $this->assertSame('New Name', $app->full_name);
+        $this->assertSame('new@example.com', $app->email);
+        $this->assertSame('New Address', $app->current_residential_address);
+        $this->assertSame('New Employer Address', $app->employer_address);
+        $this->assertSame('New Conditions', $app->special_conditions);
+        $this->assertSame('business_owner_personal_account', $app->employment_type);
+        $this->assertSame(3, $app->adults);
     }
 }

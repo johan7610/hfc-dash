@@ -16,12 +16,14 @@ class RentalApplicationMailer
      */
     public function sendInvite(RentalApplication $application): bool
     {
-        if (! $application->contact->email) {
+        $recipientEmail = $application->recipientEmail();
+
+        if (! $recipientEmail) {
             return false;
         }
 
         try {
-            Mail::to($application->contact->email)->send(new RentalApplicationInviteMail($application));
+            Mail::to($recipientEmail)->send(new RentalApplicationInviteMail($application));
 
             return true;
         } catch (\Throwable $e) {
