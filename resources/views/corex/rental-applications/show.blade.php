@@ -47,6 +47,12 @@
         <div class="rounded-md px-4 py-3 text-sm" style="background: var(--ds-emerald-soft, #ecfdf5); color: var(--ds-emerald, #059669);">{{ session('success') }}</div>
     @endif
 
+    @if($errors->any())
+        <div class="rounded-md px-4 py-3 text-sm" style="background: var(--ds-red-soft, #fef2f2); color: var(--ds-red, #dc2626);">
+            Please check the highlighted field{{ $errors->count() > 1 ? 's' : '' }} below — nothing was saved.
+        </div>
+    @endif
+
     @if($rentalApplication->token)
     <div class="rounded-md p-4 text-xs space-y-1" style="background: var(--surface); border: 1px solid var(--border);">
         <div><strong>Online link:</strong> <a href="{{ route('rental-applications.public.show', $rentalApplication->token) }}" target="_blank" style="color: var(--brand-icon, #2563eb);">{{ route('rental-applications.public.show', $rentalApplication->token) }}</a></div>
@@ -116,7 +122,10 @@
             </div>
             <div class="mt-3">
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Current residential address</label>
-                <textarea name="current_residential_address" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">{{ $rentalApplication->current_residential_address }}</textarea>
+                <textarea name="current_residential_address" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">{{ old('current_residential_address', $rentalApplication->current_residential_address) }}</textarea>
+                @error('current_residential_address')
+                    <p class="text-xs mt-1" style="color: var(--ds-red, #dc2626);">{{ $message }}</p>
+                @enderror
             </div>
         </div>
 
@@ -148,9 +157,12 @@
                     <select name="employment_type" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
                         <option value="">— Select —</option>
                         @foreach(\App\Models\RentalApplication::EMPLOYMENT_TYPES as $type)
-                            <option value="{{ $type }}" @selected($rentalApplication->employment_type === $type)>{{ str_replace('_', ' ', ucfirst($type)) }}</option>
+                            <option value="{{ $type }}" @selected(old('employment_type', $rentalApplication->employment_type) === $type)>{{ str_replace('_', ' ', ucfirst($type)) }}</option>
                         @endforeach
                     </select>
+                    @error('employment_type')
+                        <p class="text-xs mt-1" style="color: var(--ds-red, #dc2626);">{{ $message }}</p>
+                    @enderror
                 </div>
                 <x-rental-application-field name="employer_name" label="Employer" :value="$rentalApplication->employer_name" />
                 <x-rental-application-field name="employer_position" label="Position" :value="$rentalApplication->employer_position" />
@@ -159,7 +171,10 @@
             </div>
             <div class="mt-3">
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Employer address</label>
-                <textarea name="employer_address" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">{{ $rentalApplication->employer_address }}</textarea>
+                <textarea name="employer_address" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">{{ old('employer_address', $rentalApplication->employer_address) }}</textarea>
+                @error('employer_address')
+                    <p class="text-xs mt-1" style="color: var(--ds-red, #dc2626);">{{ $message }}</p>
+                @enderror
             </div>
         </div>
 
@@ -173,7 +188,10 @@
             </div>
             <div class="mt-3">
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Special conditions</label>
-                <textarea name="special_conditions" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">{{ $rentalApplication->special_conditions }}</textarea>
+                <textarea name="special_conditions" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">{{ old('special_conditions', $rentalApplication->special_conditions) }}</textarea>
+                @error('special_conditions')
+                    <p class="text-xs mt-1" style="color: var(--ds-red, #dc2626);">{{ $message }}</p>
+                @enderror
             </div>
         </div>
 

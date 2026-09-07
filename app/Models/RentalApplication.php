@@ -149,6 +149,23 @@ class RentalApplication extends Model
     }
 
     /**
+     * Johan, QA1 bug — "moans no email correctly, but adding and saving do
+     * not persist." Root cause: two separate email values existed on one
+     * screen. This field (`rental_applications.email`) is the ONLY one the
+     * agent can see or edit (show.blade.php's "Email address" field), and
+     * it was saving correctly all along. send()/sendInvite() instead always
+     * read `contact->email` — a different column the agent has no way to
+     * touch from this screen — so an agent who typed a correction here saw
+     * it "not stick" because nothing that could actually send an email ever
+     * consulted this field. Single choke point so send() and the mailer can
+     * never independently drift back out of sync with each other.
+     */
+    public function recipientEmail(): ?string
+    {
+        return $this->email ?: $this->contact?->email;
+    }
+
+    /**
      * Johan, 2026-09-07 — "submitted docs are submitted. they can add, but
      * not replace or remove." This is the single source of truth for "has
      * this application already been submitted" — every submitted-lock check

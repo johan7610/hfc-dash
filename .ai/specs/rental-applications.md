@@ -1003,3 +1003,101 @@ untouched; an ADD of `bankstatement.pdf` (doc 2287) succeeded (HTTP 200,
 The rendered `already-submitted.blade.php` page shows "Submitted —
 locked" against the original document, zero occurrences of "Replace" or
 "Remove", and the explanatory line beneath the list.
+
+---
+
+## Agent-side bug (Johan, QA1) — "adding and saving" the email did not persist
+
+**This section covers the agent-facing edit screen
+(`corex/rental-applications/{id}` — `RentalApplicationController`,
+`show.blade.php`) — normally cc3's lane, fixed here directly on Johan's
+explicit, highest-priority instruction while he was blocked and waiting.**
+
+**Johan's words, verbatim:** "Tried rental application - loaded test
+contact, no email. moans no email correctly, but adding and saving do not
+persist. thats rookie coding issues that I should not have to run into."
+
+**Root cause — NOT a persistence bug. Two different "email" values, one
+visible field.** `rental_applications.email` (the "Email address" field
+on the edit screen, `show.blade.php:113`) always saved correctly — proven
+with real dispatched requests before touching a single line of the fix.
+But `send()` (`RentalApplicationController.php:233`, pre-fix) and
+`RentalApplicationMailer::sendInvite()` (pre-fix) both read
+`$rentalApplication->contact->email` — a completely different column, on
+the linked `Contact` record, which this screen offers no way to edit.
+Sequence: contact has no email → Send correctly reports "no email on
+file" (`contacts.email` genuinely empty) → agent types an email into the
+only field the screen shows and saves → it saves, correctly, to
+`rental_applications.email` → nothing that decides whether/where to mail
+ever reads that column, so sending still (correctly, by its own logic)
+reports "no email." From the agent's side this is indistinguishable from
+"I saved it and it didn't stick."
+
+**Fix:** `RentalApplication::recipientEmail()` — `$this->email ?:
+$this->contact?->email` — single choke point both `send()` and
+`sendInvite()` now call. The application's own, agent-editable field
+takes priority (it's the one this screen exists to let the agent fix);
+falls back to the contact's email if the application's own field was
+never set. Deliberately does NOT write back to `contacts.email` — that's
+a separate, bigger decision (should fixing the email here update the
+contact's own record for every other feature that reads it?) outside
+this bug's scope; flagged, not decided.
+
+**Fix the class, not the instance (Johan's explicit instruction):** while
+tracing this, found the SAME symptom already existed for other fields on
+this exact form — but for the DB-persistence angle, not the "wrong field
+consulted" angle. Three `<textarea>` fields
+(`current_residential_address`, `employer_address`, `special_conditions`)
+and the `employment_type` `<select>` read straight from
+`$rentalApplication->X` on redisplay, never `old('X', ...)` — so ANY
+validation failure elsewhere on this one-big-form silently reverted all
+four to their stale DB value, while the `<x-rental-application-field>`
+component-based inputs (already fixed once, on the public-facing form)
+correctly preserved what was typed. Fixed all four to use `old()`.
+
+Also found and fixed: **this screen had zero validation-error visibility
+at all** — no summary banner, no per-field `@error` messages anywhere. A
+failed save looked visually identical to a successful one; the only
+difference was which fields silently reverted. Added a "Please check the
+highlighted field(s) below — nothing was saved" banner and `@error`
+blocks under all four raw fields, matching the pattern already used by
+`<x-rental-application-field>`.
+
+**Proven end to end, real requests as user 22, live QA1:**
+- Contact with no email (id 8324, application id 5) → Send → flash
+  correctly reads "This contact has no email on file"; `Mail::fake()`
+  equivalent (real Mailpit check) confirms nothing sent.
+- Fill `email` field only, save → `HTTP 302`, DB `email` column
+  persisted, reloaded show page's input carries the value.
+- Send again → flash: "Sent to johan-test-recipient@example.com" —
+  **confirmed via the real Mailpit API**, the captured message's `To`
+  header is exactly that address, not the (still-empty) contact email.
+- Full-form submission with every field filled to a distinct value and
+  ONE field deliberately invalid (`adults = 'abc'`, fails `integer`):
+  redirect back, error banner and per-field message both render, DB
+  confirms nothing at all was written (all-or-nothing), and — the actual
+  regression check — every single field the agent typed, including the
+  four previously-reverting ones, is still shown on redisplay, not the
+  stale DB value. Corrected resubmission then saves everything.
+
+**Regression tests** (`tests/Feature/RentalApplications/RentalApplicationAgentControllerTest.php`):
+`test_editing_the_applications_own_email_field_is_what_send_actually_uses`
+and `test_every_field_on_the_form_survives_a_validation_failure_not_just_the_corrected_one`.
+Both drive the real routes end to end (`Mail::fake()` +
+`Mail::assertSent(...->hasTo(...))` for the email-target assertion) —
+this is exactly the class of rule ("input typed must never be silently
+discarded") that a later refactor could quietly undo with no failing
+assertion to catch it, hence locking it in as a real HTTP-level test
+rather than a unit assertion on the model alone.
+
+**Also found while running this file's OTHER (pre-existing, cc3's)
+tests, and fixed as an environment gap, not a code bug:** this worktree
+has no built frontend bundle (`public/build/manifest.json` was never
+generated here — no `npm run build` was ever run in this specific
+worktree), so every test hitting a `@vite()`-using view 500'd with
+`ViteManifestNotFoundException` — 5 of cc3's own pre-existing tests in
+this file, unrelated to this bug, were failing for that reason alone.
+Added `$this->withoutVite();` to this test class's `setUp()` (the correct
+Laravel testing pattern for exactly this situation, already used in
+`RentalApplicationDocumentLockTest.php`). All 10 tests in this file now
+pass, 73 assertions.
