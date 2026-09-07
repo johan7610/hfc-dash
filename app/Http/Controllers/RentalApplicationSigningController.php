@@ -43,6 +43,10 @@ class RentalApplicationSigningController extends Controller
             return view('rental-applications.public.unavailable', ['reason' => 'expired']);
         }
 
+        if ($application->status === 'draft') {
+            return view('rental-applications.public.unavailable', ['reason' => 'not_sent']);
+        }
+
         if (in_array($application->status, ['returned', 'under_assessment', 'approved', 'declined', 'withdrawn'], true)) {
             return view('rental-applications.public.already-submitted', compact('application'));
         }
@@ -64,9 +68,18 @@ class RentalApplicationSigningController extends Controller
                 ->with('error', 'This link has expired.');
         }
 
+        if ($application->status === 'draft') {
+            return redirect()->route('rental-applications.public.show', $token);
+        }
+
         if (in_array($application->status, ['returned', 'under_assessment', 'approved', 'declined', 'withdrawn'], true)) {
             return redirect()->route('rental-applications.public.show', $token);
         }
+
+        // RA-02 (cc5) — "a real person types 15,000... gets 'must be a
+        // number'." Strip thousand separators/spaces/R-prefix on every
+        // numeric field before validation, same as the agent-side fix.
+        $request->merge(RentalApplication::sanitizeNumericInput($request->only(RentalApplication::NUMERIC_FIELDS)));
 
         // BUILD_STANDARD §2 — every field is optional (nullable passes on
         // empty/absent), but a MALFORMED value must be rejected with a clear
@@ -140,6 +153,14 @@ class RentalApplicationSigningController extends Controller
 
             return redirect()->route('rental-applications.public.show', $token)
                 ->with('error', 'This link has expired.');
+        }
+
+        if ($application->status === 'draft') {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => "This application hasn't been sent to you yet."], 410);
+            }
+
+            return redirect()->route('rental-applications.public.show', $token);
         }
 
         $request->validate([

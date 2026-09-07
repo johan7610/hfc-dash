@@ -158,8 +158,8 @@
                 @include('rental-applications.public._signature-pad', ['field' => 'tpn_consent_signature', 'label' => 'TPN consent'])
             </section>
 
-            <input type="hidden" name="declaration_signature" x-ref="declaration_signature_input">
-            <input type="hidden" name="tpn_consent_signature" x-ref="tpn_consent_signature_input">
+            <input type="hidden" name="declaration_signature" value="{{ old('declaration_signature') }}" x-ref="declaration_signature_input">
+            <input type="hidden" name="tpn_consent_signature" value="{{ old('tpn_consent_signature') }}" x-ref="tpn_consent_signature_input">
         </div>
     </form>
 
