@@ -1359,6 +1359,7 @@ class ESignWizardController extends Controller
                     'passport_number' => $val('passport_number', (string) ($rep->passport_number ?? '')),
                     'email' => $val('email', (string) ($rep->email ?? '')),
                     'cell' => $val('cell', (string) ($rep->phone ?? '')),
+                    'address' => $val('address', (string) ($rep->address ?? '')),
                     'capacity' => $rep->pivot->capacity ?? null,
                     'is_primary' => (bool) ($rep->pivot->is_primary ?? false),
                     'is_proxy' => $overrideProxyRepId !== null ? ($rep->id === $overrideProxyRepId) : (bool) ($rep->pivot->signs_as_proxy ?? false),
@@ -4891,6 +4892,9 @@ class ESignWizardController extends Controller
                 if (trim((string) ($repOverride['cell'] ?? '')) !== '') {
                     $effectiveRep->phone = trim($repOverride['cell']);
                 }
+                if (trim((string) ($repOverride['address'] ?? '')) !== '') {
+                    $effectiveRep->address = trim($repOverride['address']);
+                }
                 $effectivePassport = trim((string) ($repOverride['passport_number'] ?? '')) !== ''
                     ? trim($repOverride['passport_number'])
                     : (string) ($rep->passport_number ?? '');
@@ -4944,7 +4948,7 @@ class ESignWizardController extends Controller
                     'passport_number'       => $effectivePassport,
                     'email'                 => $effectiveRep->email ?? '',
                     'cell'                  => $effectiveRep->phone ?? '',
-                    'address'               => $rep->address ?? '',
+                    'address'               => $effectiveRep->address ?? '',
                     '_contact_id'           => (int) $rep->id,
                     '_entity_contact_id'    => (int) $contact->id,
                     '_entity_name'          => (string) $contact->entity_name,
@@ -6984,6 +6988,18 @@ class ESignWizardController extends Controller
             // document (once this fix landed) would not.
             $req->signer_phone   = (string) ($r['cell'] ?? '');
             $req->signer_address = (string) ($r['address'] ?? '');
+            // 2026-09-07 — an entity representative IS a linked Contact, so
+            // RoleBlockExpansionService::mutateCloneForInstance() would
+            // otherwise always resolve phone/email/address from the real,
+            // un-overridden Contact record and never see a step-3 director
+            // card correction. represented_contact_id is the existing,
+            // real signal (never set for a plain recipient) that lets that
+            // resolver know this row's signer_phone/signer_email/
+            // signer_address are already the effective (override-if-typed)
+            // values and safe to prefer. Must be set here too, not just at
+            // real send time, or the live preview would keep showing the
+            // stale value while the eventually-sent document was correct.
+            $req->represented_contact_id = $r['_entity_contact_id'] ?? null;
             // Johan, 2026-08-26 — RoleBlockExpansionService::expandWithLooping()'s
             // attestation-block split reads is_proxy/is_deceased straight off
             // these transient rows (never the DB — nothing here is persisted)
