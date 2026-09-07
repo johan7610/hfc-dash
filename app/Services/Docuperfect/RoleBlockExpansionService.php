@@ -580,6 +580,20 @@ final class RoleBlockExpansionService
                 $index++;
                 $name = (string) ($recipient->signer_name ?? '');
                 $identity = strtolower($markerParty) . '_' . $index;
+                // AT-332 identity-binding fix (Johan, 2026-09-07): "our check or link
+                // needs to be on id, not name. id will always be a unique identifier,
+                // not name, not surname." Stamp the true unique key — signature_requests.id
+                // — alongside the existing name/identity stamps, so CanonicalInkComposer::
+                // markerBelongsToSigner() can bind ink by it instead of by name (two
+                // same-named parties, e.g. a married couple sharing a surname, otherwise
+                // collide). NULL/omitted for a non-persisted recipient (only
+                // CanonicalDocumentRenderer::expandRepresentedEntitiesForDisplay()'s
+                // replicate()-cloned, unsaved entity-representative rows reach here
+                // unsaved — ->exists is false and ->id is stripped by replicate()); those
+                // markers simply fall through to the pre-existing name/identity matching,
+                // exactly as before this fix — entity-representative display expansion is
+                // untouched.
+                $requestIdAttr = $recipient->exists ? (string) $recipient->id : null;
 
                 $clone = $block->cloneNode(true);
                 if (! $clone instanceof DOMElement) {
@@ -606,10 +620,16 @@ final class RoleBlockExpansionService
                         }
                         $m->setAttribute('data-name', $name);
                         $m->setAttribute('data-recipient-identity', $identity);
+                        if ($requestIdAttr !== null) {
+                            $m->setAttribute('data-recipient-request-id', $requestIdAttr);
+                        }
                     } else {
                         // Ceremony field → this recipient's own.
                         $m->setAttribute('data-name', $name);
                         $m->setAttribute('data-recipient-identity', $identity);
+                        if ($requestIdAttr !== null) {
+                            $m->setAttribute('data-recipient-request-id', $requestIdAttr);
+                        }
                     }
                 }
 
@@ -2058,12 +2078,29 @@ final class RoleBlockExpansionService
             'descendant-or-self::*[@data-marker-party] | descendant-or-self::*[@data-marker-type]',
             $clone,
         );
+        // AT-332 identity-binding fix (Johan, 2026-09-07): "our check or link
+        // needs to be on id, not name. id will always be a unique identifier,
+        // not name, not surname." This is the OTHER (primary/contract-path)
+        // per-recipient marker-stamping site — see the identical stamp +
+        // rationale in expandAttestationBlocksPerRecipient(), which handles the
+        // separate shared-attestation-paragraph-splitting case. Both must carry
+        // the true unique key, since CanonicalInkComposer::markerBelongsToSigner()
+        // reads it regardless of which cloning path produced the marker. NULL
+        // guard: $recipient is nullable here (some legacy/orphan call shapes
+        // pass none), and a non-persisted recipient (CanonicalDocumentRenderer::
+        // expandRepresentedEntitiesForDisplay()'s replicate()-cloned entity rows)
+        // has no id to stamp — falls through to the pre-existing name/identity
+        // matching untouched, exactly as before this fix.
+        $requestIdAttr = ($recipient !== null && $recipient->exists) ? (string) $recipient->id : null;
         if ($markers !== false) {
             foreach ($markers as $m) {
                 if ($m instanceof DOMElement) {
                     $m->setAttribute('data-recipient-identity', $identity);
                     if ($m->getAttribute('data-role-token') === '') {
                         $m->setAttribute('data-role-token', $role);
+                    }
+                    if ($requestIdAttr !== null) {
+                        $m->setAttribute('data-recipient-request-id', $requestIdAttr);
                     }
                 }
             }
@@ -2130,6 +2167,36 @@ final class RoleBlockExpansionService
                 $value = $contact !== null
                     ? $this->resolveContactValue($contact, $parsed['sub_name'], $recipient)
                     : null;
+                // 2026-09-07 (Johan) — "changing tel do not change on doc?
+                // ... email also do not update on document." An entity
+                // representative (director/trustee/member) IS itself a
+                // linked Contact, so the branch above always won and any
+                // per-document correction typed on that representative's
+                // own step-3 card (tel/email/address) was silently
+                // discarded in favour of the Contact's raw, unedited
+                // value — never even reaching resolveContactValue()'s
+                // no-Contact fallback further down, because there always
+                // WAS a Contact. represented_contact_id is set ONLY on an
+                // entity representative's own (transient preview or real)
+                // SignatureRequest row, never on a plain recipient's — see
+                // buildTransientSignatureRequestsForPreview() and
+                // expandEntityRecipients()'s createSigningRequest() call.
+                // Its signer_phone/signer_email/signer_address are already
+                // resolved to the EFFECTIVE value (the typed override when
+                // one exists, else the same real Contact value above) by
+                // expandEntityRecipients(), so preferring them here is safe
+                // unconditionally — id_number is deliberately untouched,
+                // it already reaches the document correctly via the
+                // separate party_clause_text snapshot path.
+                if ($recipient !== null && $recipient->represented_contact_id !== null) {
+                    if (in_array($parsed['sub_name'], ['phone', 'cell', 'cell_phone', 'mobile'], true)) {
+                        $value = $this->blankToNull($recipient->signer_phone);
+                    } elseif ($parsed['sub_name'] === 'email') {
+                        $value = $this->blankToNull($recipient->signer_email);
+                    } elseif (in_array($parsed['sub_name'], ['address', 'address_1', 'address_line_1', 'physical_address'], true)) {
+                        $value = $this->blankToNull($recipient->signer_address);
+                    }
+                }
                 // AT-292 — headline couple's-mandate fix, and now also the
                 // no-Contact-at-all case above. When there is no id_number to
                 // read (Contact has none, or there is no Contact), fall back
@@ -2505,9 +2572,21 @@ final class RoleBlockExpansionService
      * before); this only ever adds an ID to a NATURAL-PERSON party's own
      * name, which was never possible before regardless of representation.
      */
-    public function composeEntityPartyText(Contact $entity, bool $includeRegNo = true, ?int $overrideProxyRepId = null, ?array $orderContactIds = null): string
+    /**
+     * @param  ?array<int, array{name?: string, id_number?: string}>  $representativeOverrides
+     *         Johan, 2026-09-07 — "there is no way to edit director details
+     *         as they do not have cards on the left." Per-document
+     *         corrections to a DIRECT representative's name/ID, keyed by
+     *         contact_id — never written to the Contact record (except
+     *         id_number's existing fill-if-blank backfill in
+     *         ESignWizardController::saveStep()). Same depth-0-only bound as
+     *         $overrideProxyRepId/$orderContactIds immediately below: a
+     *         correction applies to this document's own direct
+     *         representatives only, never to a deeper nested chain.
+     */
+    public function composeEntityPartyText(Contact $entity, bool $includeRegNo = true, ?int $overrideProxyRepId = null, ?array $orderContactIds = null, ?array $representativeOverrides = null): string
     {
-        $reps = $this->resolveDocumentRepresentatives($entity, 0, [], $overrideProxyRepId, $orderContactIds);
+        $reps = $this->resolveDocumentRepresentatives($entity, 0, [], $overrideProxyRepId, $orderContactIds, $representativeOverrides);
 
         $name = (string) ($entity->entity_name ?: $entity->full_name);
         if ($entity->isEntity()) {
@@ -2575,7 +2654,7 @@ final class RoleBlockExpansionService
      *
      * @return array<int, array{0: Contact, 1: ?string, 2: bool, 3: array}> [rep, capacity, isProxy, nestedReps] per rep
      */
-    private function resolveDocumentRepresentatives(Contact $entity, int $depth = 0, array $seenIds = [], ?int $overrideProxyRepId = null, ?array $orderContactIds = null): array
+    private function resolveDocumentRepresentatives(Contact $entity, int $depth = 0, array $seenIds = [], ?int $overrideProxyRepId = null, ?array $orderContactIds = null, ?array $representativeOverrides = null): array
     {
         if ($depth > self::MAX_REPRESENTATIVE_DEPTH) {
             throw UnresolvableRepresentativeChainException::tooDeep($entity, self::MAX_REPRESENTATIVE_DEPTH);
@@ -2593,7 +2672,7 @@ final class RoleBlockExpansionService
         // describes the same one-off choices as the signer, never a deeper
         // level of the chain.
         $reps = $depth === 0
-            ? $this->resolveDirectRepresentatives($entity, $overrideProxyRepId, $orderContactIds)
+            ? $this->resolveDirectRepresentatives($entity, $overrideProxyRepId, $orderContactIds, $representativeOverrides)
             : $this->resolveDirectRepresentatives($entity);
 
         if (empty($reps)) {
@@ -2659,7 +2738,7 @@ final class RoleBlockExpansionService
      *
      * @return array<int, array{0: Contact, 1: ?string, 2: bool}> [rep, capacity, isProxy] per rep
      */
-    private function resolveDirectRepresentatives(Contact $party, ?int $overrideProxyRepId = null, ?array $orderContactIds = null): array
+    private function resolveDirectRepresentatives(Contact $party, ?int $overrideProxyRepId = null, ?array $orderContactIds = null, ?array $representativeOverrides = null): array
     {
         $reps = $party->representatives()->get();
 
@@ -2669,6 +2748,36 @@ final class RoleBlockExpansionService
         // the pivot. Contact::applyRepresentativeOrder() is the ONE
         // ordering implementation — reused here, not re-sorted locally.
         $reps = Contact::applyRepresentativeOrder($reps, $orderContactIds);
+
+        // 2026-09-07 — apply this document's own director corrections
+        // BEFORE the proxy-override membership check below: overlaying an
+        // in-memory clone (never ->save()d) with the overridden name/ID so
+        // the printed clause ("...herein represented by X (ID: Y)") reflects
+        // what the agent corrected on step 3, not the stale Contact record.
+        // `id` (used by the membership check and by every OTHER caller that
+        // keys off $rep->id — e.g. expandEntityRecipients()) is never
+        // touched; only display/identity fields are overlaid. Contact's own
+        // getFullNameAttribute() reads first_name/last_name directly, so a
+        // single "full name" override (matching the wizard's own one-field
+        // UI, same as any natural-person recipient's Full Name input) is
+        // applied as first_name with last_name cleared.
+        if (! empty($representativeOverrides)) {
+            $reps = $reps->map(function (Contact $r) use ($representativeOverrides) {
+                $o = $representativeOverrides[$r->id] ?? null;
+                if (empty($o)) {
+                    return $r;
+                }
+                $clone = clone $r;
+                if (! empty(trim((string) ($o['name'] ?? '')))) {
+                    $clone->first_name = trim($o['name']);
+                    $clone->last_name = '';
+                }
+                if (! empty(trim((string) ($o['id_number'] ?? '')))) {
+                    $clone->id_number = trim($o['id_number']);
+                }
+                return $clone;
+            });
+        }
 
         // Johan, 2026-08-26 — the per-document proxy override, never written
         // to signs_as_proxy on the pivot. Everyone stays named either way

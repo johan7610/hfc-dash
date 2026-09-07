@@ -2116,6 +2116,8 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/', [\App\Http\Controllers\MyPortal\CommunicationCaptureController::class, 'store'])->name('store');
         Route::put('/{mailbox}', [\App\Http\Controllers\MyPortal\CommunicationCaptureController::class, 'update'])->name('update');
         Route::delete('/{mailbox}', [\App\Http\Controllers\MyPortal\CommunicationCaptureController::class, 'destroy'])->name('destroy');
+        // AT-395 (2026-09-07) — Test Connection, same as the other two mailbox surfaces.
+        Route::post('/{mailbox}/test-connection', [\App\Http\Controllers\MyPortal\CommunicationCaptureController::class, 'testConnection'])->name('test-connection');
     });
     Route::post('/my-portal/upload', [\App\Http\Controllers\Agent\AgentPortalController::class, 'uploadDocument'])
         ->middleware('permission:upload_own_documents')->name('agent.portal.upload');
@@ -4542,6 +4544,8 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::post('/documents/{document}/send-reminder/{signatureRequest}', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'sendReminder'])->name('docuperfect.signatures.sendReminder');
     // AT-294 — resend a recipient's e-sign email (invitation or completed document)
     Route::post('/documents/{document}/resend-email/{signatureRequest}', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'resendEmail'])->name('docuperfect.signatures.resendEmail');
+    // AT-385/AT-332 — logs that the agent OPENED the WhatsApp deep link (never "sent" — see the controller method's own docblock)
+    Route::post('/documents/{document}/whatsapp-opened/{signatureRequest}', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'whatsappOpened'])->name('docuperfect.signatures.whatsappOpened');
 
     // Audit & download
     Route::get('/documents/{document}/signatures/audit', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'audit'])->name('docuperfect.signatures.audit');

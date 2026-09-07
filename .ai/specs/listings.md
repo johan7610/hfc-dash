@@ -60,6 +60,120 @@ Covered by `tests/Feature/Properties/SecondaryAgentVisibilityTest.php`.
 
 ---
 
+## Deeds-capture suburb resolution never guesses across provinces — Live (2026-09-07, QA1)
+
+Investigation of properties #21014 and #15774 (Johan, live-testing and QA1) found
+that promoting a deeds capture to a property could file it in the wrong PROVINCE
+even though the deeds capture screen was showing the correct one on screen. "Melville"
+exists as both a Johannesburg, Gauteng suburb and a Port Shepstone, KwaZulu-Natal one
+in `p24_suburbs`; the resolver matched on suburb NAME alone and took whichever row
+had the lower id (Johannesburg) — ignoring the province and coordinates the deeds
+capture had already captured correctly.
+
+**Root cause & fix — `app/Models/P24Suburb.php::lookup()`:** now takes the caller's
+known province name and coordinates as optional arguments and disambiguates in
+order, never guessing: (1) a single name match needs no disambiguation; (2) multiple
+matches are narrowed by province when one is given; (3) if still ambiguous,
+coordinates break the tie **only** when the nearest candidate is plausibly the same
+physical suburb (≤25km) — a `p24_suburbs` centroid can itself be wrong (historically
+geocoded from mis-attributed listings via this same method), so coordinates are a
+last-resort tie-breaker, never a primary signal; (4) still unresolved → `null`.
+
+**Call site — `DeedsCaptureController::promote()` (line ~809):** now passes the
+tracked property's own `province`/`latitude`/`longitude` — all already captured
+correctly from the source — into `lookup()`. Also now sets `p24_province_id` on the
+created property from the resolved chain (previously left null at creation, only
+ever backfilled by a later manual edit).
+
+**Silent wrong-filing, never.** When `lookup()` returns `null` (genuinely
+unresolved), the existing `p24_suburb_mismatch` flag is set exactly as it already
+was for a "no match at all" case — the property is created with province/suburb
+text kept but no P24 link, not filed under a guess. This is the existing "flag, don't
+guess" mechanism already built for the no-match case; it now also covers the
+ambiguous-match case.
+
+**Related, separate fix (different branch, not yet merged into QA1):** the EDIT-time
+desync between `properties.town` and `city`/`suburb`/`province` — where correcting a
+property's location after creation left `town` stale — is fixed on
+`fix/property-town-sync-qa1` (`AppliesP24Location::applyP24Location()` +
+`_market-snapshot.blade.php` city-first precedence). This fix (deeds-capture
+creation-time province resolution) is independent and does not depend on it, but
+both address the same underlying investigation (properties #21014/#15774).
+
+**Other callers of `P24Suburb::lookup()`, found but NOT touched (backward
+compatible — new params are optional, unused calls behave exactly as before; out of
+scope for this defect, reported per CLAUDE.md #2):**
+- `app/Services/Presentations/Analytics/AbsorptionInflowService.php:190`
+- `app/Services/Presentations/Analytics/PropConInsightsService.php:251`
+
+**Acceptance:** covered by
+`tests/Feature/Prospecting/DeedsCapturePromoteSuburbProvinceTest.php` — a KZN
+Melville deeds capture promotes to Port Shepstone/KwaZulu-Natal; a genuine
+Johannesburg Melville deeds capture still promotes to Johannesburg/Gauteng
+(confirms the fix does not simply flip everything to KZN).
+
+**Files:** `app/Models/P24Suburb.php`, `app/Http/Controllers/CoreX/DeedsCaptureController.php`.
+
+---
+
+## Location field consistency (suburb/city/town/province) — Live (2026-09-07, QA1)
+
+Investigation of property #21014 (Johan, live-testing) found that `properties.town`
+could silently disagree with `suburb`/`city`/`province` after a location edit — the
+Property24 location picker corrected suburb/city/province and all three P24 ids, but
+`town` was never part of that write and kept whatever value it held from promotion
+time. The property Intelligence tab's market snapshot preferred `town` over `city`,
+so a fully-corrected property could still display its old, wrong area.
+
+**Storage:** `properties.city` is the field kept in sync on every save that resolves
+a P24 suburb (`AppliesP24Location::applyP24Location()`), used by the full property
+edit form, the quick-setup wizard, and the mobile API alike. `properties.town` means
+the same thing — "the real town an agent/buyer recognises" for a P24-linked property
+(see `DeedsCaptureController::promote()`'s own town-resolution comment) — and is now
+written from the **same** resolved P24 city row as `city`, every time, so the two can
+never drift again.
+
+**Precedence when they still disagree** (legacy rows saved before this fix, or a
+property whose suburb was never linked to a P24 record): **`city` wins, `town` is the
+fallback only when city is blank** — `$property->city ?: $property->town`. `city` is
+the field this trait actively maintains; `town` is best-effort. This matches
+`Property::slug()`'s own existing `$this->city ?? $this->town` precedence, so the
+Intelligence tab is now consistent with that, not introducing a third convention.
+
+**Other screens that read `town`/`city` together, found during this investigation but
+NOT touched (outside this defect's direct path — reported per CLAUDE.md non-negotiable
+#2, "report don't fix outside scope"):**
+- `app/Models/Property.php:1974` — `slug()`, already city-first (`$this->city ?? $this->town`)
+- `app/Services/WebTemplateDataService.php:113,882,887,889,1477` — public web template data (suburb/town/district fallback chains), town-first
+- `app/Services/Compliance/MarketingReadinessService.php:536` — town-first
+- `app/Services/Map/MapPinService.php:411` — town-first
+- `app/Services/Contact/ContactAddressPropertyGuard.php:247,256` — city-first
+- `app/Services/PrivateProperty/PrivatePropertyListingMapper.php:72` — town-first
+- `app/Http/Controllers/Presentation/PresentationGeneratorController.php:83` — city-first
+- `resources/views/corex/properties/partials/syndication-panel.blade.php:555` — town-first
+
+These will stop mattering for any property edited going forward (town and city are
+now always equal after a P24 suburb pick), but for existing/legacy rows they read
+whichever precedence they already had before this fix — unchanged.
+
+**Repair for existing data:** `php artisan properties:repair-town` — dry-run by
+default, `--apply` to persist. Only touches properties with a resolved
+`p24_city_id` whose `town` disagrees with that city's name (a `town` that was never
+populated is left alone — that's a different, much larger, unrequested change; see
+command docblock). Idempotent.
+
+**Acceptance:** covered by
+`tests/Feature/Properties/PropertyTownFollowsLocationEditTest.php` —
+correcting a property's location via the edit screen updates `town` along with
+`suburb`/`city`/`province`/the three P24 ids; the Intelligence tab shows the
+corrected area even on a property still carrying a stale `town` from before this fix.
+
+**Files:** `app/Http/Concerns/AppliesP24Location.php`,
+`resources/views/corex/properties/intelligence/_market-snapshot.blade.php`,
+`app/Console/Commands/RepairPropertyTownFromP24City.php`.
+
+---
+
 ## Pending Spec Items
 
 The following require full spec before build:
