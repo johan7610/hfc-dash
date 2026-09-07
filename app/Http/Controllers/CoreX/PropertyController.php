@@ -148,19 +148,18 @@ class PropertyController extends Controller
                 if ($branchId) $query->where('branch_id', $branchId);
             }
             // dataScope 'all' ⇒ no restriction
+        } elseif ($search !== '') {
+            // AT-394 — a typed search must find a match anywhere in the agency, not just the
+            // searching agent's own book, so an agent never re-lists a property a colleague
+            // already holds. Deliberately scoped to the search action only — every other view
+            // of this page (no search term) keeps today's own/branch breadth exactly as before.
+            // Still bounded by AgencyScope (untouched), so this can never cross an agency
+            // boundary. Rows outside the agent's own/branch breadth render read-only below.
         } else {
             // Agent: 'my' = own listings only; 'branch' = all branch listings. For an ASSISTANT
             // "own" is the assigned agent's book (dataIdentityIds() = [agentId, selfId]), never the
             // assistant's own empty id — so their list loads the agent's listings.
-            if ($viewScope === 'branch' && $user->branch_id) {
-                $query->where('branch_id', $user->branch_id);
-            } else {
-                $ids = $user->dataIdentityIds();
-                $query->where(function ($q) use ($ids) {
-                    $q->whereIn('agent_id', $ids)
-                      ->orWhereIn('pp_second_agent_id', $ids);
-                });
-            }
+            $this->applyOwnPropertyScope($query, $user, $viewScope);
         }
 
         // Remember the active filter set for this session (only on an explicit
@@ -314,6 +313,22 @@ class PropertyController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 200) : 20;
         $properties = $query->paginate($perPage)->withQueryString();
 
+        // AT-394 — of THIS page's widened-search results, which fall outside the user's normal
+        // own/branch breadth? Re-run the SAME restriction (applyOwnPropertyScope) against just
+        // these ids rather than duplicating its logic — whatever survives is exactly what the
+        // user could already see without the widened search. The rest render read-only below:
+        // no link into show() (still gated by authorizeProperty() and would 403).
+        $restrictedPropertyIds = [];
+        if ($search !== '' && !$canPickAgent) {
+            $pageIds = $properties->getCollection()->pluck('id')->all();
+            if (!empty($pageIds)) {
+                $checkQuery = Property::query()->whereIn('id', $pageIds);
+                $this->applyOwnPropertyScope($checkQuery, $user, $viewScope);
+                $inScopeIds = $checkQuery->pluck('id')->all();
+                $restrictedPropertyIds = array_values(array_diff($pageIds, $inScopeIds));
+            }
+        }
+
         // Website views for THIS page only — one grouped query for the whole page,
         // never one per row. Display is page-scoped even when the sort above ran
         // across the full set. (AT-383)
@@ -326,6 +341,7 @@ class PropertyController extends Controller
         $authId = (int) ($user->id ?? 0);
         foreach ($properties as $p) {
             $p->website_views_30d = (int) ($pageWebsiteViews[$p->id] ?? 0);
+            $p->owned_by_other = in_array($p->id, $restrictedPropertyIds, true);
 
             // Is the current viewer the SECONDARY (co-listing) agent on this
             // listing rather than the primary? Drives the "Secondary" badge so a
@@ -408,6 +424,25 @@ class PropertyController extends Controller
             'filterOptions', 'filters', 'currentSort', 'currentDir', 'agencySortMode',
             'myDrafts', 'hasWebsiteStats'
         ));
+    }
+
+    /**
+     * The plain-agent (non-canPickAgent) "my listings" / "my branch" restriction, factored out
+     * so AT-394's search widening can reuse the exact same rule (rather than re-implementing it)
+     * to work out, after the fact, which widened rows the user could ALSO see under the normal
+     * un-widened breadth.
+     */
+    private function applyOwnPropertyScope($query, User $user, string $viewScope): void
+    {
+        if ($viewScope === 'branch' && $user->branch_id) {
+            $query->where('branch_id', $user->branch_id);
+        } else {
+            $ids = $user->dataIdentityIds();
+            $query->where(function ($q) use ($ids) {
+                $q->whereIn('agent_id', $ids)
+                  ->orWhereIn('pp_second_agent_id', $ids);
+            });
+        }
     }
 
     /**

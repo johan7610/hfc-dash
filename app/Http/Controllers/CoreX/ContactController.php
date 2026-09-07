@@ -44,7 +44,15 @@ class ContactController extends Controller
             $filterAgentId = '';
         }
 
-        $query = Contact::with(['type', 'createdBy'])->orderBy('last_name')->orderBy('first_name');
+        // AT-394 — a typed search must find a match anywhere in the agency, not just the
+        // searching agent's own book. Without this, an agent typing an existing colleague's
+        // contact into the search box sees no result and re-creates a duplicate, because the
+        // "my contacts" narrowing below silently swallows it. Deliberately scoped to the search
+        // action only — every other view of this page (no search term) keeps today's own/branch/
+        // all breadth exactly as before.
+        $isSearching = $request->filled('search');
+
+        $query = Contact::with(['type', 'createdBy', 'agent'])->orderBy('last_name')->orderBy('first_name');
 
         // AT-91 — an EXPLICIT agent pick keys off contacts.agent_id (the
         // operational responsible agent), NOT created_by_user_id (immutable
@@ -63,6 +71,13 @@ class ContactController extends Controller
                 $query->whereHas('createdBy', fn($q) => $q->where('branch_id', $user->branch_id));
             }
             // 'all' scope with no filter = show all contacts
+        } elseif ($isSearching) {
+            // AT-394 — widen to the whole agency for the duration of this search. Bypasses ONLY
+            // the role-based ContactScope (agency isolation via AgencyScope is untouched — this
+            // can never cross an agency boundary). Rows outside the user's normal own/branch
+            // breadth are flagged read-only below and rendered without edit/delete affordances,
+            // mirroring the existing cross-agent duplicate-warning pattern (ContactDuplicateService).
+            $query->withoutGlobalScope(\App\Models\Scopes\ContactScope::class);
         } else {
             // 'own' scope: agents see only their own (ContactScope also enforces this). For an
             // assistant this is the assigned agent's book — dataIdentityIds() = [agentId, selfId] —
@@ -133,6 +148,21 @@ class ContactController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 200) : 25;
         // Eager-load picker relations so the inline edit-row pickers don't N+1.
         $contacts     = $query->with(['tags', 'parentTypes'])->paginate($perPage)->withQueryString();
+
+        // AT-394 — of THIS page's widened-search results, which ones fall outside the user's
+        // normal own/branch breadth? Re-run the untouched ContactScope (no bypass here) against
+        // just these ids rather than re-implementing its own/branch/bm rules — whatever survives
+        // is exactly what the user could already see without the widened search. The rest render
+        // read-only, tagged with their agent, and never link into show()/destroy() (which still
+        // enforce ContactScope and would 403).
+        $restrictedContactIds = [];
+        if ($isSearching && !$canPickAgent) {
+            $pageIds = $contacts->pluck('id')->all();
+            if (!empty($pageIds)) {
+                $inScopeIds = Contact::whereIn('id', $pageIds)->pluck('id')->all();
+                $restrictedContactIds = array_values(array_diff($pageIds, $inScopeIds));
+            }
+        }
         // The four fixed parents, each with its agency-scoped sub-tags — feeds
         // the type/tag pop-up picker on the contact forms (AT-79).
         $contactTypes = ContactType::parents()->with('subTags')->get()->unique('name')->values();
@@ -146,7 +176,8 @@ class ContactController extends Controller
             : null;
 
         return view('corex.contacts.index', compact(
-            'contacts', 'contactTypes', 'contactIdentifierLabels', 'filterAgentId', 'agentList', 'selectedAgent', 'canPickAgent'
+            'contacts', 'contactTypes', 'contactIdentifierLabels', 'filterAgentId', 'agentList', 'selectedAgent', 'canPickAgent',
+            'restrictedContactIds'
         ));
     }
 

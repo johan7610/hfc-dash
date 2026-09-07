@@ -633,6 +633,14 @@
         </div>
 
         @forelse($contacts as $contact)
+        @php
+            // AT-394 — this row surfaced only because search was widened past the
+            // user's normal own/branch breadth. It renders read-only: no link into
+            // show()/destroy() (both still enforce ContactScope and would 403), and
+            // an "Agent" badge naming who actually holds it, so the searching agent
+            // knows to go to that colleague instead of creating a duplicate.
+            $isRestricted = in_array($contact->id, $restrictedContactIds ?? [], true);
+        @endphp
         <div class="px-5 py-4 transition-all duration-300" style="border-bottom:1px solid var(--border);"
              onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
 
@@ -646,11 +654,21 @@
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
+                            @if($isRestricted)
+                            <span class="text-sm font-semibold" style="color:var(--text-primary);">{{ $contact->full_name }}</span>
+                            @else
                             <a href="{{ route('corex.contacts.show', $contact) }}"
                                class="text-sm font-semibold no-underline transition-all duration-300"
                                style="color:var(--text-primary);"
                                onmouseover="this.style.color='var(--brand-icon,#0ea5e9)'" onmouseout="this.style.color='var(--text-primary)'">{{ $contact->full_name }}</a>
-                            @if($contact->type)
+                            @endif
+                            @if($isRestricted)
+                            <span class="text-xs px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
+                                  style="background:color-mix(in srgb, var(--ds-amber) 12%, transparent); color:var(--ds-amber); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);"
+                                  title="Found elsewhere in the agency — not in your own contacts">
+                                Agent: {{ $contact->agent->name ?? $contact->createdBy->name ?? 'Unassigned' }}
+                            </span>
+                            @elseif($contact->type)
                             <span class="text-xs px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
                                   style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 12%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 25%, transparent);">
                                 {{ $contact->type->name }}
@@ -675,6 +693,12 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-1 flex-shrink-0">
+                    @if($isRestricted)
+                    <span class="text-[10px] italic text-right" style="color:var(--text-muted); max-width:9rem;"
+                          title="Ask {{ $contact->agent->name ?? $contact->createdBy->name ?? 'that agent' }} to link or share this contact with you">
+                        Not in your contacts
+                    </span>
+                    @else
                     <a href="{{ route('corex.contacts.show', $contact) }}"
                        class="corex-btn-outline text-[10px] px-2 py-1">View</a>
                     @if(auth()->user()->hasPermission('contacts.delete'))
@@ -685,12 +709,16 @@
                                 style="color:var(--ds-crimson,#c41e3a); border-color:color-mix(in srgb, var(--ds-crimson,#c41e3a) 30%, transparent);">Delete</button>
                     </form>
                     @endif
+                    @endif
                 </div>
             </div>
 
             {{-- Edit row (inline) — x-if (not x-show): a hidden row's identifier inputs must
                  NOT be in the DOM, or the New-Contact duplicate pre-check could scrape them.
-                 Rendered only when this row is actually being edited. --}}
+                 Rendered only when this row is actually being edited. AT-394: never for a
+                 restricted (different-agent) row — the update route still enforces ContactScope
+                 and would 403. --}}
+            @if(!$isRestricted)
             <template x-if="editId === {{ $contact->id }}">
             <div class="rounded-md p-4 mt-1"
                  style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 5%, transparent); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);">
@@ -740,6 +768,7 @@
                 </form>
             </div>
             </template>
+            @endif
 
         </div>
         @empty
