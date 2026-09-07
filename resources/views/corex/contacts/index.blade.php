@@ -693,7 +693,13 @@
                                 {{ $contact->email }}
                             </span>
                             @endif
-                            @if($contact->notes)
+                            @if($contact->notes && !$isRestricted)
+                            {{-- AT-394 audit — notes are private free text an agent wrote about
+                                 THEIR OWN contact; unlike phone/email (shown deliberately so the
+                                 searching agent can recognise "is this the same person", matching
+                                 the existing cross-agent duplicate-warning pattern), notes carry
+                                 no recognition value and can hold anything — never shown for a
+                                 record outside the viewer's normal scope. --}}
                             <span class="text-xs truncate max-w-xs" style="color:var(--text-muted);">{{ $contact->notes }}</span>
                             @endif
                         </div>
