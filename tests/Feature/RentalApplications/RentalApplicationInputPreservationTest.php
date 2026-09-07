@@ -189,4 +189,56 @@ final class RentalApplicationInputPreservationTest extends TestCase
         $show->assertOk();
         $show->assertSee('Checked the payslips, all good.');
     }
+
+    // ── RA-02 (cc5, independent testing): "a real person types 15,000
+    // because that is how South Africans write money, and gets 'must be a
+    // number'." Fixed the class — every numeric field, both forms. ───────
+
+    public function test_agent_side_numeric_fields_accept_comma_formatted_south_african_money(): void
+    {
+        $app = $this->application();
+
+        $response = $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'monthly_salary' => '15,000',
+            'current_rental_amount' => 'R 8,500.50',
+            'adults' => '2',
+            'children' => '1',
+        ]);
+
+        $response->assertSessionDoesntHaveErrors();
+        $app->refresh();
+        $this->assertSame('15000.00', $app->monthly_salary);
+        $this->assertSame('8500.50', $app->current_rental_amount);
+    }
+
+    public function test_public_side_numeric_fields_accept_comma_formatted_south_african_money(): void
+    {
+        $app = $this->application(['status' => 'sent']);
+        $sig = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+        $response = $this->post(route('rental-applications.public.submit', $app->token), [
+            'monthly_salary' => '25 000',
+            'current_rental_amount' => '7,500',
+            'declaration_signature' => $sig,
+            'tpn_consent_signature' => $sig,
+        ]);
+
+        $response->assertSessionDoesntHaveErrors();
+        $app->refresh();
+        $this->assertSame('returned', $app->status);
+        $this->assertSame('25000.00', $app->monthly_salary);
+        $this->assertSame('7500.00', $app->current_rental_amount);
+    }
+
+    public function test_a_genuinely_invalid_numeric_value_is_still_rejected_after_sanitizing(): void
+    {
+        $app = $this->application();
+
+        $response = $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'monthly_salary' => 'not money at all',
+        ]);
+
+        $response->assertSessionHasErrors('monthly_salary');
+        $this->assertNull($app->fresh()->monthly_salary);
+    }
 }

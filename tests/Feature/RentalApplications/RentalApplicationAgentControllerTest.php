@@ -56,6 +56,16 @@ final class RentalApplicationAgentControllerTest extends TestCase
         $this->agent = User::factory()->create(['agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'role' => 'admin']);
     }
 
+    protected function tearDown(): void
+    {
+        // Guards the RA-05 timing test above: if a Carbon::setTestNow()
+        // call there is ever followed by a failed assertion, the reset at
+        // the end of that test never runs — this backstop stops fake time
+        // leaking into whichever test runs next in the same process.
+        \Illuminate\Support\Carbon::setTestNow();
+        parent::tearDown();
+    }
+
     private function rentalProperty(string $title = 'House to let in Ramsgate'): Property
     {
         return Property::create([
@@ -828,5 +838,136 @@ final class RentalApplicationAgentControllerTest extends TestCase
         $doc->delete();
         $this->assertSoftDeleted('documents', ['id' => $doc->id]);
         $this->assertDatabaseHas('documents', ['id' => $doc->id]);
+    }
+
+    // ── RA-03 (cc5, independent testing): "A document the applicant adds
+    // AFTER submission renders identically to one submitted originally —
+    // no badge, no timestamp." Agreed with cc3: created_at >= submitted_at. ─
+
+    public function test_the_detail_page_badges_a_document_added_after_submission(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'returned', 'submitted_at' => now()->subDay()]);
+
+        // created_at is deliberately not mass-assignable on Document (no
+        // legitimate request path ever needs to fake it) — set it via
+        // direct property assignment after create(), which bypasses the
+        // $fillable guard the way mass assignment never can.
+        $original = Document::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'original_name' => 'original-at-submit.pdf', 'storage_path' => 'x', 'disk' => 'local',
+            'mime_type' => 'application/pdf', 'size' => 10,
+            'source_type' => 'rental_application', 'source_id' => $app->id,
+        ]);
+        $original->created_at = $app->submitted_at->copy()->subMinute();
+        $original->save();
+
+        $late = Document::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'original_name' => 'added-later.pdf', 'storage_path' => 'x', 'disk' => 'local',
+            'mime_type' => 'application/pdf', 'size' => 10,
+            'source_type' => 'rental_application', 'source_id' => $app->id,
+        ]);
+        $late->created_at = $app->submitted_at->copy()->addHour();
+        $late->save();
+
+        $show = $this->actingAs($this->agent)->get(route('corex.rental-applications.show', $app));
+        $show->assertOk();
+        $show->assertSee('Added after submission');
+
+        // The original-at-submission document must NOT carry the server-
+        // rendered badge — isolate the actual document-list markup (not
+        // just "before the first <script> tag", which cuts off way too
+        // early since the layout has its own <script> tags before this
+        // section) and count only within it.
+        preg_match('/<ul id="supportingDocumentsList".*?<\/ul>/s', $show->getContent(), $matches);
+        $this->assertNotEmpty($matches, 'The document list markup must be present to check.');
+        $this->assertSame(1, substr_count($matches[0], 'Added after submission'));
+    }
+
+    public function test_a_document_added_before_submission_is_never_badged(): void
+    {
+        $app = $this->application($this->contact(), ['status' => 'in_progress']);
+        Document::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'original_name' => 'pre-submit.pdf', 'storage_path' => 'x', 'disk' => 'local',
+            'mime_type' => 'application/pdf', 'size' => 10,
+            'source_type' => 'rental_application', 'source_id' => $app->id,
+        ]);
+
+        $show = $this->actingAs($this->agent)->get(route('corex.rental-applications.show', $app));
+        $show->assertOk();
+        $show->assertDontSee('Added after submission');
+    }
+
+    // ── RA-05 (cc5, independent testing): "Tab 1 saves a field. Tab 2,
+    // opened earlier and unaware, then saves a different field and
+    // SILENTLY BLANKS Tab 1's genuine save." ──────────────────────────────
+
+    public function test_two_tabs_second_stale_save_is_blocked_not_silently_overwritten(): void
+    {
+        // updated_at is second-precision (a plain timestamps() column) —
+        // a real two-tab race always has human reaction time between the
+        // two saves, but a fast test can genuinely execute both PUTs
+        // within the same wall-clock second, which would falsely pass.
+        // Carbon::setTestNow() controls time explicitly so this proves
+        // the real mechanism, not an accident of test execution speed.
+        \Illuminate\Support\Carbon::setTestNow(now());
+        $app = $this->application($this->contact(), ['full_name' => 'Original Name']);
+
+        // Both tabs load the page at the same moment — both capture the
+        // SAME expected_updated_at.
+        $openedAt = $app->updated_at->timestamp;
+
+        // Tab 1 saves first, genuinely, several seconds later.
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds(5));
+        $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'expected_updated_at' => $openedAt,
+            'full_name' => 'Saved By Tab One',
+        ])->assertSessionDoesntHaveErrors();
+        $this->assertSame('Saved By Tab One', $app->fresh()->full_name);
+
+        // Tab 2, unaware, saves later still, using its STALE
+        // expected_updated_at (captured before Tab 1's save) — must be
+        // refused, not applied.
+        \Illuminate\Support\Carbon::setTestNow(now()->addSeconds(10));
+        $response = $this->actingAs($this->agent)->from(route('corex.rental-applications.show', $app))
+            ->put(route('corex.rental-applications.update', $app), [
+                'expected_updated_at' => $openedAt,
+                'full_name' => 'Overwritten By Tab Two',
+            ]);
+
+        $response->assertRedirect(route('corex.rental-applications.show', $app));
+        $response->assertSessionHas('error');
+        $this->assertSame('Saved By Tab One', $app->fresh()->full_name, "Tab 1's genuine save must survive Tab 2's stale write.");
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_a_save_with_no_conflict_still_works_normally(): void
+    {
+        $app = $this->application($this->contact());
+        $openedAt = $app->updated_at->timestamp;
+
+        $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'expected_updated_at' => $openedAt,
+            'full_name' => 'No Conflict Here',
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertSame('No Conflict Here', $app->fresh()->full_name);
+    }
+
+    public function test_the_blocked_tabs_typed_input_is_preserved_for_retry(): void
+    {
+        $app = $this->application($this->contact());
+        $staleTimestamp = $app->updated_at->timestamp - 100; // simulate a genuinely older load
+
+        $response = $this->actingAs($this->agent)->from(route('corex.rental-applications.show', $app))
+            ->put(route('corex.rental-applications.update', $app), [
+                'expected_updated_at' => $staleTimestamp,
+                'full_name' => 'What I Actually Typed',
+            ]);
+
+        $response->assertSessionHas('error');
+        $show = $this->actingAs($this->agent)->get(route('corex.rental-applications.show', $app));
+        $show->assertSee('What I Actually Typed', false);
     }
 }

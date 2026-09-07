@@ -160,6 +160,10 @@
                 @foreach($rentalApplication->documents as $doc)
                     <li>✓ <a href="{{ route('corex.rental-applications.documents.download', [$rentalApplication, $doc]) }}" style="color: var(--brand-icon, #2563eb);">{{ $doc->original_name }}</a> @if($doc->documentType) ({{ $doc->documentType->label }}) @endif
                         <span style="color: var(--text-muted);">— {{ $doc->uploaded_by ? 'added by ' . ($doc->uploader->name ?? 'an agent') : 'from applicant' }}</span>
+                        @if($rentalApplication->submitted_at && $doc->created_at->greaterThanOrEqualTo($rentalApplication->submitted_at))
+                            <span class="ds-badge ds-badge-warning" title="This document was added after the application was submitted">Added after submission</span>
+                            <span style="color: var(--text-muted);">{{ $doc->created_at->format('d M Y H:i') }}</span>
+                        @endif
                     </li>
                 @endforeach
             </ul>
@@ -207,6 +211,14 @@
           class="rounded-md p-6 space-y-6" style="background: var(--surface); border: 1px solid var(--border);">
         @csrf
         @method('PUT')
+        {{--
+            RA-05 (cc5) — "Tab 2, opened earlier and unaware, saves a
+            different field and silently blanks Tab 1's genuine save."
+            Seeded from old() first so a validation-failure redisplay in
+            THIS same tab doesn't falsely trip the staleness check (the
+            record genuinely hasn't changed if the save itself failed).
+        --}}
+        <input type="hidden" name="expected_updated_at" value="{{ old('expected_updated_at', $rentalApplication->updated_at?->timestamp) }}">
 
         <div>
             <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Property</h2>
@@ -360,6 +372,19 @@ function agentDocumentUpload() {
             span.style.color = 'var(--text-muted)';
             span.textContent = ' — added by ' + @js(auth()->user()->name ?? 'an agent');
             li.append('✓ ', a, span);
+            // RA-03 (cc5) — anything added right now, through this widget,
+            // on an already-submitted application is by definition "after
+            // submission" (submitted_at is necessarily in the past).
+            @if($rentalApplication->submitted_at)
+                const badge = document.createElement('span');
+                badge.className = 'ds-badge ds-badge-warning';
+                badge.title = 'This document was added after the application was submitted';
+                badge.textContent = 'Added after submission';
+                const when = document.createElement('span');
+                when.style.color = 'var(--text-muted)';
+                when.textContent = new Date().toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                li.append(' ', badge, ' ', when);
+            @endif
             list.appendChild(li);
         },
     };

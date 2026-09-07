@@ -196,4 +196,65 @@ final class RentalApplicationAsyncUploadTest extends TestCase
         $show->assertSee('id-copy.pdf');
         $show->assertSee('Submitted — locked');
     }
+
+    // ── RA-01 (cc5, independent testing): "A DRAFT application — created
+    // but the agent has never clicked Send — is already fully fillable at
+    // its public token URL, with nothing telling the applicant it was
+    // never sent." Token is generated at creation (an earlier round's own
+    // fix), which is what made this reachable at all. ────────────────────
+
+    public function test_a_draft_applications_public_link_shows_not_ready_not_the_fillable_form(): void
+    {
+        $application = $this->application(['status' => 'draft']);
+
+        $response = $this->get(route('rental-applications.public.show', $application->token));
+
+        $response->assertOk();
+        $response->assertSee("isn't ready yet", false);
+        $response->assertDontSee('name="full_name"', false);
+        $response->assertDontSee('Submit Application');
+    }
+
+    public function test_a_draft_application_cannot_be_submitted_even_via_a_direct_post(): void
+    {
+        $application = $this->application(['status' => 'draft']);
+        $sig = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+        $response = $this->post(route('rental-applications.public.submit', $application->token), [
+            'full_name' => 'Sneaky Bypass',
+            'declaration_signature' => $sig,
+            'tpn_consent_signature' => $sig,
+        ]);
+
+        $response->assertRedirect(route('rental-applications.public.show', $application->token));
+        $application->refresh();
+        $this->assertSame('draft', $application->status, 'A draft must never be submittable before it has genuinely been sent.');
+        $this->assertNull($application->submitted_at);
+        $this->assertNull($application->full_name);
+    }
+
+    public function test_a_draft_application_cannot_receive_documents_via_the_json_endpoint_either(): void
+    {
+        $application = $this->application(['status' => 'draft']);
+
+        $response = $this->postJson(route('rental-applications.public.documents', $application->token), [
+            'supporting_files' => [UploadedFile::fake()->create('sneaky.pdf', 100, 'application/pdf')],
+        ]);
+
+        $response->assertStatus(410);
+        $this->assertSame(0, $application->refresh()->documents()->count());
+    }
+
+    public function test_once_sent_the_same_link_becomes_the_real_fillable_form(): void
+    {
+        // Same token throughout — sending is a status flip, not a new link
+        // (the token/link are generated at creation, spec-approved).
+        $application = $this->application(['status' => 'sent']);
+
+        $response = $this->get(route('rental-applications.public.show', $application->token));
+
+        $response->assertOk();
+        $response->assertDontSee("isn't ready yet", false);
+        $response->assertSee('name="full_name"', false);
+    }
 }

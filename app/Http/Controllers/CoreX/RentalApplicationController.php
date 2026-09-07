@@ -217,9 +217,41 @@ class RentalApplicationController extends Controller
         return view('corex.rental-applications.show', compact('rentalApplication'));
     }
 
+    /**
+     * AT-392 — Johan, independent testing (cc5), RA-05: "Tab 1 saves a
+     * field. Tab 2, opened earlier and unaware, then saves a different
+     * field and SILENTLY BLANKS Tab 1's genuine save." Same family as
+     * every other input-loss defect on this feature — work an agent
+     * genuinely did disappears with no warning.
+     *
+     * No existing "hidden updated_at + compare on submit" trait exists
+     * anywhere in CoreX (checked before building this). The closest
+     * precedent is `Property::galleryFingerprint()` +
+     * `PropertyController::reorderImages()` — a content-fingerprint
+     * hidden in the request, hard-blocked with a 409-style refusal on
+     * mismatch rather than silently merged or just warned-after-the-fact.
+     * Mirrors that shape here with `updated_at` (simpler than a field
+     * hash, and correctly reflects "changed since I opened this" for a
+     * plain Blade form) — a hidden `expected_updated_at` seeded when the
+     * page loads, compared against the record's actual current
+     * `updated_at` before ANY write happens. On mismatch: the save is
+     * refused outright (matching the CoreX precedent's hard-block, not a
+     * softer warn-then-save), with `old()` preserving everything the
+     * SECOND tab typed so reloading and redoing the edit costs nothing.
+     */
     public function update(Request $request, RentalApplication $rentalApplication)
     {
         $this->guardRentalApplication($rentalApplication);
+
+        $expectedUpdatedAt = $request->input('expected_updated_at');
+        if ($expectedUpdatedAt !== null && $expectedUpdatedAt !== ''
+            && (int) $expectedUpdatedAt !== $rentalApplication->updated_at?->timestamp) {
+            return back()->withInput()->with('error',
+                'Someone else saved changes to this application after you opened it — your changes were NOT saved, to avoid silently overwriting theirs. Reload the page to see the latest version, then redo your edit.'
+            );
+        }
+
+        $request->merge(RentalApplication::sanitizeNumericInput($request->only(RentalApplication::NUMERIC_FIELDS)));
 
         $validated = $request->validate(array_merge(RentalApplication::fieldValidationRules(), [
             'property_id' => ['nullable', 'integer', 'exists:properties,id'],
