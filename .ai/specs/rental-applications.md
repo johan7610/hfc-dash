@@ -1379,3 +1379,21 @@ Agent side, added to `RentalApplicationAgentControllerTest.php`:
 `test_email_backfill_never_crosses_agency_boundaries`,
 `test_archiving_from_the_list_soft_deletes_and_it_is_findable_and_restorable`,
 `test_the_status_filter_on_the_main_list_actually_filters`.
+
+**Post-merge incident, found and fixed during live proof:** after this
+round's PR merge landed on QA1, the public show page 500'd for every
+real request. Root cause: `documents: @json($application->documents->map(fn ($d) => [...]))`
+nested a multi-line arrow-function/array literal (including a `route()`
+call with an array argument) inside `@json()`'s own parentheses. Blade's
+directive-argument parser mishandled the nesting and compiled it to
+genuinely invalid PHP — a real `ParseError` on first render, not a Blade
+templating error. **`Blade::compileString()` alone did not catch this** —
+it only proves the Blade→PHP string transform succeeded, never that the
+resulting PHP is itself parseable; that requires an actual render (or a
+`php -l` on the compiled output). Fixed by computing the array in a
+`@php ... @endphp` block ahead of `<!DOCTYPE html>` and referencing the
+plain variable inside `@json()`. Lesson for this codebase: never nest a
+multi-line closure/array literal directly inside a Blade directive's own
+parentheses — compute it in a preceding `@php` block instead, and verify
+any `@json()`/directive change with a real render, not just
+`compileString()`.
