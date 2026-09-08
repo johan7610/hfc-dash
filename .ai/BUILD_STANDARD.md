@@ -18,6 +18,8 @@ These override everything else. Violating scope is worse than doing nothing. Whe
 
 7. REPORT EXACTLY. When done, report exactly what changed (files + why) and how you proved it, and confirm nothing outside the task was touched.
 
+8. FULL CRUD, LIST-SCREEN COMPLETENESS, AND OWN/BRANCH/AGENCY SCOPING ARE THE FLOOR — DESIGNED IN, NOT REQUESTED. Johan's words: "we always need proper crud? search / sort / own / branch / agency levels. that should be the design standard. not me asking for it once we get to that stage." Every entity ships with Create, Read, Update, Archive (soft delete only — never hard delete) and Restore from the first build, not as a later ask. Every list screen ships with search (named fields), sort (every sensible column + a stated default), filter (status + date range minimum), pagination, and a real empty state. Every list, detail view, export, download, and API endpoint enforces OWN / BRANCH / AGENCY visibility scoping at the query layer (BelongsToAgency / AgencyScope, never a hidden UI link) — direct-URL access by ID is blocked, not just unlinked. The spec for any new feature states search fields, sort/default, filters, and per-screen scoping BEFORE code is written; a spec missing these is not ready to build. Full detail: §1a below.
+
 This applies to the conductor too.
 
 
@@ -42,14 +44,91 @@ nothing to a user.
 
 ---
 
-## 1. Full CRUD is the default, never a request
+## 1. Full CRUD, list-screen completeness, and own/branch/agency scoping are the floor
+
+Johan, verbatim: *"we always need proper crud? search / sort / own /
+branch / agency levels. that should be the design standard. not me
+asking for it once we get to that stage. so get that going as well
+that we design and build correctly from the word go."*
+
+He should never have to ask for these after a feature is built. They
+are designed in at spec time, every time, without him mentioning it. A
+feature that ships with only create-and-list is incomplete — it is not
+"phase 1," it is not done.
+
+### 1a. Full CRUD is the default, never a request
 
 Every entity that can be created can be read, updated, and archived
 (soft-deleted). If a prompt says "add the ability to create X", the
-build INCLUDES list, view, edit, and archive for X unless the prompt
-explicitly scopes it down. Never ship a create with no edit. Never ship
-an edit with no archive. Asking for "full CRUD" should never be a
-thought — it is the floor.
+build INCLUDES list, view, edit, archive, AND **restore from archive**
+for X unless the prompt explicitly scopes it down. Never ship a create
+with no edit. Never ship an edit with no archive. Never ship an archive
+with no restore path — an archived record an admin cannot bring back is
+a hard delete wearing a soft-delete costume. **Hard deletes are
+forbidden anywhere in CoreX, no exceptions** (CLAUDE.md Non-negotiable
+#1). Asking for "full CRUD" should never be a thought — it is the
+floor.
+
+### 1b. Every list screen ships with search, sort, filter, pagination, and a real empty state
+
+No exceptions, no "add it later":
+
+- **Search** — across the fields a user would actually search by. The
+  spec names those fields explicitly; "search" with no named fields is
+  not a spec, it's a placeholder.
+- **Sort** — on every sensible column, with a **stated default sort**.
+  A list with no default order is non-deterministic to the user — same
+  query, different-looking results, every reload.
+- **Filter** — by status and by date range, at minimum. Add
+  domain-specific filters (branch, agent, type) where the entity has
+  them.
+- **Pagination** — a sensible page size. Never dump an unbounded result
+  set into the DOM.
+- **A real empty state** — copy that tells the user why the list is
+  empty and what to do next (no results for this filter vs. genuinely
+  nothing yet are different messages). A blank table with no rows and
+  no explanation is a bug, not an edge case.
+
+### 1c. Three visibility levels, always: OWN / BRANCH / AGENCY
+
+Every list, every detail view, every export, every document download,
+and every API endpoint respects three scoping levels:
+
+- **OWN** — records belonging to the logged-in user.
+- **BRANCH** — records belonging to their branch.
+- **AGENCY** — records belonging to their agency.
+
+Which level a given user sees is **permission-driven**, decided at spec
+time per screen. This is layered on top of, not a replacement for,
+CLAUDE.md Non-negotiable #7 (multi-tenancy / `AgencyScope`) — agency is
+the outer boundary that can never be crossed; own/branch is the
+narrower scoping WITHIN an agency that a role's permissions resolve.
+
+**An agency must never see another agency's data. This is a hard
+security boundary, enforced at the query layer** (`BelongsToAgency` /
+the global `AgencyScope`), **never by hiding a link in the UI.**
+Removing a menu item is not access control. **Direct-URL access by ID
+must be blocked, not just absent from the menu** — every `show`/`edit`/
+`destroy`/download/export action re-checks scope against the
+authenticated user's own/branch/agency, independent of how the request
+arrived. A controller that trusts "they wouldn't have found the URL" is
+a security bug, not a low-risk gap.
+
+### 1d. This is design-time, not retrofit
+
+The spec for any new feature states, **before code is written**:
+
+- the search fields, named explicitly,
+- the sort columns and the stated default,
+- the filters,
+- and how own/branch/agency scoping is enforced, **per screen** (list,
+  detail, export, download, API).
+
+**A spec missing these is not ready to build.** This is not a
+checklist item to satisfy after the feature works — the input-space
+rule in §2 below and the CRUD/scoping standard here are decided
+together, at the same spec stage, for the same reason: discovering
+either after code is written means a rebuild, not a review comment.
 
 ---
 
@@ -201,7 +280,9 @@ reach, or can reach without permission, is not done.
 
 A feature is DONE only when ALL apply:
 
-- [ ] Full CRUD present (or explicitly scoped out in the prompt)
+- [ ] Full CRUD present — create, read, update, archive, AND restore (or explicitly scoped out in the prompt)
+- [ ] List screen has search (named fields), sort (every sensible column + stated default), filter (status + date range minimum), pagination, and a real empty state
+- [ ] OWN / BRANCH / AGENCY scoping enforced at the query layer on every list, detail view, export, download, and API endpoint for this feature — verified by direct-URL-by-ID test, not just absence from the menu
 - [ ] Every NOT-NULL column supplied a value for every input combination
 - [ ] Every optional-empty path accepted gracefully (no 500)
 - [ ] Every required-empty path rejected with a user-clear message
