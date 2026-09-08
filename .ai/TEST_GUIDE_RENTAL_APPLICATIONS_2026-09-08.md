@@ -40,11 +40,10 @@ Applications**.
   like `8,500` — it should be accepted.
 - Fill in a few fields, attach a document, and confirm everything you
   typed is still there afterwards (nothing should clear).
-- **One thing worth checking with us rather than assuming:** the Submit
-  button currently sits below the document-upload area, not above it —
-  that was a deliberate change (so nobody submits before they've had the
-  chance to attach anything), but if that's not what you had in mind, say
-  so and we'll move it back.
+- The applicant fills in the form, attaches their supporting documents,
+  and only then sees the Submit Application button — it sits below the
+  documents on purpose, so nothing gets submitted before the documents
+  are attached.
 
 ### The agent review screen
 - From **Returned Applications**, click **Review** on any row.
@@ -66,14 +65,19 @@ Applications**.
 - **New:** opening a large document used to take about nine seconds before
   anything appeared. It now shows the first page in well under a second,
   at full quality, and loads the rest behind it.
+- **New:** while building the speed fix above, we found and closed a real
+  way a save could have quietly wiped highlights on pages that hadn't
+  finished loading yet — nothing was actually lost in practice, but it's
+  now impossible rather than just unlikely.
 
 ### Submitting to the authoriser
 - On the review screen, click **Submit to authoriser** (it says
   "Re-submit to authoriser" if it's already been sent once before).
 
 ### The authoriser screens
-**Note:** there's no menu button for this yet, so the first time, whoever
-set you up as an authoriser will need to send you the direct link.
+- On the left-hand menu, click **Rentals**, then **Rental Application
+  Authorisation**. (You'll only see this if you've been set up as an
+  authoriser — see the settings note below.)
 - **Approve** — enter the rand amount the tenant is approved for and
   confirm. (See the comma note below — a comma in this box currently
   causes an error; type the amount without commas for now.)
