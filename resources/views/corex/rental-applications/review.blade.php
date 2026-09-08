@@ -474,12 +474,27 @@
                     <p class="text-[11px] mb-2" style="color: var(--text-muted);">
                         What's on the payslip before tax and other deductions — not take-home pay.
                     </p>
+                    {{-- Johan, live on QA1, watching this exact panel at 1522px:
+                         "the amount input is clipped at the panel's right edge —
+                         only the leftmost couple of pixels of its border are
+                         visible." Root cause: this is a fixed 260px sticky
+                         column (`.rental-review-aside`) with overflow-x:hidden
+                         (deliberately no horizontal scrollbar) — a flex-1
+                         description input next to a fixed w-24 amount input
+                         cannot both fit; the browser's default text-input
+                         intrinsic width won the flex negotiation and pushed
+                         the amount field almost entirely outside the panel.
+                         Fixed by stacking description above amount within
+                         each row instead of side by side — both fields then
+                         always get the panel's FULL available width,
+                         regardless of how narrow the column ever gets, so
+                         this can't recur at some other width. --}}
                     <div class="space-y-2" x-ref="incomeRows">
                         <template x-for="(item, index) in incomeItems" :key="index">
-                            <div class="flex items-center gap-1.5">
-                                <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Salary"
+                            <div class="space-y-1">
+                                <input type="text" class="corex-input text-sm w-full" placeholder="e.g. Salary"
                                        x-model="item.description" @input="onIncomeRowInput()" @blur="save()">
-                                <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
+                                <input type="text" inputmode="decimal" class="corex-input text-sm w-full" placeholder="0.00"
                                        data-role="amount" x-model="item.amount" @input="onIncomeRowInput()" @blur="save()"
                                        @keydown.enter.prevent="focusNextAmountRow('incomeRows', index)">
                             </div>
@@ -508,10 +523,10 @@
                     <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Expenses / existing debt</label>
                     <div class="space-y-2" x-ref="expenseRows">
                         <template x-for="(item, index) in expenseItems" :key="index">
-                            <div class="flex items-center gap-1.5">
-                                <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Car payment"
+                            <div class="space-y-1">
+                                <input type="text" class="corex-input text-sm w-full" placeholder="e.g. Car payment"
                                        x-model="item.description" @input="onExpenseRowInput()" @blur="save()">
-                                <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
+                                <input type="text" inputmode="decimal" class="corex-input text-sm w-full" placeholder="0.00"
                                        data-role="amount" x-model="item.amount" @input="onExpenseRowInput()" @blur="save()"
                                        @keydown.enter.prevent="focusNextAmountRow('expenseRows', index)">
                             </div>
