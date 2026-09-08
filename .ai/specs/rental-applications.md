@@ -3371,3 +3371,189 @@ returning null.
 - `resources/views/rental-applications/public/show.blade.php` — still-living tick box, rental term quick-select buttons
 - `resources/views/corex/rental-applications/show.blade.php` — same two, agent-side, plus the legacy-text note
 - `resources/views/corex/rental-applications/pdf.blade.php` — renders "Still living there" and months-based term
+
+## Round 9 — affordability formula corrected to the actual law (2026-09-08)
+
+Johan, from his own reading of the law: "the law states you may not spend
+more than 30% of your gross income on rentals... on this also confirm our
+formula matches up with this - its not 3.5 or what you created it as of
+nett disposable income. its of the gross income."
+
+### Investigation findings (reported before any code changed)
+
+The single calculation method, `RentalApplicationAssessment::qualifyingResult()`,
+fed three display surfaces: the review screen's live Alpine display
+(`review.blade.php`), the authoriser's static display
+(`authorisation/show.blade.php`), and the settings screen configured the
+multiplier both used. It computed `total_income`
+(`monthly_income + other_monthly_income`, before expenses) and compared it
+against `rent * multiplier` (default multiplier 3.00 — mathematically close
+to but not exactly 30%, ≈33.3%), framed backwards as "income must be N
+times rent" rather than "rent must be X% of income." `monthly_expenses`
+was captured and an unused `net_income` figure was computed but played no
+role in the pass/fail decision — and on `review.blade.php` specifically was
+displayed unlabelled right next to the pass/fail badge. No field anywhere
+(applicant form "Monthly salary (R)"; agent panel "Monthly
+income"/"Other monthly income"; PDF "Monthly Salary") was labelled gross vs.
+net/take-home — confirming Johan's exact fear (an applicant entering
+take-home pay because nothing told them otherwise).
+
+**cc5's claim, verified from the code directly, not on trust:** the OLD
+`qualifyingResult()` compared `$totalIncome` (income before expenses) against
+the threshold, never `$netIncome` — cc5's finding that the calculation
+already used gross-before-expenses was correct. The defect was the
+multiplier framing, not a net-vs-gross mixup.
+
+### THE RULE, one place — `RentalApplicationAssessment::qualifyingResult()`
+
+Rewritten so rent must not exceed `$maxRentPercent`% of gross income,
+checked directly: `$maxAffordableRent = round($grossIncome * ($maxRentPercent / 100), 2)`,
+`$meetsThreshold = $rent <= $maxAffordableRent`. No second implementation
+exists anywhere — the settings screen, the authorisation screen, and (once
+released) the review screen all call this one method. Renamed fields:
+`total_income` → `gross_income`, `multiplier` → `max_rent_percent`,
+`required_income` → `max_affordable_rent`; added `rent_as_percent_of_gross`.
+`net_income` is kept in the return array — Johan's call — see "Judgment
+call 1" below.
+
+### Agency-configurable, default 30% — `RentalApplicationQualifyingSetting`
+
+`income_to_rent_multiplier` (decimal(5,2) default 3.00) replaced outright
+with `max_rent_percent_of_gross_income` (decimal(5,2) default 30.00 — the
+legal ceiling itself), via
+`database/migrations/2026_09_08_170000_replace_income_multiplier_with_gross_income_percentage.php`.
+A clean replace, not a second column: only one agency (id 1) had ever
+configured the old column, and that single row was confirmed to be a
+leftover test artifact from this session's own Round 8 verification
+(timestamped to that proof run) — hard-deleted before this migration was
+written, restoring agency 1 to the correct never-configured, in-memory-
+default state. The figure the percentage applies to (gross income) is
+never itself configurable — only the percentage is. A new
+`RentalApplicationQualifyingSetting::exceedsLegalCeiling()` returns true
+when an agency sets above 30%.
+
+**Judgment call 2 — how "above 30%" is handled, and why:** BOTH a one-time
+`session('warning')` toast (the existing global `<x-toast-notifications />`
+pattern, fired on save in `RentalApplicationSettingsController::updateQualifyingFormula()`)
+AND a NEW persistent amber banner on the settings screen itself
+(`resources/views/corex/settings/rental-applications.blade.php`), shown
+for as long as the configured figure exceeds 30%. Reasoning: a toast alone
+vanishes on the next page load and would not satisfy Johan's explicit "do
+not silently accept it as normal" — an agency owner who set 40% last month
+and forgot needs to see the warning again every time they open the screen,
+not just the moment they saved it.
+
+### Plain-language gross-income labels — every capture point
+
+Extended `<x-rental-application-field>` with an optional `hint` prop
+(backward compatible, defaults to null). Applied to both income fields
+that exist on this feature:
+- Applicant's own form (`rental-applications/public/show.blade.php`):
+  label → "Gross monthly income, before deductions (R)", hint → "The amount
+  on your payslip BEFORE tax and other deductions — not what actually
+  lands in your bank account."
+- Agent's own detail page (`corex/rental-applications/show.blade.php`):
+  same label, hint → "...not their take-home pay."
+
+Directly addresses Johan's own example (an applicant entering 10,000 when
+their payslip shows 18,000 gross). The assessment panel's own income
+fields (agent-typed, on the review screen) still need the same treatment —
+blocked, see "Still blocked" below.
+
+**Scope decision — `pdf.blade.php` left unchanged:** it is a read-only,
+legal-document-styled transcript of a standard form, not a data-capture
+point; relabelling risked diverging from a recognised document template's
+exact wording for no functional benefit. Flagged for Johan's awareness —
+override if he wants the PDF relabelled too.
+
+**Judgment call 1 — `net_income` kept, not removed:** cc5 flagged it as
+"actively misleading" since it's computed and shown but plays no part in
+the decision. Kept — genuinely useful context an agent typed in themselves
+(what's left after existing debts/expenses) — but the docblock on
+`qualifyingResult()` now states explicitly that any screen displaying it
+must label it unmistakably as reference-only, separated from the pass/fail
+badge. Actually re-labelling it on-screen is only needed on `review.blade.php`
+(the authorisation screen never showed it) — blocked, see below.
+
+### Still blocked — `review.blade.php` / `RentalApplicationReviewController.php`
+
+Deliberately NOT touched in this round — sequenced behind cc6's
+review-screen work and cc3's applicant-side work landing on the shared
+QA1 checkout. Confirmed via the shared checkout's own `QA1` branch that
+`RentalApplicationReviewController.php` still calls the OLD `multiplierFor()`
+at two call sites (the `show()` method and the assessment-autosave
+endpoint) as of this commit — updating those calls, the Alpine result
+display's key names, the assessment panel's income-field labels, and the
+`net_income` relabelling all still need review.blade.php released. Item 5
+(auto-adding income/expense rows) has not been designed yet at all —
+it needs that same screen and likely a data-model change to support a
+growing list of income/expense rows rather than fixed
+`monthly_income`/`other_monthly_income`/`monthly_expenses` columns.
+
+### Verification
+
+`tests/Feature/RentalApplications/RentalApplicationRound9AffordabilityTest.php`
+(new) covers: the default 30% ceiling; the worked example Johan asked for
+verbatim (18,000 gross → 5,400 max affordable rent, with one rand over
+flipping the verdict); that `net_income` does not affect the decision even
+when wildly different; the agency-configurable percentage (stricter and
+above-ceiling cases, including the persistent banner surviving a later,
+unrelated page visit); the authorisation screen rendering the worked
+example over a real HTTP request through the full Laravel kernel/middleware
+stack; and the gross-income labels appearing on both the agent and public
+applicant forms. `RentalApplicationRound8FixesTest.php`'s qualifying-formula
+test updated to the new field name (the old one no longer exists after the
+migration). Full run: 17 tests, 15 passed; the 2 failures are both
+pre-existing calls through the still-blocked `RentalApplicationReviewController`
+route (`Call to undefined method ...::multiplierFor()`) — expected and
+unavoidable until that controller is released and updated in the same
+commit that finishes this feature.
+
+A live-server (real TCP, real login, real `php artisan serve`) proof of
+the worked example was attempted via an isolated clone of the real QA1
+data (dumped from `corex_qa1` into a disposable `corex_qa1_round9_verify`
+database, never touching the shared schema other lanes are actively using
+against the OLD column name) rather than migrating the shared database
+directly — deliberately, since dropping `income_to_rent_multiplier` on the
+live shared QA1 database would break every other lane's checkout still
+reading it. The attempt hit infrastructure friction (the schema-snapshot
+loader treated the pre-populated clone as fresh and tried to reapply the
+whole snapshot) and was abandoned in favour of the HTTP-kernel-level
+PHPUnit proof above, which already exercises real routing, real
+middleware (auth/permissions/CSRF), a real database, and real Blade
+rendering — no shortcut through the controller. The disposable database
+and dump file were dropped/deleted; nothing was left behind, and the
+shared `corex_qa1` database was never touched.
+
+### Note — `origin/QA1` (GitHub) lags the shared `/corex-qa1` checkout
+
+Not a defect, just worth recording: `origin/QA1` on GitHub was last pushed
+2026-09-07 15:30 and does not yet include the last day's worth of
+work merged locally into the shared `/corex-qa1` checkout's own `QA1`
+branch (including both `review-screen-critical-fixes-2026-09-08` and
+`fix/rental-applications-applicant-fixes-2026-09-08`, already merged
+there). This round's commits are built on the shared checkout's `QA1`
+branch (current, confirmed unchanged at time of push), not on the stale
+GitHub ref. Flagging so the GitHub mirror doesn't fall further behind.
+
+### Files touched
+
+- `database/migrations/2026_09_08_170000_replace_income_multiplier_with_gross_income_percentage.php` (new)
+- `app/Models/RentalApplicationAssessment.php` — `qualifyingResult()` rewritten to percentage-of-gross
+- `app/Models/RentalApplicationQualifyingSetting.php` — column rename, `DEFAULT_MAX_RENT_PERCENT`, `LEGAL_CEILING_PERCENT`, `maxRentPercentFor()`, `exceedsLegalCeiling()`
+- `app/Http/Controllers/CoreX/RentalApplicationSettingsController.php` — new field name, legal-ceiling warning (toast + banner flag)
+- `app/Http/Controllers/CoreX/RentalApplicationAuthorisationController.php` — `maxRentPercentFor()`/new `qualifyingResult()` signature
+- `resources/views/corex/settings/rental-applications.blade.php` — persistent banner, relabelled field
+- `resources/views/corex/rental-applications/authorisation/show.blade.php` — gross-income labels, worked-example wording
+- `resources/views/corex/rental-applications/show.blade.php` — agent's own income field relabelled, hint added
+- `resources/views/rental-applications/public/show.blade.php` — applicant's own income field relabelled, hint added
+- `resources/views/components/rental-application-field.blade.php` — new optional `hint` prop
+- `tests/Feature/RentalApplications/RentalApplicationRound9AffordabilityTest.php` (new)
+- `tests/Feature/RentalApplications/RentalApplicationRound8FixesTest.php` — field-name update only
+
+Branch: `rental-applications-affordability-2026-09-08`, commits `dcd5f3cd4`
+(the formula/labels/settings change) and `6ac326581` (a variable-name bug
+in the authorisation controller's `compact()` call, caught before push,
+plus this round's tests). Pushed to origin. Not merged into the shared
+`QA1` checkout — awaiting review.blade.php's release to finish items 1/3/4
+and to design item 5.
