@@ -1789,8 +1789,23 @@
              TO ADD THE NEXT RENTALS FEATURE: add one more
              @permission(...)/<a>/@endpermission block inside the panel div
              below, after Returned Applications, following the exact same
-             shape. --}}
-        @if($user && $user->hasAnyPermission(['rental_applications.view', 'rental_applications.view_returned']))
+             shape.
+
+             2026-09-08 — Rental Application Authorisation link added, Johan's
+             standing rule: every page gets a nav entry, no exceptions, and an
+             authoriser had none — the same invisibility bug this whole
+             section was built to fix in the first place. Gated on
+             $user->isRentalApplicationAuthoriser() — the EXACT check
+             RentalApplicationAuthorisationController::guardCanView() enforces
+             (isRentalApplicationRO() || isRentalApplicationCO(), which this
+             helper on User.php already wraps) — not a permission key, because
+             this isn't gated by one; reusing the real check means the link
+             and the door it opens can never drift out of step. The outer
+             group gate below is widened to match, so an authoriser who
+             doesn't also hold rental_applications.view/.view_returned still
+             sees the "Rentals" group at all — otherwise they'd have the
+             right to the queue but never see the toggle that leads to it. --}}
+        @if($user && ($user->hasAnyPermission(['rental_applications.view', 'rental_applications.view_returned']) || $user->isRentalApplicationAuthoriser()))
         <div>
             <button type="button" @click="push('rental-applications')"
                     class="corex-nav-item corex-nav-group-toggle {{ $activeGroup === 'rental-applications' ? 'active' : '' }}">
@@ -1815,6 +1830,10 @@
                 @permission('rental_applications.view_returned')
                 <a href="{{ route('corex.rental-applications.returned') }}" class="corex-nav-subitem {{ request()->routeIs('corex.rental-applications.returned') ? 'active' : '' }}">Returned Applications</a>
                 @endpermission
+
+                @if($user->isRentalApplicationAuthoriser())
+                <a href="{{ route('corex.rental-applications.authorisation.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.rental-applications.authorisation.*') ? 'active' : '' }}">Rental Application Authorisation</a>
+                @endif
             </div>
         </div>
         @endif
