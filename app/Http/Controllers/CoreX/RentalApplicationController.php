@@ -269,12 +269,51 @@ class RentalApplicationController extends Controller
             ->with('success', 'Rental application created. Review it, then send.');
     }
 
+    /**
+     * AT-392, Johan (asked three times, verbatim): "opening a rental
+     * application should not be able to edit... open / view should show
+     * the application the applicant sent in. nothing more. no edits,
+     * nothing... A signed document a third party can alter afterwards is
+     * worthless as evidence."
+     *
+     * Once the applicant has actually submitted (any status in
+     * POST_RETURN_STATUSES), View renders a read-only page built around
+     * the SAME PDF this module already generates for download
+     * (RentalApplicationPdfService — reused via pdfInline(), never a
+     * second rendering) instead of the editable field form. Before
+     * submission (draft/sent/in_progress) nothing changes — the agent is
+     * still building/sending it and there is nothing signed yet to
+     * protect.
+     */
     public function show(Request $request, RentalApplication $rentalApplication): View
     {
         $this->guardRentalApplication($rentalApplication);
         $rentalApplication->load(['contact', 'property', 'signatures', 'documents.documentType', 'documents.uploader', 'statusHistory.changedBy']);
 
+        if (in_array($rentalApplication->status, RentalApplication::POST_RETURN_STATUSES, true)) {
+            return view('corex.rental-applications.view-readonly', compact('rentalApplication'));
+        }
+
         return view('corex.rental-applications.show', compact('rentalApplication'));
+    }
+
+    /**
+     * The same generated PDF as pdf() (RentalApplicationPdfService — one
+     * rendering, never a second one that could drift), served inline for
+     * the read-only View screen's embedded viewer instead of forcing a
+     * download. Never a hand-editable page: this is a flat PDF byte
+     * stream with no form, no inputs, nothing to submit.
+     */
+    public function pdfInline(RentalApplication $rentalApplication)
+    {
+        $this->guardRentalApplication($rentalApplication);
+
+        $service = app(\App\Services\RentalApplications\RentalApplicationPdfService::class);
+        $path = $service->generate($rentalApplication);
+
+        return response()->file($path, [
+            'Content-Disposition' => 'inline; filename="Rental Application - ' . ($rentalApplication->full_name ?: $rentalApplication->contact->full_name) . '.pdf"',
+        ])->deleteFileAfterSend(true);
     }
 
     /**
@@ -302,6 +341,19 @@ class RentalApplicationController extends Controller
     public function update(Request $request, RentalApplication $rentalApplication)
     {
         $this->guardRentalApplication($rentalApplication);
+
+        // AT-392, Johan (asked three times): "no edits, nothing... A signed
+        // document a third party can alter afterwards is worthless as
+        // evidence." Enforced HERE, not just by the View screen no longer
+        // rendering a form — a hand-crafted PUT against this route must be
+        // refused too, regardless of what any page shows. Once the
+        // applicant has submitted, this action is permanently closed; there
+        // is no override, no permission that reopens it.
+        abort_if(
+            in_array($rentalApplication->status, RentalApplication::POST_RETURN_STATUSES, true),
+            403,
+            'This application was submitted and signed by the applicant — its answers can no longer be edited.'
+        );
 
         $expectedUpdatedAt = $request->input('expected_updated_at');
         if ($expectedUpdatedAt !== null && $expectedUpdatedAt !== ''

@@ -2853,6 +2853,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/{rentalApplication}/send', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'send'])
             ->middleware('permission:rental_applications.create')->name('corex.rental-applications.send');
         Route::get('/{rentalApplication}/pdf', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'pdf'])->name('corex.rental-applications.pdf');
+        Route::get('/{rentalApplication}/pdf-inline', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'pdfInline'])->name('corex.rental-applications.pdf-inline');
         Route::get('/{rentalApplication}/documents/{document}', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'downloadDocument'])->name('corex.rental-applications.documents.download');
         Route::post('/{rentalApplication}/documents', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'uploadDocument'])
             ->middleware('permission:rental_applications.create')->name('corex.rental-applications.documents.upload');
