@@ -31,6 +31,9 @@ Applications**.
 ### The applicant's own form
 - Open **Rental Applications**, click **New Rental Application**, fill in
   a contact, and save it — **don't** click Send yet.
+- Check the status shown on the application, both here and back on the
+  list — it should say **Draft**, not Sent. A brand new application
+  should never show as sent before you've actually sent it.
 - Open the "Online link" shown on that application in a new tab. It should
   say the link isn't ready yet and show no form — this is deliberate, so
   a link can't be filled in before you've actually sent it.
@@ -44,6 +47,11 @@ Applications**.
   and only then sees the Submit Application button — it sits below the
   documents on purpose, so nothing gets submitted before the documents
   are attached.
+- **Contact email stays in sync.** If you type an email into an
+  application for a contact who doesn't already have one on file, saving
+  it now fills in the contact's own email too. If the contact already
+  has an email of their own, it's left alone — the application never
+  overwrites a real email that's already there.
 
 ### The agent review screen
 - From **Returned Applications**, click **Review** on any row.
@@ -101,21 +109,25 @@ above, not from this dropdown.)
 Go to **Settings → Rental Applications**. The subject and body of the
 email sent when an application is declined can be rewritten there, per
 agency. The same screen is also where you choose who your authorisers
-are.
+are — set up the same way as your compliance officers already are, with
+a tick-box list so you can put more than one person at each level (both
+the reviewer level and the override level).
 
 ---
 
 ## 2. What is not done yet
 
-- **A document added after submission doesn't yet show a warning on the
-  review screen** — an agent reviewing an application there currently
-  can't tell that a document arrived late. (It does already show
-  correctly on the application's own page — just not yet on this
-  particular screen. This is being finished now and may be ready before
-  you test.)
-- **The authoriser's approve screen rejects a comma in the rand amount.**
-  Type the number without commas for now (e.g. `8500` not `8,500`) — a
-  fix is queued.
+Both of these may already be fixed by the time you read this — check for
+yourself rather than trusting this list.
+
+- **A document added after submission may not show a warning on the
+  review screen** — open a returned application's review screen and see
+  whether a document added afterwards is marked as added late. If it
+  isn't marked there, don't worry — it does correctly appear on the
+  application's own page, just not yet on this particular screen.
+- **The authoriser's approve screen may reject a comma in the rand
+  amount.** Try approving with a comma, e.g. `8,500`. If it's refused,
+  type the number without commas instead (`8500`) until this is fixed.
 
 ---
 
@@ -129,3 +141,10 @@ are.
 - The sales document sending screens have the same false "Sent" status
   problem that rental applications had — it can say "Sent" when nothing
   actually went out.
+
+---
+
+**If anything above doesn't behave the way it's described, please just
+note what you clicked and what happened, and send it back to us.** It
+goes straight to whoever built that part — you don't need to explain it
+twice or track anyone down yourself.
