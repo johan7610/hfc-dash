@@ -47,11 +47,13 @@ Applications**.
   and only then sees the Submit Application button — it sits below the
   documents on purpose, so nothing gets submitted before the documents
   are attached.
-- **Contact email stays in sync.** If you type an email into an
-  application for a contact who doesn't already have one on file, saving
-  it now fills in the contact's own email too. If the contact already
-  has an email of their own, it's left alone — the application never
-  overwrites a real email that's already there.
+- **Contact email — please confirm this is what you want.** If a contact
+  has no email on file and you type one on the application, saving it
+  now fills in the contact's own email too. But if the contact already
+  has an email of their own and you type a different one on the
+  application, the contact's own email is left as it was — it does not
+  get updated to match. We're not sure which of those two you meant when
+  you asked for this, so please test both and tell us which is right.
 
 ### The agent review screen
 - From **Returned Applications**, click **Review** on any row.
