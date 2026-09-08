@@ -51,6 +51,20 @@ class RentalApplicationDocumentHighlightService
     private const STROKE_WIDTH = 26;
 
     /**
+     * The document's real, true page count. Public so the controller can
+     * enforce completeness of an incoming save (see applyMarks() docblock
+     * below) — a save must account for every page or it is rejected, never
+     * silently trusted as "the whole document" when it isn't.
+     */
+    public function totalPageCount(Document $document): int
+    {
+        $cacheDir = $this->cacheDirFor($document);
+        @mkdir($cacheDir, 0775, true);
+
+        return $this->pageCountFor($document, $cacheDir);
+    }
+
+    /**
      * Progressive load, 2026-09-08 — Johan's decision on the measured 9.2s
      * cold-open cost for a 17-page document: show page 1 immediately, load
      * the rest behind it, and do NOT trade image sharpness for speed (these

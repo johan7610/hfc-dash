@@ -278,6 +278,41 @@ class RentalApplicationReviewController extends Controller
             'marks.*.*' => ['array'],
         ]);
 
+        // 2026-09-08 — cc1 and an independent second agent both reproduced:
+        // POSTing marks for only SOME of a document's pages returns 200 and
+        // SILENTLY WIPES the other pages' already-saved marks, because
+        // applyMarks() REPLACES marks_json wholesale with whatever it's
+        // given. This is not specific to progressive loading — a stale tab,
+        // a slow connection, a double submit, or a retry can all reach this
+        // endpoint with an incomplete view of the document, with no button
+        // or client-side guard in the way at all. My own earlier
+        // verification checked that the rendered PAGE IMAGES came back
+        // complete; it never checked whether the SAVED MARKS survived —
+        // those are different questions, and this is exactly the class of
+        // mistake BUILD_STANDARD.md §5a (written earlier tonight, from this
+        // same module's RA-06 defect) exists to name.
+        //
+        // Fixed here, not client-side: a save must account for EVERY page
+        // of the document or it is refused outright — no merge, no partial
+        // acceptance. Chosen over merging because the invariant is provable
+        // ("this payload is either the complete truth or it's rejected")
+        // rather than requiring perfect merge semantics (correctly telling
+        // "page 3 has zero marks" apart from "page 3 was never mentioned")
+        // to be right in every caller, forever. This also doesn't cost the
+        // legitimate progressive-load flow anything new: the frontend
+        // already refuses to let an agent save before every page has
+        // loaded (see review.blade.php's pagesLoading guard) — this makes
+        // that a real server-side guarantee instead of a suggestion a
+        // stale tab or a crafted request could simply skip.
+        $totalPages = $highlights->totalPageCount($document);
+        $providedPages = array_map('intval', array_keys((array) ($validated['marks'] ?? [])));
+        sort($providedPages);
+        if ($providedPages !== range(0, $totalPages - 1)) {
+            return response()->json([
+                'error' => 'This document hasn\'t fully finished loading yet — wait for every page to load, then try saving again.',
+            ], 422);
+        }
+
         try {
             $highlight = $highlights->applyMarks(
                 $document,

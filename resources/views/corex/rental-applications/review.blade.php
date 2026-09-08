@@ -909,8 +909,15 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
                         x: Math.round(m.x * scaleX), y: Math.round(m.y * scaleY),
                         text: m.text, color: m.color,
                     }));
-                    const combined = [...strokes, ...notes];
-                    if (combined.length) marksByPage[page.index] = combined;
+                    // 2026-09-08 — ALWAYS assign, even an empty array. The
+                    // server now requires the payload to name every one of
+                    // the document's pages (see applyHighlight()'s
+                    // completeness check) so it can tell "this page
+                    // genuinely has zero marks" apart from "this page was
+                    // never mentioned" — omitting empty pages here would
+                    // make every real, complete save look incomplete and
+                    // get refused.
+                    marksByPage[page.index] = [...strokes, ...notes];
                 }
 
                 const res = await fetch(this.postUrl, {

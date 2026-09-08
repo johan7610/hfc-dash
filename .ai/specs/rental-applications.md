@@ -2746,3 +2746,99 @@ private rasterization helpers to share one page-range rasterizer),
 `routes/web.php` (two routes replacing one), `resources/views/corex/
 rental-applications/review.blade.php` (progressive fetch, loading banner,
 save-guard).
+
+---
+
+## CRITICAL — partial saves silently destroyed other pages' marks (cc1 + independent second agent, 2026-09-08)
+
+Two independent runs (cc1 on this document, a second agent on a
+different 6-page document in a separate agency) both found the same
+thing: `POST .../highlight` with marks for only SOME of a document's
+pages returns 200 OK and SILENTLY WIPES the previously-saved marks on
+every page NOT mentioned in that request. My own verification of the
+progressive-load save-guard had checked that the rendered PAGE IMAGES
+came back complete after a partial-save attempt — they did — and
+concluded the guard worked. That was the wrong question. The right
+question was whether the SAVED MARKS survived, and they did not. This is
+exactly the failure BUILD_STANDARD.md §5a (written earlier the same
+night, from this same module's RA-06 defect) exists to name: verifying
+one thing and reporting a different one as proven.
+
+**Root cause.** `applyMarks()` treats whatever `marksByPage` it is given
+as the document's COMPLETE, authoritative state and REPLACES `marks_json`
+wholesale. This was always true, not something progressive loading
+introduced — it was safe before only because the old frontend loaded
+every page before allowing any interaction, so every save payload
+happened to be complete by construction. The moment ANY code path can
+reach this endpoint with an incomplete view of the document — progressive
+loading (by design), a stale tab, a slow connection, a double submit, a
+retry — the "payload is authoritative" assumption breaks, and it breaks
+silently: a real 200, correct page images, and a quietly truncated
+`marks_json`.
+
+**Reproduced directly before fixing, per instruction.** Saved real marks
+on pages 0, 3, and 7 of document 2974 (17 pages), confirmed all three in
+`marks_json` via a direct DB read. Then POSTed straight to the save
+endpoint with marks for page 0 only — got a real 200 — then read
+`marks_json` directly from the database again: pages 3 and 7 were gone,
+only page 0's new mark remained. Confirmed the exact failure both other
+agents reported before writing a line of fix code.
+
+**Fix: refuse, don't merge — server-side, not client-side.** Chosen over
+merging for one reason: refuse is a single, provable invariant ("this
+payload is either the complete truth about every page, or it is
+rejected") rather than a merge implementation that has to correctly tell
+"page 3 has zero marks" apart from "page 3 was never mentioned" in every
+caller, forever — one missed case there reintroduces the same class of
+bug in a subtler shape. It also costs nothing the design didn't already
+intend: the frontend already disables Save until every page has loaded
+(the `pagesLoading` guard from the progressive-load round above) — this
+makes that a real server-side guarantee instead of a client-side
+suggestion a stale tab or a crafted request could simply skip, which is
+the actual complaint: **"client-side cannot be the guard for data loss."**
+
+Mechanically: `RentalApplicationDocumentHighlightService::totalPageCount()`
+(new, public) returns the document's real page count. In
+`RentalApplicationReviewController::applyHighlight()`, after the existing
+per-mark shape validation, the validated `marks` array's page-index key
+set is compared against `range(0, totalPages - 1)` — if they don't match
+exactly, the request is rejected with a real `422` and a plain message
+("This document hasn't fully finished loading yet — wait for every page
+to load, then try saving again."), and `applyMarks()` is never called, so
+nothing already saved is touched. The frontend (`applyHighlights()`) was
+changed to always send an entry for EVERY loaded page — including an
+empty array for a page with zero marks — instead of omitting empty pages,
+since omitting them would make every genuine complete save look
+incomplete and get refused by the new check.
+
+**Verified the way it actually fails, not by re-checking page images:**
+
+- Reproduced the original bug first (above), confirmed via direct DB
+  read, before changing anything.
+- Same partial-page attack (marks for page 0 only) against the FIXED
+  server: real `422`, plain message, and `marks_json` read directly from
+  the database afterward — pages 0, 3, and 7 all still present, byte-for-
+  byte unchanged from before the attack.
+- Stale tab, simulated as a payload covering only 10 of the document's 17
+  pages: refused the same way, database unchanged.
+- Double submit: the same genuinely complete payload (all 17 page keys
+  present) POSTed twice in a row — both return `200`, both succeed,
+  final `marks_json` correct and not duplicated — confirms the fix is
+  refuse-on-incomplete, not refuse-on-repeat.
+- A genuinely complete save (all 17 page keys, three of them with real
+  marks) still succeeds normally and round-trips correctly through
+  `firstPagePreview()`'s `marks` field on reload.
+
+**(e) answer for Johan, plainly, as asked:** the "changes may be lost"
+popup is gone by design, not by accident. The screen won't let an agent
+leave a document with unsaved marks without asking them to save first —
+so by the time they could click "Back to application," there is nothing
+left to warn about.
+
+**Files touched:** `app/Services/RentalApplications/
+RentalApplicationDocumentHighlightService.php` (new public
+`totalPageCount()`), `app/Http/Controllers/CoreX/
+RentalApplicationReviewController.php` (the completeness gate in
+`applyHighlight()`), `resources/views/corex/rental-applications/
+review.blade.php` (`applyHighlights()` now sends every loaded page, not
+just non-empty ones).
