@@ -474,13 +474,13 @@
                     <p class="text-[11px] mb-2" style="color: var(--text-muted);">
                         What's on the payslip before tax and other deductions — not take-home pay.
                     </p>
-                    <div class="space-y-2">
+                    <div class="space-y-2" x-ref="incomeRows">
                         <template x-for="(item, index) in incomeItems" :key="index">
                             <div class="flex items-center gap-1.5">
                                 <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Salary"
-                                       x-model="item.description" @input="onIncomeRowInput()" @blur="save()">
+                                       x-model="item.description" @input="onIncomeRowInput(false)" @blur="save()">
                                 <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
-                                       x-model="item.amount" @input="onIncomeRowInput()" @blur="save()">
+                                       data-role="amount" x-model="item.amount" @input="onIncomeRowInput(true)" @blur="save()">
                             </div>
                         </template>
                     </div>
@@ -505,13 +505,13 @@
                 </div>
                 <div>
                     <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Expenses / existing debt</label>
-                    <div class="space-y-2">
+                    <div class="space-y-2" x-ref="expenseRows">
                         <template x-for="(item, index) in expenseItems" :key="index">
                             <div class="flex items-center gap-1.5">
                                 <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Car payment"
-                                       x-model="item.description" @input="onExpenseRowInput()" @blur="save()">
+                                       x-model="item.description" @input="onExpenseRowInput(false)" @blur="save()">
                                 <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
-                                       x-model="item.amount" @input="onExpenseRowInput()" @blur="save()">
+                                       data-role="amount" x-model="item.amount" @input="onExpenseRowInput(true)" @blur="save()">
                             </div>
                         </template>
                     </div>
@@ -684,22 +684,47 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
         },
         // Removes any blank row that isn't the last one (how an agent
         // "deletes" a row — clear both its fields), then guarantees exactly
-        // one blank trailing row is always available to type into.
+        // one blank trailing row is always available to type into. Returns
+        // true only on the call that actually pushed a fresh row, so the
+        // caller can react exactly once, not on every subsequent keystroke
+        // into that new row.
         compactAndEnsureTrailing(list) {
             for (let i = list.length - 2; i >= 0; i--) {
                 if (this.rowIsBlank(list[i])) list.splice(i, 1);
             }
             if (!list.length || !this.rowIsBlank(list[list.length - 1])) {
                 list.push({ id: null, description: '', amount: '' });
+                return true;
             }
+            return false;
         },
-        onIncomeRowInput() {
-            this.compactAndEnsureTrailing(this.incomeItems);
+        // 2026-09-08 — Johan, live on QA1: "added values in right hand
+        // panel totals do not populate." Root cause, found on the real
+        // record: the typed amounts had landed in the DESCRIPTION column,
+        // amount left null — an agent racing down a bank statement, typing
+        // one amount after another, has no reason to click/tab into each
+        // new row's amount box specifically; a new row appearing next to
+        // whatever they're already doing is not the same as the cursor
+        // actually being IN that row's amount field. Fixed by moving focus
+        // there automatically the instant a fresh row appears — but ONLY
+        // when the AMOUNT field is what triggered the row (fromAmountField),
+        // never the description field, so someone deliberately typing a
+        // longer description never has their cursor ripped away mid-word.
+        onIncomeRowInput(fromAmountField) {
+            const added = this.compactAndEnsureTrailing(this.incomeItems);
+            if (added && fromAmountField) this.focusLastAmountField('incomeRows');
             this.save();
         },
-        onExpenseRowInput() {
-            this.compactAndEnsureTrailing(this.expenseItems);
+        onExpenseRowInput(fromAmountField) {
+            const added = this.compactAndEnsureTrailing(this.expenseItems);
+            if (added && fromAmountField) this.focusLastAmountField('expenseRows');
             this.save();
+        },
+        focusLastAmountField(ref) {
+            this.$nextTick(() => {
+                const inputs = this.$refs[ref].querySelectorAll('[data-role="amount"]');
+                inputs[inputs.length - 1]?.focus();
+            });
         },
         // Sums exactly what the server will sum (RentalApplicationAssessment::
         // qualifyingResult() sums the same persisted amounts) — this MUST
@@ -802,46 +827,77 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
         saveStatus: initialSavedAt ? ('Saved at ' + formatTime(initialSavedAt)) : '',
         saveError: false,
         saveTimer: null,
+        // 2026-09-08 — the SECOND real bug behind "totals do not populate"
+        // on the live record: typing at real bank-statement-entry speed
+        // fires more than one debounced save before the first one's
+        // response comes back. Each of those in-flight requests still
+        // carries id: null for a row whose real id the FIRST request's
+        // response hasn't delivered yet, so the server (correctly, given
+        // what it was told) creates a SECOND new row and soft-deletes the
+        // first — over and over, one throwaway row per keystroke that
+        // outran the network, never a "the total went to zero" scenario
+        // by itself, but exactly the kind of hidden fragility that makes
+        // the field-focus bug above so easy to write off as isolated.
+        // Fixed by strict serialisation: never more than one save in
+        // flight; a save requested while one is already running is
+        // queued, not fired — and by the time the queued one actually
+        // goes out, the row ids from the request just ahead of it have
+        // already landed, so every row keeps the SAME database id across
+        // its whole edit history instead of leaving a trail of orphans.
+        saveInFlight: false,
+        saveQueued: false,
         save() {
             clearTimeout(this.saveTimer);
-            this.saveTimer = setTimeout(() => {
-                this.saveStatus = 'Saving…';
-                this.saveError = false;
-                // Capture the actual row OBJECTS being sent (not a copy) so
-                // the response's ids can be patched back onto them by
-                // position after the round trip, without disturbing any
-                // blank row the agent has started typing into since —
-                // wholesale-replacing the array here would drop that.
-                const sentIncomeRows = this.incomeItems.filter(r => !this.rowIsBlank(r));
-                const sentExpenseRows = this.expenseItems.filter(r => !this.rowIsBlank(r));
-                fetch(saveUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        income_items: sentIncomeRows,
-                        expense_items: sentExpenseRows,
-                        notes: this.fields.notes,
-                        statement_months: this.statementMonths,
-                    }),
-                }).then(r => r.json()).then(data => {
-                    if (data.ok) {
-                        this.result = data.result;
-                        (data.income_items || []).forEach((saved, i) => { if (sentIncomeRows[i]) sentIncomeRows[i].id = saved.id; });
-                        (data.expense_items || []).forEach((saved, i) => { if (sentExpenseRows[i]) sentExpenseRows[i].id = saved.id; });
-                        this.saveStatus = data.saved_at ? ('Saved at ' + formatTime(data.saved_at)) : 'Saved';
-                    } else {
-                        this.saveError = true;
-                        this.saveStatus = 'Could not save — try again';
-                    }
-                }).catch(() => {
+            this.saveTimer = setTimeout(() => this.performSave(), 150);
+        },
+        performSave() {
+            if (this.saveInFlight) {
+                this.saveQueued = true;
+                return;
+            }
+            this.saveInFlight = true;
+            this.saveStatus = 'Saving…';
+            this.saveError = false;
+            // Capture the actual row OBJECTS being sent (not a copy) so
+            // the response's ids can be patched back onto them by
+            // position after the round trip, without disturbing any
+            // blank row the agent has started typing into since —
+            // wholesale-replacing the array here would drop that.
+            const sentIncomeRows = this.incomeItems.filter(r => !this.rowIsBlank(r));
+            const sentExpenseRows = this.expenseItems.filter(r => !this.rowIsBlank(r));
+            fetch(saveUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    income_items: sentIncomeRows,
+                    expense_items: sentExpenseRows,
+                    notes: this.fields.notes,
+                    statement_months: this.statementMonths,
+                }),
+            }).then(r => r.json()).then(data => {
+                if (data.ok) {
+                    this.result = data.result;
+                    (data.income_items || []).forEach((saved, i) => { if (sentIncomeRows[i]) sentIncomeRows[i].id = saved.id; });
+                    (data.expense_items || []).forEach((saved, i) => { if (sentExpenseRows[i]) sentExpenseRows[i].id = saved.id; });
+                    this.saveStatus = data.saved_at ? ('Saved at ' + formatTime(data.saved_at)) : 'Saved';
+                } else {
                     this.saveError = true;
-                    this.saveStatus = 'Could not save — check your connection';
-                });
-            }, 150);
+                    this.saveStatus = 'Could not save — try again';
+                }
+            }).catch(() => {
+                this.saveError = true;
+                this.saveStatus = 'Could not save — check your connection';
+            }).finally(() => {
+                this.saveInFlight = false;
+                if (this.saveQueued) {
+                    this.saveQueued = false;
+                    this.performSave();
+                }
+            });
         },
         formatR(v) {
             return v === null || v === undefined ? '—' : 'R ' + Number(v).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
