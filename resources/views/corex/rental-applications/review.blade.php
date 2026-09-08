@@ -1057,30 +1057,53 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
         // Shared by both the first-page load and the remaining-pages load —
         // converts saved marks (RASTER px) to DISPLAY px for the given page
         // indexes, once their images have actually laid out.
-        restoreSavedMarksForPages(pageIndexes) {
-            this.$nextTick(() => {
-                for (const pageIndex of pageIndexes) {
-                    const saved = this._savedByPage[String(pageIndex)] || this._savedByPage[pageIndex];
-                    if (!saved) continue;
-                    const page = this.pages.find(p => p.index === pageIndex);
-                    const img = document.querySelector('img.rah-page-img[data-page="' + pageIndex + '"]');
-                    if (!page || !img || !img.clientWidth) continue;
-                    const scaleX = img.clientWidth / page.width;
-                    const scaleY = img.clientHeight / page.height;
-                    saved.forEach(m => {
-                        if (m.type === 'note') {
-                            this.marks.push({ type: 'note', page: pageIndex, x: m.x * scaleX, y: m.y * scaleY, text: m.text, color: m.color || 'yellow' });
-                        } else {
-                            this.marks.push({
-                                type: 'highlight', page: pageIndex,
-                                points: (m.points || []).map(p => ({ x: p.x * scaleX, y: p.y * scaleY })),
-                                width: (m.width || 26) * scaleX,
-                                color: m.color || 'yellow',
-                            });
-                        }
-                    });
-                }
-            });
+        //
+        // 2026-09-08 — Johan: "added notes - they do not show on the
+        // document." Reproduced it, and it wasn't consistent — the same
+        // document, the same code, sometimes showed the notes and sometimes
+        // didn't. That's the signature of a race, not a logic bug, and it
+        // wasn't notes-specific: on the run where it failed, ALL of page 0's
+        // marks were missing — highlights included — not just the notes;
+        // page 0 just happened to be the only page in that document with
+        // any notes on it, so that's the only symptom he saw.
+        //
+        // Root cause: $nextTick() guarantees Alpine's OWN DOM mutation has
+        // been applied (the <img> tag exists with its src set) — it does
+        // NOT guarantee the browser has finished DECODING that image yet,
+        // and computing clientWidth/clientHeight for height:auto sizing
+        // requires the image's real intrinsic dimensions, which aren't
+        // available until decode finishes. Page 0's image is now delivered
+        // fast on purpose (the progressive-load fix from earlier tonight),
+        // which made this race easier to lose, not harder — restoration
+        // for page 0 can now genuinely run before the browser has decoded
+        // it. Fixed with img.decode() — a real Promise that resolves only
+        // once decoding is actually complete, not a longer wait or a
+        // guess.
+        async restoreSavedMarksForPages(pageIndexes) {
+            for (const pageIndex of pageIndexes) {
+                const saved = this._savedByPage[String(pageIndex)] || this._savedByPage[pageIndex];
+                if (!saved) continue;
+                await this.$nextTick();
+                const img = document.querySelector('img.rah-page-img[data-page="' + pageIndex + '"]');
+                if (!img) continue;
+                try { if (img.decode) await img.decode(); } catch (_) {} // decode() can reject on a since-removed <img> (fast document switching) — fall through to the clientWidth guard below either way
+                const page = this.pages.find(p => p.index === pageIndex);
+                if (!page || !img.clientWidth) continue;
+                const scaleX = img.clientWidth / page.width;
+                const scaleY = img.clientHeight / page.height;
+                saved.forEach(m => {
+                    if (m.type === 'note') {
+                        this.marks.push({ type: 'note', page: pageIndex, x: m.x * scaleX, y: m.y * scaleY, text: m.text, color: m.color || 'yellow' });
+                    } else {
+                        this.marks.push({
+                            type: 'highlight', page: pageIndex,
+                            points: (m.points || []).map(p => ({ x: p.x * scaleX, y: p.y * scaleY })),
+                            width: (m.width || 26) * scaleX,
+                            color: m.color || 'yellow',
+                        });
+                    }
+                });
+            }
         },
         async closeHighlighter() {
             // Same explicit-confirm rule as openHighlighter() above — "Done"
