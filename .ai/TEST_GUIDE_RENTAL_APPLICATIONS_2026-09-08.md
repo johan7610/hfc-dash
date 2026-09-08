@@ -47,13 +47,16 @@ Applications**.
   and only then sees the Submit Application button — it sits below the
   documents on purpose, so nothing gets submitted before the documents
   are attached.
-- **Contact email — please confirm this is what you want.** If a contact
-  has no email on file and you type one on the application, saving it
-  now fills in the contact's own email too. But if the contact already
-  has an email of their own and you type a different one on the
-  application, the contact's own email is left as it was — it does not
-  get updated to match. We're not sure which of those two you meant when
-  you asked for this, so please test both and tell us which is right.
+- **Contact email.** If the contact has no email on record, the email
+  the agent types on the application is saved onto the contact. If the
+  contact already has a different email, the contact is left alone — the
+  application keeps the new address, but the contact's own record is not
+  overwritten.
+  > **A question for you:** at the moment an agent can't accidentally
+  > overwrite a contact's real email address by typing a different one
+  > on an application — the contact only gets filled in if it was blank.
+  > If you'd rather the contact always update to whatever the agent
+  > types, say so and we'll change it.
 
 ### The agent review screen
 - From **Returned Applications**, click **Review** on any row.
