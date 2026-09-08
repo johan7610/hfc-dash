@@ -587,6 +587,18 @@ Route::middleware(['auth:sanctum', 'app_access'])->group(function () {
             Route::delete('/{contact}/drive/{document}',         [MobileContactComplianceController::class, 'driveDestroy'])->name('v1.mobile.contacts.drive.destroy');
 
             Route::get('/{contact}/fica', [MobileContactComplianceController::class, 'ficaIndex'])->name('v1.mobile.contacts.fica.index');
+
+            // Notes & Testimonials — same tables/rules as the web Contact
+            // "Notes & Testimonials" tab. Spec: .ai/specs/contact-notes-testimonials.md
+            Route::get('/{contact}/notes',           [\App\Http\Controllers\Api\MobileContactNotesController::class, 'notesIndex'])->name('v1.mobile.contacts.notes.index');
+            Route::post('/{contact}/notes',          [\App\Http\Controllers\Api\MobileContactNotesController::class, 'notesStore'])->name('v1.mobile.contacts.notes.store');
+            Route::put('/{contact}/notes/{note}',    [\App\Http\Controllers\Api\MobileContactNotesController::class, 'notesUpdate'])->name('v1.mobile.contacts.notes.update');
+            Route::delete('/{contact}/notes/{note}', [\App\Http\Controllers\Api\MobileContactNotesController::class, 'notesDestroy'])->name('v1.mobile.contacts.notes.destroy');
+
+            Route::get('/{contact}/testimonials',                       [\App\Http\Controllers\Api\MobileContactNotesController::class, 'testimonialsIndex'])->name('v1.mobile.contacts.testimonials.index');
+            Route::post('/{contact}/testimonials',                      [\App\Http\Controllers\Api\MobileContactNotesController::class, 'testimonialsStore'])->name('v1.mobile.contacts.testimonials.store');
+            Route::put('/{contact}/testimonials/{testimonial}',         [\App\Http\Controllers\Api\MobileContactNotesController::class, 'testimonialsUpdate'])->name('v1.mobile.contacts.testimonials.update');
+            Route::delete('/{contact}/testimonials/{testimonial}',      [\App\Http\Controllers\Api\MobileContactNotesController::class, 'testimonialsDestroy'])->name('v1.mobile.contacts.testimonials.destroy');
         });
 
         // ── Mobile Core Matches ─────────────────────────────────────
