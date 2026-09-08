@@ -65,14 +65,60 @@
             <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
                 <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Agent's Assessment</h2>
                 <p class="text-xs mb-3" style="color: var(--text-muted);">Read-only — captured by the submitting agent.</p>
-                <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mb-3">
-                    <dt style="color: var(--text-muted);">Gross monthly income</dt><dd>{{ $assessment->monthly_income !== null ? 'R ' . number_format($assessment->monthly_income, 2) : '—' }}</dd>
-                    <dt style="color: var(--text-muted);">Other gross monthly income</dt><dd>{{ $assessment->other_monthly_income !== null ? 'R ' . number_format($assessment->other_monthly_income, 2) : '—' }}</dd>
-                    <dt style="color: var(--text-muted);">Monthly expenses / existing debt</dt><dd>{{ $assessment->monthly_expenses !== null ? 'R ' . number_format($assessment->monthly_expenses, 2) : '—' }}</dd>
-                </dl>
-                {{-- 2026-09-08 — the rule, stated as the law states it: rent
-                     must not exceed {max_rent_percent}% of GROSS income.
-                     Not a multiplier of rent (the same arithmetic wearing a
+                {{-- 2026-09-08 — Johan, application 9: "now all the work the
+                     agent did is nowhere to be found on the auth screen -
+                     no values from the right hand panel." Root cause: this
+                     block still referenced $assessment->monthly_income /
+                     other_monthly_income / monthly_expenses — three columns
+                     that no longer exist on the model (Round 9 replaced them
+                     with the growable incomeItems()/expenseItems() lines,
+                     see the model's own docblock). Eloquent returns null for
+                     an unknown attribute rather than erroring, so every row
+                     here silently showed "—" instead of a real figure — no
+                     error, nothing to notice, exactly why this got missed.
+                     The controller was already passing the right data
+                     ($assessment, $result via qualifyingResult()); only this
+                     view was stale. Rebuilt to show every line the agent
+                     actually captured — the authoriser is deciding on a
+                     person's home from this, not a display nicety. --}}
+                <div class="text-xs mb-3">
+                    <p style="color: var(--text-muted);">Number of months this bank statement covers</p>
+                    <p class="font-semibold" style="color: var(--text-primary);">{{ $assessment->statement_months ?? '—' }}</p>
+                </div>
+                <div class="text-xs mb-3">
+                    <p class="font-medium mb-1" style="color: var(--text-secondary);">Income (gross, before deductions)</p>
+                    @forelse($assessment->incomeItems as $item)
+                        <div class="flex items-center justify-between py-0.5">
+                            <span style="color: var(--text-primary);">{{ $item->description ?: '(no description)' }}</span>
+                            <span style="color: var(--text-primary);">R {{ number_format($item->amount, 2) }}</span>
+                        </div>
+                    @empty
+                        <p style="color: var(--text-muted);">Nothing captured yet.</p>
+                    @endforelse
+                    @if($result && $result['total_captured_income'] !== null)
+                        <p class="mt-1" style="color: var(--text-secondary);">Total captured: <strong>R {{ number_format($result['total_captured_income'], 2) }}</strong></p>
+                        @if($result['gross_income'] !== null)
+                            <p style="color: var(--text-secondary);">Monthly average (÷ {{ $result['statement_months'] }} months — used in the affordability check below): <strong>R {{ number_format($result['gross_income'], 2) }}</strong></p>
+                        @endif
+                    @endif
+                </div>
+                <div class="text-xs mb-3">
+                    <p class="font-medium mb-1" style="color: var(--text-secondary);">Expenses / existing debt</p>
+                    @forelse($assessment->expenseItems as $item)
+                        <div class="flex items-center justify-between py-0.5">
+                            <span style="color: var(--text-primary);">{{ $item->description ?: '(no description)' }}</span>
+                            <span style="color: var(--text-primary);">R {{ number_format($item->amount, 2) }}</span>
+                        </div>
+                    @empty
+                        <p style="color: var(--text-muted);">Nothing captured.</p>
+                    @endforelse
+                    @if($result && $result['total_captured_expenses'] !== null)
+                        <p class="mt-1" style="color: var(--text-secondary);">Total captured: <strong>R {{ number_format($result['total_captured_expenses'], 2) }}</strong></p>
+                    @endif
+                </div>
+                {{-- The rule, stated as the law states it: rent must not
+                     exceed {max_rent_percent}% of GROSS income. Not a
+                     multiplier of rent (the same arithmetic wearing a
                      disguise). --}}
                 @if($result && $result['label'] !== 'incomplete')
                     <div class="rounded-md p-3" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px solid var(--border);">
@@ -80,6 +126,10 @@
                         <p class="text-sm">Gross income R{{ number_format($result['gross_income'], 2) }} — rent must not exceed {{ rtrim(rtrim(number_format($result['max_rent_percent'], 2), '0'), '.') }}% of this (R{{ number_format($result['max_affordable_rent'], 2) }}). Actual rent (R{{ number_format($result['rent'], 2) }}) is {{ $result['rent_as_percent_of_gross'] }}% of gross income.
                             <span class="ds-badge" :class="'{{ $result['meets_threshold'] ? 'ds-badge-success' : 'ds-badge-warning' }}'">{{ $result['meets_threshold'] ? 'Within the affordability guideline' : 'Exceeds the affordability guideline' }}</span>
                         </p>
+                    </div>
+                @elseif($result)
+                    <div class="rounded-md p-3 text-xs" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px solid var(--border); color: var(--text-muted);">
+                        Not enough captured yet to run the affordability guideline (needs both income and the number of months).
                     </div>
                 @endif
                 @if($assessment->notes)

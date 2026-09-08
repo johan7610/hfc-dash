@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\CoreX;
 
+use App\Http\Controllers\Concerns\HandlesRentalApplicationDocumentMarks;
 use App\Http\Controllers\Controller;
 use App\Models\Document;
 use App\Models\RentalApplication;
@@ -40,8 +41,24 @@ use Illuminate\View\View;
  */
 class RentalApplicationAuthorisationController extends Controller
 {
+    use HandlesRentalApplicationDocumentMarks;
+
     /** Mime types the browser can render natively — mirrors RentalApplicationReviewController exactly. */
     private const INLINE_VIEWABLE_MIME_PREFIXES = ['application/pdf', 'image/'];
+
+    /**
+     * Fulfils HandlesRentalApplicationDocumentMarks's guard requirement.
+     * 2026-09-08 — Johan: "the auth should be able to write on the docs as
+     * well making notes etc." Deliberately guardCanView(), not
+     * guardCanDecide() — marking up a document is not itself a decision,
+     * and an RO/CO who can see the application can mark it up regardless
+     * of whether they're the one who'll end up deciding it.
+     */
+    protected function guardDocumentMarkAccess(RentalApplication $rentalApplication, Document $document): void
+    {
+        $this->guardCanView($rentalApplication);
+        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
+    }
 
     /**
      * @return array{tier: string, is_override: bool}
