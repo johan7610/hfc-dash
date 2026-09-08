@@ -24,6 +24,9 @@
 <div class="w-full"
      x-data="rentalAuthorisationViewer({
          initialMarkedUpDocIds: {{ Js::from($initialMarkedUpDocIds) }},
+         currentUserId: {{ Js::from(auth()->id()) }},
+         currentUserName: {{ Js::from(auth()->user()->name) }},
+         currentUserRole: 'authoriser',
      })">
 
     <div class="rounded-md px-6 py-4 corex-page-banner flex items-center justify-between">
@@ -82,76 +85,156 @@
                 </dl>
             </div>
 
-            <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
+            <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);"
+                 x-data="rentalAssessmentEditor({
+                     incomeItems: {{ Js::from($assessment->incomeItems->map(fn ($i) => ['id'=>$i->id,'description'=>$i->description,'amount'=>(float)$i->amount,'struck_out'=>$i->isStruckOut(),'added_by_authoriser'=>$i->added_by_user_id!==null])) }},
+                     expenseItems: {{ Js::from($assessment->expenseItems->map(fn ($i) => ['id'=>$i->id,'description'=>$i->description,'amount'=>(float)$i->amount,'struck_out'=>$i->isStruckOut(),'added_by_authoriser'=>$i->added_by_user_id!==null])) }},
+                     addIncomeUrl: {{ Js::from(route('corex.rental-applications.authorisation.assessment.income-items.store', $rentalApplication)) }},
+                     addExpenseUrl: {{ Js::from(route('corex.rental-applications.authorisation.assessment.expense-items.store', $rentalApplication)) }},
+                     incomeItemUrl: {{ Js::from(url('corex/rental-applications/authorisation/' . $rentalApplication->id . '/assessment/income-items')) }},
+                     expenseItemUrl: {{ Js::from(url('corex/rental-applications/authorisation/' . $rentalApplication->id . '/assessment/expense-items')) }},
+                     statementMonths: {{ Js::from($assessment->statement_months) }},
+                     maxRentPercent: {{ Js::from($maxRentPercent) }},
+                     rent: {{ Js::from($rentalApplication->current_rental_amount !== null ? (float) $rentalApplication->current_rental_amount : null) }},
+                 })">
                 <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Agent's Assessment</h2>
-                <p class="text-xs mb-3" style="color: var(--text-muted);">Read-only — captured by the submitting agent.</p>
                 {{-- 2026-09-08 — Johan, application 9: "now all the work the
                      agent did is nowhere to be found on the auth screen -
-                     no values from the right hand panel." Root cause: this
-                     block still referenced $assessment->monthly_income /
-                     other_monthly_income / monthly_expenses — three columns
-                     that no longer exist on the model (Round 9 replaced them
-                     with the growable incomeItems()/expenseItems() lines,
-                     see the model's own docblock). Eloquent returns null for
-                     an unknown attribute rather than erroring, so every row
-                     here silently showed "—" instead of a real figure — no
-                     error, nothing to notice, exactly why this got missed.
-                     The controller was already passing the right data
-                     ($assessment, $result via qualifyingResult()); only this
-                     view was stale. Rebuilt to show every line the agent
-                     actually captured — the authoriser is deciding on a
-                     person's home from this, not a display nicety. --}}
+                     no values from the right hand panel." Fixed (see the
+                     commit history on this block). This round: Johan — "so
+                     the auth can verify working through the doc... they can
+                     add / edit / remove (remove im thinking is just a
+                     strike out tick - which leaves the amount there but
+                     removes it from the calcs)... it is an audit trail, not
+                     a display choice." Struck lines stay rendered
+                     (line-through, muted) and drop out of the live total
+                     computed client-side below — the server-side total in
+                     RentalApplicationAssessment::qualifyingResult() already
+                     excludes them the same way (single source of truth for
+                     "what counts": struck_out_at, checked in both places). --}}
+                <p class="text-xs mb-3" style="color: var(--text-muted);">Captured by the agent. You can add your own lines, edit a value, or strike one out — a struck line stays visible with a reason it doesn't count, it never just disappears.</p>
                 <div class="text-xs mb-3">
                     <p style="color: var(--text-muted);">Number of months this bank statement covers</p>
                     <p class="font-semibold" style="color: var(--text-primary);">{{ $assessment->statement_months ?? '—' }}</p>
                 </div>
-                <div class="text-xs mb-3">
+
+                <div class="text-xs mb-4">
                     <p class="font-medium mb-1" style="color: var(--text-secondary);">Income (gross, before deductions)</p>
-                    @forelse($assessment->incomeItems as $item)
-                        <div class="flex items-center justify-between py-0.5">
-                            <span style="color: var(--text-primary);">{{ $item->description ?: '(no description)' }}</span>
-                            <span style="color: var(--text-primary);">R {{ number_format($item->amount, 2) }}</span>
+                    <template x-if="incomeItems.length === 0"><p style="color: var(--text-muted);">Nothing captured yet.</p></template>
+                    <template x-for="item in incomeItems" :key="item.id">
+                        <div class="flex items-center justify-between py-1 gap-2" :style="{ opacity: item.struck_out ? '0.6' : '1' }">
+                            <span class="flex items-center gap-1.5 min-w-0">
+                                <span x-show="item.added_by_authoriser" class="ds-badge ds-badge-info" style="font-size:9px; padding:1px 4px;" title="Added by the authoriser">Auth</span>
+                                <template x-if="editingItem !== ('income-' + item.id)">
+                                    <span :style="{ textDecoration: item.struck_out ? 'line-through' : 'none' }" style="color: var(--text-primary);" x-text="item.description || '(no description)'"></span>
+                                </template>
+                                <template x-if="editingItem === ('income-' + item.id)">
+                                    <input type="text" x-model="editDescription" class="corex-input text-xs" style="width:140px;" placeholder="Description">
+                                </template>
+                            </span>
+                            <span class="flex items-center gap-2 flex-shrink-0">
+                                <template x-if="editingItem !== ('income-' + item.id)">
+                                    <span :style="{ textDecoration: item.struck_out ? 'line-through' : 'none' }" style="color: var(--text-primary);" x-text="'R ' + formatAmount(item.amount)"></span>
+                                </template>
+                                <template x-if="editingItem === ('income-' + item.id)">
+                                    <input type="text" inputmode="decimal" x-model="editAmount" class="corex-input text-xs" style="width:80px;">
+                                </template>
+                                <template x-if="editingItem === ('income-' + item.id)">
+                                    <span class="flex items-center gap-1">
+                                        <button type="button" class="text-xs font-semibold" style="color: var(--ds-blue, #2563eb);" @click="saveEdit('income', item)">Save</button>
+                                        <button type="button" class="text-xs" style="color: var(--text-muted);" @click="editingItem = null">Cancel</button>
+                                    </span>
+                                </template>
+                                <template x-if="editingItem !== ('income-' + item.id)">
+                                    <span class="flex items-center gap-1">
+                                        <button type="button" class="text-xs" style="color: var(--text-muted);" @click="startEdit('income', item)">Edit</button>
+                                        <button type="button" class="text-xs" :style="{ color: item.struck_out ? 'var(--ds-emerald, #059669)' : 'var(--ds-crimson, #dc2626)' }" @click="toggleStrike('income', item)" x-text="item.struck_out ? 'Restore' : 'Strike out'"></button>
+                                    </span>
+                                </template>
+                            </span>
                         </div>
-                    @empty
-                        <p style="color: var(--text-muted);">Nothing captured yet.</p>
-                    @endforelse
-                    @if($result && $result['total_captured_income'] !== null)
-                        <p class="mt-1" style="color: var(--text-secondary);">Total captured: <strong>R {{ number_format($result['total_captured_income'], 2) }}</strong></p>
-                        @if($result['gross_income'] !== null)
-                            <p style="color: var(--text-secondary);">Monthly average (÷ {{ $result['statement_months'] }} months — used in the affordability check below): <strong>R {{ number_format($result['gross_income'], 2) }}</strong></p>
-                        @endif
-                    @endif
+                    </template>
+                    <div class="flex items-center gap-2 pt-2 mt-1" style="border-top: 1px dashed var(--border);">
+                        <input type="text" x-model="newIncomeDescription" placeholder="Description" class="corex-input text-xs" style="width:140px;">
+                        <input type="text" inputmode="decimal" x-model="newIncomeAmount" placeholder="0.00" class="corex-input text-xs" style="width:80px;">
+                        <button type="button" class="text-xs font-semibold" style="color: var(--ds-blue, #2563eb);" :disabled="!newIncomeAmount" @click="addItem('income')">+ Add income line</button>
+                    </div>
+                    <p class="mt-2" style="color: var(--text-secondary);">Total (struck-out lines excluded): <strong x-text="'R ' + formatAmount(incomeTotal())"></strong></p>
+                    <p style="color: var(--text-secondary);" x-show="statementMonths">Monthly average (÷ <span x-text="statementMonths"></span> months — used in the affordability check below): <strong x-text="'R ' + formatAmount(grossIncome())"></strong></p>
                 </div>
+
                 <div class="text-xs mb-3">
                     <p class="font-medium mb-1" style="color: var(--text-secondary);">Expenses / existing debt</p>
-                    @forelse($assessment->expenseItems as $item)
-                        <div class="flex items-center justify-between py-0.5">
-                            <span style="color: var(--text-primary);">{{ $item->description ?: '(no description)' }}</span>
-                            <span style="color: var(--text-primary);">R {{ number_format($item->amount, 2) }}</span>
+                    <template x-if="expenseItems.length === 0"><p style="color: var(--text-muted);">Nothing captured.</p></template>
+                    <template x-for="item in expenseItems" :key="item.id">
+                        <div class="flex items-center justify-between py-1 gap-2" :style="{ opacity: item.struck_out ? '0.6' : '1' }">
+                            <span class="flex items-center gap-1.5 min-w-0">
+                                <span x-show="item.added_by_authoriser" class="ds-badge ds-badge-info" style="font-size:9px; padding:1px 4px;" title="Added by the authoriser">Auth</span>
+                                <template x-if="editingItem !== ('expense-' + item.id)">
+                                    <span :style="{ textDecoration: item.struck_out ? 'line-through' : 'none' }" style="color: var(--text-primary);" x-text="item.description || '(no description)'"></span>
+                                </template>
+                                <template x-if="editingItem === ('expense-' + item.id)">
+                                    <input type="text" x-model="editDescription" class="corex-input text-xs" style="width:140px;" placeholder="Description">
+                                </template>
+                            </span>
+                            <span class="flex items-center gap-2 flex-shrink-0">
+                                <template x-if="editingItem !== ('expense-' + item.id)">
+                                    <span :style="{ textDecoration: item.struck_out ? 'line-through' : 'none' }" style="color: var(--text-primary);" x-text="'R ' + formatAmount(item.amount)"></span>
+                                </template>
+                                <template x-if="editingItem === ('expense-' + item.id)">
+                                    <input type="text" inputmode="decimal" x-model="editAmount" class="corex-input text-xs" style="width:80px;">
+                                </template>
+                                <template x-if="editingItem === ('expense-' + item.id)">
+                                    <span class="flex items-center gap-1">
+                                        <button type="button" class="text-xs font-semibold" style="color: var(--ds-blue, #2563eb);" @click="saveEdit('expense', item)">Save</button>
+                                        <button type="button" class="text-xs" style="color: var(--text-muted);" @click="editingItem = null">Cancel</button>
+                                    </span>
+                                </template>
+                                <template x-if="editingItem !== ('expense-' + item.id)">
+                                    <span class="flex items-center gap-1">
+                                        <button type="button" class="text-xs" style="color: var(--text-muted);" @click="startEdit('expense', item)">Edit</button>
+                                        <button type="button" class="text-xs" :style="{ color: item.struck_out ? 'var(--ds-emerald, #059669)' : 'var(--ds-crimson, #dc2626)' }" @click="toggleStrike('expense', item)" x-text="item.struck_out ? 'Restore' : 'Strike out'"></button>
+                                    </span>
+                                </template>
+                            </span>
                         </div>
-                    @empty
-                        <p style="color: var(--text-muted);">Nothing captured.</p>
-                    @endforelse
-                    @if($result && $result['total_captured_expenses'] !== null)
-                        <p class="mt-1" style="color: var(--text-secondary);">Total captured: <strong>R {{ number_format($result['total_captured_expenses'], 2) }}</strong></p>
-                    @endif
+                    </template>
+                    <div class="flex items-center gap-2 pt-2 mt-1" style="border-top: 1px dashed var(--border);">
+                        <input type="text" x-model="newExpenseDescription" placeholder="Description" class="corex-input text-xs" style="width:140px;">
+                        <input type="text" inputmode="decimal" x-model="newExpenseAmount" placeholder="0.00" class="corex-input text-xs" style="width:80px;">
+                        <button type="button" class="text-xs font-semibold" style="color: var(--ds-blue, #2563eb);" :disabled="!newExpenseAmount" @click="addItem('expense')">+ Add expense line</button>
+                    </div>
+                    <p class="mt-2" style="color: var(--text-secondary);">Total (struck-out lines excluded): <strong x-text="'R ' + formatAmount(expenseTotal())"></strong></p>
                 </div>
+                <div x-show="itemError" x-cloak class="text-xs mb-3 rounded-md px-2 py-1.5" style="background: var(--ds-crimson-soft, #fef2f2); color: var(--ds-crimson, #dc2626);" x-text="itemError"></div>
                 {{-- The rule, stated as the law states it: rent must not
                      exceed {max_rent_percent}% of GROSS income. Not a
                      multiplier of rent (the same arithmetic wearing a
-                     disguise). --}}
-                @if($result && $result['label'] !== 'incomplete')
+                     disguise). Live, client-side — Johan's test: "watch the
+                     total change" when a line is struck. Recomputed with
+                     the exact same arithmetic as
+                     RentalApplicationAssessment::qualifyingResult() (see
+                     rentalAssessmentEditor() below); the server re-derives
+                     the authoritative figure independently once marks are
+                     saved, this is the same rule shown live, not a second
+                     source of truth. --}}
+                <template x-if="statementMonths && incomeTotal() > 0">
                     <div class="rounded-md p-3" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px solid var(--border);">
                         <p class="text-[11px] font-semibold uppercase tracking-wide mb-1" style="color: var(--text-muted);">Suggested check — not a rule</p>
-                        <p class="text-sm">Gross income R{{ number_format($result['gross_income'], 2) }} — rent must not exceed {{ rtrim(rtrim(number_format($result['max_rent_percent'], 2), '0'), '.') }}% of this (R{{ number_format($result['max_affordable_rent'], 2) }}). Actual rent (R{{ number_format($result['rent'], 2) }}) is {{ $result['rent_as_percent_of_gross'] }}% of gross income.
-                            <span class="ds-badge" :class="'{{ $result['meets_threshold'] ? 'ds-badge-success' : 'ds-badge-warning' }}'">{{ $result['meets_threshold'] ? 'Within the affordability guideline' : 'Exceeds the affordability guideline' }}</span>
+                        <p class="text-sm">
+                            Gross income <span x-text="'R' + formatAmount(grossIncome())"></span> — rent must not exceed <span x-text="trimPercent(maxRentPercent)"></span>% of this (<span x-text="'R' + formatAmount(maxAffordableRent())"></span>).
+                            <template x-if="rent !== null">
+                                <span>Actual rent (<span x-text="'R' + formatAmount(rent)"></span>) is <span x-text="rentAsPercent()"></span>% of gross income.
+                                <span class="ds-badge" :class="meetsThreshold() ? 'ds-badge-success' : 'ds-badge-warning'" x-text="meetsThreshold() ? 'Within the affordability guideline' : 'Exceeds the affordability guideline'"></span></span>
+                            </template>
                         </p>
                     </div>
-                @elseif($result)
+                </template>
+                <template x-if="!(statementMonths && incomeTotal() > 0)">
                     <div class="rounded-md p-3 text-xs" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px solid var(--border); color: var(--text-muted);">
                         Not enough captured yet to run the affordability guideline (needs both income and the number of months).
                     </div>
-                @endif
+                </template>
                 @if($assessment->notes)
                     <p class="text-xs mt-3 whitespace-pre-wrap" style="color: var(--text-primary);">{{ $assessment->notes }}</p>
                 @endif
@@ -209,10 +292,17 @@
                                             <button type="button" class="text-xs px-2 py-1 rounded-md" @click="activeTool = 'note'"
                                                     :style="{ border:'1px solid var(--border)', background: activeTool === 'note' ? 'var(--ds-blue-soft, #eff6ff)' : 'transparent', fontWeight: activeTool === 'note' ? '700' : '400' }">Note</button>
                                         </div>
+                                        {{-- Category picker, 2026-09-08 — Johan-approved six-colour
+                                             scheme: the authoriser picks WHAT this mark is (Income,
+                                             Expense, Unpaid), not a raw colour. The authoriser's own
+                                             marks render in the DARKER shade of that category (role
+                                             = treatment) — the same category the agent picked reads
+                                             as a lighter shade of the same hue on their own marks. --}}
                                         <div class="flex items-center gap-1">
-                                            <template x-for="c in colors" :key="c.key">
-                                                <button type="button" :title="c.label" @click="activeColor = c.key"
-                                                        :style="{ width:'16px', height:'16px', borderRadius:'9999px', background: c.css, cursor:'pointer', border: activeColor === c.key ? '2px solid var(--text-primary,#111)' : '1px solid rgba(0,0,0,0.2)' }"></button>
+                                            <template x-for="c in categories" :key="c.key">
+                                                <button type="button" class="text-xs px-2 py-1 rounded-md" @click="activeCategory = c.key"
+                                                        :style="{ border: '1px solid var(--border)', background: activeCategory === c.key ? fillFor({category: c.key, authorRole: currentUserRole}) : 'transparent', fontWeight: activeCategory === c.key ? '700' : '400', borderBottom: activeCategory === c.key ? ('3px solid ' + markPalette[c.key].underline) : '1px solid var(--border)' }"
+                                                        x-text="c.label"></button>
                                             </template>
                                         </div>
                                         <div class="flex items-center gap-1" x-show="activeTool === 'highlight'">
@@ -238,77 +328,7 @@
                                         <button type="button" class="corex-btn-outline text-xs" @click="closeHighlighter()">Done</button>
                                     </div>
 
-                                    <template x-if="loading">
-                                        <p class="text-sm py-4" style="color: var(--text-secondary);">Loading document…</p>
-                                    </template>
-                                    <template x-if="loadError">
-                                        <p class="text-sm py-4" style="color: var(--ds-crimson, #dc2626);" x-text="loadError"></p>
-                                    </template>
-                                    <p class="text-xs py-2" style="color: var(--text-muted);" x-show="!loading && !loadError">
-                                        <span x-show="activeTool === 'highlight'">Click and drag across the document, like a marker pen, to highlight.</span>
-                                        <span x-show="activeTool === 'note'">Click anywhere on the document to pin a note.</span>
-                                        Marks are saved for this document — anyone who opens it next sees the same marks.
-                                    </p>
-
-                                    <div class="flex items-center gap-2 text-xs py-2 px-3 rounded-md mb-2" x-show="pagesLoading" x-cloak
-                                         style="background: var(--ds-blue-soft, #eff6ff); color: var(--ds-blue, #2563eb);">
-                                        <span>Page 1 of <span x-text="totalPages"></span> shown — loading the remaining <span x-text="totalPages - pages.length"></span> pages. You can start marking up page 1 now.</span>
-                                    </div>
-
-                                    <div class="space-y-4 pt-2" x-show="!loading && !loadError">
-                                        <template x-for="page in pages" :key="page.index">
-                                            <div>
-                                                <div class="flex items-center justify-between mb-1">
-                                                    <span class="text-xs font-semibold" style="color: var(--text-muted);">Page <span x-text="page.index + 1"></span></span>
-                                                    <button type="button" class="text-xs" style="color: var(--ds-crimson, #dc2626);" @click="clearPage(page.index)">Clear marks on this page</button>
-                                                </div>
-                                                <div class="relative inline-block select-none" style="max-width:100%;">
-                                                    <img :src="page.data_uri" class="rah-page-img block" :data-page="page.index"
-                                                         style="max-width:100%; height:auto; border:1px solid var(--border);"
-                                                         draggable="false" @dragstart.prevent>
-                                                    <div class="absolute inset-0" style="cursor:crosshair; touch-action:none;"
-                                                         :data-page="page.index"
-                                                         @pointerdown.prevent="startDraw($event, page.index)"
-                                                         @pointermove.prevent="moveDraw($event, page.index)"
-                                                         @pointerup.prevent="endDraw($event, page.index)"
-                                                         @pointercancel.prevent="endDraw($event, page.index)"
-                                                         @dragstart.prevent>
-                                                        <svg class="absolute inset-0" style="pointer-events:none; width:100%; height:100%;"
-                                                             x-html="strokesSvgFor(page.index)"></svg>
-                                                        <template x-for="(mark, mi) in strokesFor(page.index)" :key="'r'+mi">
-                                                            <button type="button" title="Remove this mark"
-                                                                    @pointerdown.stop.prevent="removeMark(page.index, mi, 'highlight')"
-                                                                    :style="{ position:'absolute', left:(mark.points[0].x-9)+'px', top:(mark.points[0].y-9)+'px', width:'18px', height:'18px', borderRadius:'9999px', background:'#475569', color:'#fff', fontSize:'12px', lineHeight:'16px', textAlign:'center', border:'1px solid #fff', padding:'0', pointerEvents:'auto', cursor:'pointer' }">&times;</button>
-                                                        </template>
-                                                        <template x-for="(note, ni) in notesFor(page.index)" :key="'n'+ni">
-                                                            <div @pointerdown.stop :style="{ position:'absolute', left:note.x+'px', top:note.y+'px', transform:'translate(-50%,-50%)', pointerEvents:'auto' }">
-                                                                <div class="rounded-full" :style="{ width:'16px', height:'16px', background: colorCss(note.color), border:'2px solid #fff', boxShadow:'0 0 0 1px rgba(0,0,0,0.3)', cursor:'pointer' }"
-                                                                     @click="toggleNotePopover(page.index, ni)"></div>
-                                                                <div x-show="openNote && openNote.page === page.index && openNote.index === ni" x-cloak
-                                                                     class="rounded-md p-2 text-xs" style="position:absolute; top:20px; left:0; width:220px; background: var(--surface); border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10;">
-                                                                    <p class="mb-2" style="white-space:pre-wrap; color: var(--text-primary);" x-text="note.text"></p>
-                                                                    <div class="flex justify-end gap-2">
-                                                                        <button type="button" style="color: var(--ds-crimson, #dc2626);" @click="removeMark(page.index, ni, 'note')">Remove</button>
-                                                                        <button type="button" style="color: var(--text-muted);" @click="openNote = null">Close</button>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </template>
-                                                        <div x-show="pendingNote && pendingNote.page === page.index" x-cloak @pointerdown.stop
-                                                             :style="{ position:'absolute', left:(pendingNote ? pendingNote.x : 0)+'px', top:(pendingNote ? pendingNote.y : 0)+'px', transform:'translate(-50%,-50%)', pointerEvents:'auto' }">
-                                                            <div class="rounded-md p-2" style="width:220px; background: var(--surface); border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                                                                <textarea x-model="pendingNoteText" rows="3" class="corex-input text-xs w-full" placeholder="Note text…" @click.stop :data-pending-note-page="page.index"></textarea>
-                                                                <div class="flex justify-end gap-2 mt-1">
-                                                                    <button type="button" class="text-xs" style="color: var(--text-muted);" @click.stop="pendingNote = null; pendingNoteText = ''">Cancel</button>
-                                                                    <button type="button" class="text-xs font-semibold" style="color: var(--ds-blue, #2563eb);" @click.stop="commitNote()">Add note</button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </div>
+                                    @include('corex.rental-applications.partials.document-highlighter-pages')
                                 </div>
                             </div>
                         @endforeach
@@ -403,10 +423,10 @@
 @include('corex.rental-applications.partials.document-highlighter-script')
 
 <script>
-function rentalAuthorisationViewer({ initialMarkedUpDocIds }) {
+function rentalAuthorisationViewer({ initialMarkedUpDocIds, currentUserId, currentUserName, currentUserRole }) {
     return {
         // Shared highlight/note viewer — see partials/document-highlighter-script.blade.php.
-        ...rentalDocumentHighlighter({ initialMarkedUpDocIds }),
+        ...rentalDocumentHighlighter({ initialMarkedUpDocIds, currentUserId, currentUserName, currentUserRole }),
 
         // Decision panel fields — unchanged from before this screen grew a document viewer.
         approveAmount: '',
@@ -416,6 +436,109 @@ function rentalAuthorisationViewer({ initialMarkedUpDocIds }) {
 
         init() {
             this.initHighlighterPrefs();
+        },
+    };
+}
+
+/**
+ * AT-392 authoriser markup, 2026-09-08 — add / edit / strike-out for the
+ * agent's captured income and expense lines. Johan: "remove im thinking is
+ * just a strike out tick - which leaves the amount there but removes it
+ * from the calcs... it is an audit trail, not a display choice." Every
+ * write round-trips to the server (the authoritative row) before the local
+ * copy is trusted — no optimistic-then-hope-it-saved state, same principle
+ * the document highlighter already uses.
+ */
+function rentalAssessmentEditor({ incomeItems, expenseItems, addIncomeUrl, addExpenseUrl, incomeItemUrl, expenseItemUrl, statementMonths, maxRentPercent, rent }) {
+    return {
+        incomeItems, expenseItems, statementMonths, maxRentPercent, rent,
+        newIncomeDescription: '', newIncomeAmount: '',
+        newExpenseDescription: '', newExpenseAmount: '',
+        editingItem: null, editDescription: '', editAmount: '',
+        itemError: '',
+
+        formatAmount(v) {
+            return (Number(v) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        },
+        trimPercent(v) {
+            return String(Number(v)).replace(/\.?0+$/, '');
+        },
+        liveTotal(list) {
+            return list.filter(i => !i.struck_out).reduce((sum, i) => sum + Number(i.amount || 0), 0);
+        },
+        incomeTotal() { return this.liveTotal(this.incomeItems); },
+        expenseTotal() { return this.liveTotal(this.expenseItems); },
+        grossIncome() {
+            if (!this.statementMonths) return 0;
+            return Math.round((this.incomeTotal() / this.statementMonths) * 100) / 100;
+        },
+        maxAffordableRent() {
+            return Math.round(this.grossIncome() * (this.maxRentPercent / 100) * 100) / 100;
+        },
+        rentAsPercent() {
+            const g = this.grossIncome();
+            if (this.rent === null || !g) return '0';
+            return (Math.round((this.rent / g) * 1000) / 10).toString();
+        },
+        meetsThreshold() {
+            if (this.rent === null) return null;
+            return this.rent <= this.maxAffordableRent();
+        },
+
+        async postJson(url, method, body) {
+            this.itemError = '';
+            try {
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': @js(csrf_token()), 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) {
+                    this.itemError = (data && data.message) ? data.message : 'Could not save — please try again.';
+                    return null;
+                }
+                return data.item;
+            } catch (e) {
+                this.itemError = 'Could not save — please try again.';
+                return null;
+            }
+        },
+
+        async addItem(kind) {
+            const isIncome = kind === 'income';
+            const description = isIncome ? this.newIncomeDescription : this.newExpenseDescription;
+            const amount = isIncome ? this.newIncomeAmount : this.newExpenseAmount;
+            if (!amount) return;
+            const item = await this.postJson(isIncome ? addIncomeUrl : addExpenseUrl, 'POST', { description, amount });
+            if (!item) return;
+            (isIncome ? this.incomeItems : this.expenseItems).push(item);
+            if (isIncome) { this.newIncomeDescription = ''; this.newIncomeAmount = ''; }
+            else { this.newExpenseDescription = ''; this.newExpenseAmount = ''; }
+        },
+
+        startEdit(kind, item) {
+            this.editingItem = kind + '-' + item.id;
+            this.editDescription = item.description || '';
+            this.editAmount = String(item.amount);
+        },
+
+        async saveEdit(kind, item) {
+            const isIncome = kind === 'income';
+            const updated = await this.postJson(`${isIncome ? incomeItemUrl : expenseItemUrl}/${item.id}`, 'PUT', {
+                description: this.editDescription, amount: this.editAmount,
+            });
+            if (!updated) return;
+            item.description = updated.description;
+            item.amount = updated.amount;
+            this.editingItem = null;
+        },
+
+        async toggleStrike(kind, item) {
+            const isIncome = kind === 'income';
+            const updated = await this.postJson(`${isIncome ? incomeItemUrl : expenseItemUrl}/${item.id}/strike`, 'POST', {});
+            if (!updated) return;
+            item.struck_out = updated.struck_out;
         },
     };
 }

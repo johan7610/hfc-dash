@@ -98,9 +98,13 @@ class RentalApplicationAssessment extends Model
      */
     public function qualifyingResult(float $maxRentPercent): array
     {
-        $incomeItems = $this->incomeItems;
+        // Struck-out lines stay in the rendered list (Johan: "leaves the
+        // amount there but removes it from the calcs") — excluded HERE,
+        // in the total, never from the collection itself.
+        $incomeItems = $this->incomeItems->reject(fn ($item) => $item->isStruckOut());
+        $expenseItems = $this->expenseItems->reject(fn ($item) => $item->isStruckOut());
         $totalIncome = $incomeItems->isEmpty() ? null : (float) $incomeItems->sum('amount');
-        $totalExpenses = (float) $this->expenseItems->sum('amount');
+        $totalExpenses = (float) $expenseItems->sum('amount');
 
         $months = $this->statement_months;
         $hasValidMonths = $months !== null && $months > 0;

@@ -8,6 +8,8 @@ use App\Models\Document;
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationAssessment;
 use App\Models\RentalApplicationDocumentHighlight;
+use App\Models\RentalApplicationExpenseItem;
+use App\Models\RentalApplicationIncomeItem;
 use App\Models\RentalApplicationQualifyingSetting;
 use App\Models\RentalApplicationStatusHistory;
 use App\Models\User;
@@ -58,6 +60,12 @@ class RentalApplicationAuthorisationController extends Controller
     {
         $this->guardCanView($rentalApplication);
         $this->guardDocumentBelongsToApplication($rentalApplication, $document);
+    }
+
+    /** Every mark this controller's save creates is stamped 'authoriser' — this is the authorisation screen. */
+    protected function markAuthorRole(): string
+    {
+        return 'authoriser';
     }
 
     /**
@@ -318,6 +326,180 @@ class RentalApplicationAuthorisationController extends Controller
 
         return redirect()->route('corex.rental-applications.authorisation.index')
             ->with('success', 'Sent back to the agent for more information.');
+    }
+
+    /**
+     * AT-392 authoriser markup, 2026-09-08 — Johan, verbatim: "so the auth
+     * can highlight in own colour, auth what agent did and edit... so on
+     * this the agent captured what they saw on the right panel. now the
+     * auth can verify working through the doc... now the auth can highlight
+     * in own colour, auth what agent did and edit."
+     *
+     * guardCanView(), not guardCanDecide() — verifying/annotating the
+     * assessment is not itself a decision, same reasoning already used for
+     * guardDocumentMarkAccess() above. Every write here is logged to the
+     * SAME audit trail the approve/decline/request-more-info actions use —
+     * an authoriser's change to what the agent captured is exactly the kind
+     * of fact that trail exists to hold.
+     */
+    public function addIncomeItem(Request $request, RentalApplication $rentalApplication, RentalApplicationAuditService $audit)
+    {
+        return $this->addAssessmentItem($request, $rentalApplication, $audit, RentalApplicationIncomeItem::class, 'income');
+    }
+
+    public function addExpenseItem(Request $request, RentalApplication $rentalApplication, RentalApplicationAuditService $audit)
+    {
+        return $this->addAssessmentItem($request, $rentalApplication, $audit, RentalApplicationExpenseItem::class, 'expense');
+    }
+
+    private function addAssessmentItem(Request $request, RentalApplication $rentalApplication, RentalApplicationAuditService $audit, string $modelClass, string $kind)
+    {
+        $this->guardCanView($rentalApplication);
+
+        $validated = $request->validate([
+            'description' => ['nullable', 'string', 'max:255'],
+            'amount' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
+        ]);
+
+        $assessment = RentalApplicationAssessment::firstOrCreate(
+            ['rental_application_id' => $rentalApplication->id],
+            ['agency_id' => $rentalApplication->agency_id],
+        );
+
+        $maxSort = $modelClass::where('rental_application_assessment_id', $assessment->id)->max('sort_order');
+
+        $item = $modelClass::create([
+            'agency_id' => $rentalApplication->agency_id,
+            'rental_application_assessment_id' => $assessment->id,
+            'description' => $validated['description'] ?? null,
+            'amount' => $validated['amount'],
+            'sort_order' => ($maxSort ?? -1) + 1,
+            'added_by_user_id' => $request->user()->id,
+        ]);
+
+        $audit->log(
+            $rentalApplication,
+            eventCategory: 'authorisation',
+            eventType: 'assessment_item_added',
+            user: $request->user(),
+            newValues: ['kind' => $kind, 'description' => $item->description, 'amount' => (string) $item->amount],
+            humanSummary: "Added a {$kind} line: " . ($item->description ?: '(no description)') . ' — R' . number_format((float) $item->amount, 2),
+        );
+
+        return response()->json(['ok' => true, 'item' => $this->serializeItem($item, $request->user())]);
+    }
+
+    public function updateIncomeItem(Request $request, RentalApplication $rentalApplication, RentalApplicationIncomeItem $item, RentalApplicationAuditService $audit)
+    {
+        return $this->updateAssessmentItem($request, $rentalApplication, $item, $audit, 'income');
+    }
+
+    public function updateExpenseItem(Request $request, RentalApplication $rentalApplication, RentalApplicationExpenseItem $item, RentalApplicationAuditService $audit)
+    {
+        return $this->updateAssessmentItem($request, $rentalApplication, $item, $audit, 'expense');
+    }
+
+    /**
+     * Edit — Johan's third verb alongside add/remove. Any line is editable
+     * (the agent's own capture included), but an edit to a line the
+     * AUTHORISER did not add is logged with the before/after value, the
+     * same audit-trail principle strike-out gets — a quietly changed figure
+     * is exactly what this trail exists to prevent.
+     */
+    private function updateAssessmentItem(Request $request, RentalApplication $rentalApplication, $item, RentalApplicationAuditService $audit, string $kind)
+    {
+        $this->guardCanView($rentalApplication);
+        $this->guardItemBelongsToApplication($rentalApplication, $item);
+
+        $validated = $request->validate([
+            'description' => ['nullable', 'string', 'max:255'],
+            'amount' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
+        ]);
+
+        $oldDescription = $item->description;
+        $oldAmount = (string) $item->amount;
+        $wasAgentLine = $item->added_by_user_id === null;
+
+        $item->description = $validated['description'] ?? null;
+        $item->amount = $validated['amount'];
+        $item->save();
+
+        if ($wasAgentLine && ($oldAmount !== (string) $item->amount || $oldDescription !== $item->description)) {
+            $audit->log(
+                $rentalApplication,
+                eventCategory: 'authorisation',
+                eventType: 'assessment_item_edited',
+                user: $request->user(),
+                oldValues: ['kind' => $kind, 'description' => $oldDescription, 'amount' => $oldAmount],
+                newValues: ['kind' => $kind, 'description' => $item->description, 'amount' => (string) $item->amount],
+                humanSummary: "Edited an agent-captured {$kind} line: " . ($oldDescription ?: '(no description)')
+                    . ' — R' . number_format((float) $oldAmount, 2) . ' → R' . number_format((float) $item->amount, 2),
+            );
+        }
+
+        return response()->json(['ok' => true, 'item' => $this->serializeItem($item, $request->user())]);
+    }
+
+    public function toggleStrikeIncomeItem(Request $request, RentalApplication $rentalApplication, RentalApplicationIncomeItem $item, RentalApplicationAuditService $audit)
+    {
+        return $this->toggleStrikeAssessmentItem($request, $rentalApplication, $item, $audit, 'income');
+    }
+
+    public function toggleStrikeExpenseItem(Request $request, RentalApplication $rentalApplication, RentalApplicationExpenseItem $item, RentalApplicationAuditService $audit)
+    {
+        return $this->toggleStrikeAssessmentItem($request, $rentalApplication, $item, $audit, 'expense');
+    }
+
+    /**
+     * "Remove" — Johan, verbatim: "remove im thinking is just a strike out
+     * tick - which leaves the amount there but removes it from the calcs...
+     * it shows the authoriser disagreed with a specific line rather than
+     * the figure quietly vanishing. It is an audit trail, not a display
+     * choice." Never a delete, never SoftDeletes — struck_out_at/by stay on
+     * the row, RentalApplicationAssessment::qualifyingResult() excludes a
+     * struck line from the total while every view still renders it.
+     * Toggle, not one-way — an authoriser can un-strike a line they struck
+     * in error, same as un-hiding a property on a Core Match wishlist.
+     */
+    private function toggleStrikeAssessmentItem(Request $request, RentalApplication $rentalApplication, $item, RentalApplicationAuditService $audit, string $kind)
+    {
+        $this->guardCanView($rentalApplication);
+        $this->guardItemBelongsToApplication($rentalApplication, $item);
+
+        $nowStriking = $item->struck_out_at === null;
+        $item->struck_out_at = $nowStriking ? now() : null;
+        $item->struck_out_by_user_id = $nowStriking ? $request->user()->id : null;
+        $item->save();
+
+        $audit->log(
+            $rentalApplication,
+            eventCategory: 'authorisation',
+            eventType: $nowStriking ? 'assessment_item_struck' : 'assessment_item_unstruck',
+            user: $request->user(),
+            newValues: ['kind' => $kind, 'description' => $item->description, 'amount' => (string) $item->amount],
+            humanSummary: ($nowStriking ? 'Struck out a ' : 'Restored a ') . "{$kind} line: " . ($item->description ?: '(no description)') . ' — R' . number_format((float) $item->amount, 2),
+        );
+
+        return response()->json(['ok' => true, 'item' => $this->serializeItem($item, $request->user())]);
+    }
+
+    private function guardItemBelongsToApplication(RentalApplication $rentalApplication, $item): void
+    {
+        abort_unless(
+            (int) $item->assessment->rental_application_id === (int) $rentalApplication->id,
+            404
+        );
+    }
+
+    private function serializeItem($item, User $viewer): array
+    {
+        return [
+            'id' => $item->id,
+            'description' => $item->description,
+            'amount' => (float) $item->amount,
+            'struck_out' => $item->struck_out_at !== null,
+            'added_by_authoriser' => $item->added_by_user_id !== null,
+        ];
     }
 
     /**

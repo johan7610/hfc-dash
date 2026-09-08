@@ -21,7 +21,7 @@ class RentalApplicationDocumentHighlight extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'agency_id', 'document_id', 'marks_json', 'highlighted_file_path', 'updated_by_user_id',
+        'agency_id', 'document_id', 'marks_json', 'marks_version', 'highlighted_file_path', 'updated_by_user_id',
     ];
 
     protected $casts = [

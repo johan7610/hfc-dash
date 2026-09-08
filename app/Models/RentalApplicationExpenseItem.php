@@ -19,15 +19,33 @@ class RentalApplicationExpenseItem extends Model
 
     protected $fillable = [
         'agency_id', 'rental_application_assessment_id', 'description', 'amount', 'sort_order',
+        'struck_out_at', 'struck_out_by_user_id', 'added_by_user_id',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'sort_order' => 'integer',
+        'struck_out_at' => 'datetime',
     ];
 
     public function assessment(): BelongsTo
     {
         return $this->belongsTo(RentalApplicationAssessment::class, 'rental_application_assessment_id');
+    }
+
+    public function struckOutBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'struck_out_by_user_id');
+    }
+
+    public function addedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'added_by_user_id');
+    }
+
+    /** Johan: struck out ≠ deleted — stays visible, drops out of the total. */
+    public function isStruckOut(): bool
+    {
+        return $this->struck_out_at !== null;
     }
 }
