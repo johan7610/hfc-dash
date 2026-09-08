@@ -71,9 +71,19 @@
                  one short line of text. --}}
             <template x-if="activeDocId === null">
                 <div class="flex items-center gap-2 flex-wrap justify-end">
+                    {{-- 2026-09-08 — Johan: "request more info only appears if
+                         a document is not open... I have to write down
+                         somewhere else because its only available once the
+                         doc is closed." The header prompt() was still a
+                         version of that same mistake — reachable only when
+                         no document was open, and even once open it was a
+                         one-line interruption, not somewhere he could
+                         actually compose a real request while reading. Moved
+                         to the aside (see below) — always visible, a real
+                         textarea, never covered by a document. "Submit to
+                         authoriser" stays here: a single decisive click once
+                         he's ready, not something composed while reading. --}}
                     @unless(in_array($rentalApplication->status, ['approved', 'declined'], true))
-                        <button type="button" class="corex-btn-outline text-xs" :disabled="moreInfoSending"
-                                @click="promptRequestMoreInfo()" x-text="moreInfoSending ? 'Sending…' : 'Request more info from applicant'"></button>
                         <button type="button" class="corex-btn-primary text-xs" :disabled="submittingForApproval"
                                 @click="submitForApproval()" x-text="submittingForApproval ? 'Submitting…' : ({{ $isPendingAuthorisation ? 'true' : 'false' }} ? 'Re-submit to authoriser' : 'Submit to authoriser')"></button>
                     @endunless
@@ -95,6 +105,22 @@
                         <template x-for="c in colors" :key="c.key">
                             <button type="button" :title="c.label" @click="activeColor = c.key"
                                     :style="{ width:'16px', height:'16px', borderRadius:'9999px', background: c.css, cursor:'pointer', border: activeColor === c.key ? '2px solid var(--text-primary,#111)' : '1px solid rgba(0,0,0,0.2)' }"></button>
+                        </template>
+                    </div>
+                    {{-- Highlighter size, 2026-09-08 — Johan: "we need a way
+                         to adjust the highlighter smaller or larger. current
+                         on highlights too much lines on bank statement -
+                         lines are small there." Three presets, not a slider
+                         — "medium" is today's unchanged default. Remembered
+                         in localStorage (set in init()) so it survives both
+                         switching documents in one sitting and coming back
+                         tomorrow, not just this page view. Only meaningful
+                         for the highlight tool — a note's marker size never
+                         varies. --}}
+                    <div class="flex items-center gap-1" x-show="!loading && !loadError && activeTool === 'highlight'">
+                        <template x-for="s in strokeSizes" :key="s.key">
+                            <button type="button" class="text-xs px-2 py-1 rounded-md" :title="s.label" @click="setStrokeSize(s.key)"
+                                    :style="{ border:'1px solid var(--border)', background: strokeSizeKey === s.key ? 'var(--ds-blue-soft, #eff6ff)' : 'transparent', fontWeight: strokeSizeKey === s.key ? '700' : '400' }" x-text="s.label"></button>
                         </template>
                     </div>
                     <div class="flex items-center gap-1" x-show="!loading && !loadError">
@@ -370,7 +396,7 @@
                                                         <div x-show="pendingNote && pendingNote.page === page.index" x-cloak @pointerdown.stop
                                                              :style="{ position:'absolute', left:(pendingNote ? pendingNote.x : 0)+'px', top:(pendingNote ? pendingNote.y : 0)+'px', transform:'translate(-50%,-50%)', pointerEvents:'auto' }">
                                                             <div class="rounded-md p-2" style="width:220px; background: var(--surface); border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                                                                <textarea x-model="pendingNoteText" rows="3" class="corex-input text-xs w-full" placeholder="Note text…" @click.stop x-ref="pendingNoteInput"></textarea>
+                                                                <textarea x-model="pendingNoteText" rows="3" class="corex-input text-xs w-full" placeholder="Note text…" @click.stop :data-pending-note-page="page.index"></textarea>
                                                                 <div class="flex justify-end gap-2 mt-1">
                                                                     <button type="button" class="text-xs" style="color: var(--text-muted);" @click.stop="pendingNote = null; pendingNoteText = ''">Cancel</button>
                                                                     <button type="button" class="text-xs font-semibold" style="color: var(--ds-blue, #2563eb);" @click.stop="commitNote()">Add note</button>
@@ -618,14 +644,37 @@
                     </div>
                 @endif
 
-                {{-- 2026-09-08 — the ACTIONS themselves moved to the sticky
-                     header (see the comment there). This is feedback only —
-                     the result of whichever header button the agent just
-                     used — so it stays here, next to the status it relates
-                     to, rather than adding a second place to look. --}}
+                {{-- Request more information, 2026-09-08 — Johan, verbatim:
+                     "request more info only appears if a document is not
+                     open... I have to write down somewhere else because its
+                     only available once the doc is closed?" and "the simple
+                     modal that loads on request extra info will not
+                     suffice. Allow a free text box - I can go and fill in
+                     numbered points." Both are the same underlying design
+                     mistake — the request lived somewhere that wasn't
+                     reachable, or wasn't sized for real writing, WHILE he
+                     was looking at the evidence he was writing about. Fixed
+                     by putting it here instead: the aside is never covered
+                     by an open document (same reason the highlighter went
+                     inline instead of a modal originally), so this is
+                     reachable and fillable the entire time a document is
+                     open. The draft surviving a document being opened or
+                     closed needs no extra code — `moreInfoNote` (bound
+                     below) was never part of openHighlighter()/
+                     closeHighlighter()'s reset list, so it was already
+                     independent of the document lifecycle; the fix here is
+                     purely that this UI now actually stays on screen to be
+                     typed into. rows="6" + a monospace-ish plain textarea
+                     preserves line breaks/numbering as typed — no
+                     reformatting on the way in, and the mail template
+                     already renders with white-space:pre-wrap so numbered
+                     points survive to the applicant unchanged (verified —
+                     see spec). --}}
                 @unless(in_array($rentalApplication->status, ['approved', 'declined'], true))
-                    <p class="text-xs" x-show="agentActionStatus" x-text="agentActionStatus" :style="agentActionError ? 'color: var(--ds-red, #dc2626);' : 'color: var(--ds-emerald, #059669);'"></p>
-                    <p class="text-xs" x-show="!agentActionStatus" style="color: var(--text-muted);">Use "Request more info from applicant" or "Submit to authoriser" in the header above.</p>
+                    <p class="text-xs font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Request more information</p>
+                    <textarea x-model="moreInfoNote" rows="6" class="corex-input text-xs w-full mb-2" placeholder="What do you need from the applicant? e.g.&#10;1. Three months' bank statements&#10;2. Payslip for August&#10;3. Proof of the R12,000 deposit on 14 August"></textarea>
+                    <button type="button" class="corex-btn-outline text-xs w-full" :disabled="moreInfoSending || !moreInfoNote.trim()" @click="requestMoreInfo()" x-text="moreInfoSending ? 'Sending…' : 'Send to applicant'"></button>
+                    <p class="text-xs mt-2" x-show="agentActionStatus" x-text="agentActionStatus" :style="agentActionError ? 'color: var(--ds-red, #dc2626);' : 'color: var(--ds-emerald, #059669);'"></p>
                 @endunless
             </div>
         </div>
@@ -649,6 +698,16 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
             });
             this.compactAndEnsureTrailing(this.incomeItems);
             this.compactAndEnsureTrailing(this.expenseItems);
+            // Highlighter size, 2026-09-08 — restore whatever size the
+            // agent last used, on THIS device, across documents and across
+            // sessions — not just this page view.
+            try {
+                const saved = localStorage.getItem('rahStrokeSizeKey');
+                if (saved && this.strokeSizes.some(s => s.key === saved)) {
+                    this.strokeSizeKey = saved;
+                    this.strokeWidth = this.strokeSizes.find(s => s.key === saved).px;
+                }
+            } catch (_) {} // localStorage unavailable (private browsing etc.) — default size is fine
         },
         // ── Income/expense line items — Round 9 (item 5). Johan: "filling
         // the last row auto-adds a fresh empty one, income and expenses
@@ -707,19 +766,6 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
         submittingForApproval: false,
         agentActionStatus: '',
         agentActionError: false,
-        // 2026-09-08 — the header button's own entry point. A native
-        // prompt() rather than a header-embedded textarea — this is a
-        // short line of text ("what do you need from the applicant"), and
-        // a prompt keeps the whole action, header button included, to one
-        // click without inventing a dropdown/popover for it.
-        promptRequestMoreInfo() {
-            const note = window.prompt('What do you need from the applicant?');
-            if (note === null) return; // cancelled — nothing sent, nothing lost
-            const trimmed = note.trim();
-            if (!trimmed) return;
-            this.moreInfoNote = trimmed;
-            this.requestMoreInfo();
-        },
         async requestMoreInfo() {
             if (this.moreInfoSending || !this.moreInfoNote.trim()) return;
             this.moreInfoSending = true;
@@ -865,7 +911,24 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
             { key: 'blue',   label: 'Blue',   css: '#5ac8fa' },
         ],
         activeColor: 'yellow',
+        // Highlighter size, 2026-09-08 — Johan: "current on highlights too
+        // much lines on bank statement - lines are small there." Three
+        // presets, not a slider. 'medium' (22) is the unchanged prior
+        // default, so nothing changes for an agent who never touches this.
+        strokeSizes: [
+            { key: 'thin',   label: 'Thin',   px: 10 },
+            { key: 'medium', label: 'Medium', px: 22 },
+            { key: 'thick',  label: 'Thick',  px: 36 },
+        ],
+        strokeSizeKey: 'medium',
         strokeWidth: 22,
+        setStrokeSize(key) {
+            const s = this.strokeSizes.find(s => s.key === key);
+            if (!s) return;
+            this.strokeSizeKey = key;
+            this.strokeWidth = s.px;
+            try { localStorage.setItem('rahStrokeSizeKey', key); } catch (_) {}
+        },
         drag: { active: false, page: null, points: [] },
         openNote: null,       // {page, index} — an existing note's popover open
         pendingNote: null,    // {page, x, y} — a new note being typed
@@ -1110,7 +1173,27 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
                 const x = e.clientX - r.left, y = e.clientY - r.top;
                 this.pendingNote = { page, x, y };
                 this.pendingNoteText = '';
-                this.$nextTick(() => this.$refs.pendingNoteInput && this.$refs.pendingNoteInput.focus());
+                // 2026-09-08 — cc1 caught this: focus silently never landed.
+                // Root cause found by re-testing exactly the way cc1 did (a
+                // real click, checking document.activeElement immediately,
+                // no manual click of my own in between — my earlier "proof"
+                // had quietly clicked the textarea myself before checking,
+                // which tested "can this element be focused" instead of
+                // "does opening a note focus it automatically", and masked
+                // the real bug). This markup lives inside x-for="page in
+                // pages" — one note textarea per loaded page, ALL sharing
+                // the ref name x-ref="pendingNoteInput". With N pages loaded,
+                // there were N elements answering to that one name, so
+                // $refs.pendingNoteInput resolved unreliably — not
+                // necessarily the page actually visible — and calling
+                // .focus() on a hidden (display:none) element does nothing,
+                // silently, no error. Fixed by never relying on a ref shared
+                // across loop iterations: query the ONE textarea tagged with
+                // THIS page's own index instead.
+                this.$nextTick(() => {
+                    const el = document.querySelector('textarea[data-pending-note-page="' + page + '"]');
+                    if (el) el.focus();
+                });
                 return;
             }
             if (!this.drag.active || this.drag.page !== page) return;
