@@ -2842,3 +2842,51 @@ RentalApplicationReviewController.php` (the completeness gate in
 `applyHighlight()`), `resources/views/corex/rental-applications/
 review.blade.php` (`applyHighlights()` now sends every loaded page, not
 just non-empty ones).
+
+---
+
+## The authorisation queue had no menu link (Johan, 2026-09-08)
+
+Same defect class the whole "Rentals" section was built to fix in the
+first place — a real screen an authoriser is entitled to reach existed,
+worked, and was already proven end-to-end, but nobody could actually get
+to it without already knowing its address. Johan's standing rule: every
+page gets a navigation entry, no exceptions, not something asked for
+after the fact.
+
+**Fixed in the one file that actually serves the menu** —
+`resources/views/layouts/corex-sidebar.blade.php` (confirmed by cc1
+earlier the same night as the served copy; nothing else edited).
+
+**Gate reuses the real check, not a new one.** Johan's own instruction:
+"do not invent a second, parallel check that can drift out of step with
+the real one." `RentalApplicationAuthorisationController::guardCanView()`
+enforces `isRentalApplicationRO() || isRentalApplicationCO()` — `User.php`
+already wraps that exact pair as `isRentalApplicationAuthoriser()`, so the
+new link is gated on that one call, nothing re-derived. The Rentals
+group's own outer visibility check (`hasAnyPermission(['rental_applications.view',
+'rental_applications.view_returned'])`) is widened with
+`|| $user->isRentalApplicationAuthoriser()` in the same edit — otherwise
+an authoriser who happens not to also hold either of those two
+permissions would qualify for the queue but never see the "Rentals"
+toggle that leads to it, the exact half-fixed shape this exists to avoid.
+
+**Proven over real HTTP** (a local dev server against the real database,
+real login, real session — not in-process, not by reading the blade),
+with a real Reviewer-tier user, a real Override-tier user, and a real
+plain agent with neither:
+- The Reviewer's and the Override's own real dashboard pages both contain
+  the "Rental Application Authorisation" link, with the correct address.
+- The plain agent's own real dashboard page contains it zero times —
+  confirmed the page still rendered a real, working sidebar for that
+  user (the other two Rentals links are present and counted), so the
+  absence is the gate working, not a broken page.
+- Following the link as the Reviewer lands on the real authorisation
+  screen: a real `200`, the correct page title, no error text anywhere
+  in the response.
+- The plain agent hitting that same screen's address directly (bypassing
+  the menu entirely) is refused with a real `403` — the existing,
+  already-proven server-side guard, unchanged by this fix; this fix only
+  stops the agent being shown a door they could never open.
+
+`php -l` clean. `php artisan view:clear` run after.
