@@ -157,7 +157,16 @@
             {{-- Approve --}}
             <div class="rounded-md p-3 mb-3" style="border: 1px solid var(--border);">
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Approve — monthly amount</label>
-                <input type="number" step="0.01" min="0" x-model="approveAmount" class="corex-input text-sm w-full mb-2" placeholder="0.00">
+                {{-- Johan, 2026-09-08 — "hitting the . on an amount clears the
+                     values". type="number" + x-model writes the browser's own
+                     parsed .value back into the field; a lone trailing "."
+                     doesn't parse as a number yet, so the write-back silently
+                     drops it mid-type. text + inputmode="decimal" gives the
+                     same numeric keyboard on mobile with none of that native
+                     parsing interference — the raw typed string passes
+                     through untouched; sanitizeNumericInput() on the server
+                     is the only place that ever interprets it. --}}
+                <input type="text" inputmode="decimal" x-model="approveAmount" class="corex-input text-sm w-full mb-2" placeholder="0.00">
                 <textarea x-model="approveReason" rows="2" class="corex-input text-xs w-full mb-2" placeholder="{{ $alreadyDecided ? 'Reason for override (required)' : 'Notes (optional)' }}"></textarea>
                 <form method="POST" action="{{ route('corex.rental-applications.authorisation.approve', $rentalApplication) }}" @submit="$refs.approveAmountField.value = approveAmount; $refs.approveReasonField.value = approveReason">
                     @csrf

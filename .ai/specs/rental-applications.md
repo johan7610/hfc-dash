@@ -3750,3 +3750,204 @@ new commits on top of `52a476910`. QA1 only — not merged into the shared
 `QA1` checkout, which cc1 is actively restoring with production-shaped
 data at the time of this round; will coordinate the actual QA1 landing
 once cc1 confirms QA1 is back up and clean.
+
+## Round 11 — SECOND regression on the decimal-point area, plus one-row-start rows and statement months (2026-09-08)
+
+Johan, urgent, blocking him mid-testing: "the comma rule is bust. everyone
+will enter amounts like 40638.40, the std that everyone uses. right now
+hitting the . on an amount clears the values, you have to use , - fix
+this." This is the second time this exact area (numeric money-field
+input) has broken; treated with the seriousness that implies.
+
+### Item 1 — root cause, found by driving the real screen, not guessing
+
+Reproduced with a real headless-browser session typing character by
+character into a real field: `type="number"` inputs bound with Alpine's
+`x-model` write the browser's own PARSED `.value` back into the DOM on
+every keystroke. A lone trailing "." does not parse as a valid number
+yet, so the browser's own `.value` silently omits it at that instant;
+Alpine's write-back then overwrites the field's real (still-being-typed)
+content with that dot-less value, visibly eating the "." the user just
+typed. Confirmed by typing "40638." character-by-character into the
+review screen's income field and reading `input.value` after every
+keystroke: it read "40638" (dot dropped) the instant "." was typed, then
+correctly returned to "40638.4" once a digit followed — proving the
+native input, not Alpine's own reactivity or the server, was the source.
+
+**Fix:** every money-amount field's `type="number"` replaced with
+`type="text" inputmode="decimal"` — the same numeric keyboard on mobile,
+zero native number-parsing interference. The raw typed string now passes
+through untouched; the server's sanitizer is the only place that ever
+interprets it. Changed:
+- `review.blade.php` — the income/expense row amount inputs
+- `authorisation/show.blade.php` — the approve-amount field
+- `rental-application-field.blade.php` — new optional `inputmode` prop
+- `corex/rental-applications/show.blade.php` / `rental-applications/public/show.blade.php`
+  — `current_rental_amount` and `monthly_salary`, via the component's new prop
+
+The settings percentage field (`type="number"`, no Alpine binding) was
+left as-is — it was never actually subject to this bug (no reactive
+write-back exists on that field) and isn't a Rand-and-cents value.
+
+### Item 1 — the disambiguation rule, exactly as Johan stated it
+
+`RentalApplication::sanitizeNumericInput()` rewritten. Old rule: strip
+every comma and space, leave dots alone — blind to "40638,40" (comma as
+decimal — some people do write it that way) looking identical in shape
+to "40,638" (comma as a thousands mark). Johan's own resolution,
+implemented literally: **the LAST separator (comma, dot, or space) is
+the decimal point ONLY when it is followed by exactly two digits and
+nothing else after it; every other separator, and a last separator NOT
+followed by exactly two digits, is a thousands mark and is stripped.**
+
+```php
+private static function disambiguateMoneyString(string $value): string
+{
+    $value = trim($value);
+    $value = preg_replace('/^R\s*/i', '', $value);
+
+    if (preg_match('/^(.*)[,.\s](\d{2})$/', $value, $matches)) {
+        $wholePart = preg_replace('/[,.\s]/', '', $matches[1]);
+        return $wholePart . '.' . $matches[2];
+    }
+
+    return preg_replace('/[,.\s]/', '', $value);
+}
+```
+
+Every one of Johan's stated formats resolves correctly: `40638.40`,
+`40,638.40`, `40 638.40`, `R40 638.40`, and `40638,40` all → `40638.40`;
+`40,638` → `40638` (a whole number, not four-oh-six-thirty-eight). Every
+existing Round 8 test case resolves identically to before (verified
+directly, not assumed).
+
+**Flagged rather than silently decided (per Johan's own instruction):**
+1. The qualifying-formula percentage field (`max_rent_percent_of_gross_income`)
+   is NOT run through this rule. A percentage like "28.5" has only ONE
+   digit after its decimal point — the rule would misread it as a
+   thousands-separated whole number ("285"). Percentages never carry a
+   thousands separator at all, so `RentalApplicationSettingsController::updateQualifyingFormula()`
+   now does a plain `trim()` instead of calling the money sanitizer.
+2. A value like "40638.4" (ONE digit after the last separator, not two)
+   resolves, by the letter of Johan's rule, to "406384" (thousands mark,
+   stripped) — not "40638.40" as a human dropping a trailing zero might
+   intend. This is what the stated rule produces for "40,638" (3 digits
+   after) too, so it's not a case the rule fails to resolve — but it's
+   counter-intuitive enough to flag explicitly rather than let it pass
+   unremarked.
+
+### Items 2 & 3 — one-row-start behaviour and the number-of-months field
+
+**Item 2 status:** already built correctly in Round 10 (one starting
+row per list, auto-adding a fresh one as the last is filled, live
+recalculating totals) — Johan had not yet seen it, since Round 10 was
+never merged into the shared QA1 checkout he tests against. Re-verified
+end to end after this round's `type="text"` change (see Verification).
+No design change was needed for item 2 itself.
+
+**Item 3 — built, deliberately NOT wired into the decision yet.** New
+`statement_months` column on `rental_application_assessments`
+(migration `2026_09_08_190000_add_statement_months_to_rental_application_assessments.php`),
+a "Number of months this bank statement covers" input above both lists,
+and `qualifyingResult()` now also returns `monthly_average_gross_income`
+and `monthly_average_expenses` (raw total ÷ months) — but `gross_income`
+and `meets_threshold` still run off the raw totals, unchanged. The
+screen shows the monthly average with an explicit "not yet used in the
+guideline check" badge next to it.
+
+**Johan's own question, and my reading, stated for confirmation before
+building further:** does the monthly average feed the affordability
+check directly, replacing the manually-typed/summed income? Johan's own
+stated view is yes — that is the whole point of capturing from a bank
+statement, and it is exactly the tenant's-claimed-income-vs-actual-income
+problem (his 10,000-vs-18,000 example) applied to a multi-month capture.
+**I agree with that reading and it is the more correct design** — a lump
+sum over an unstated number of months is not comparable to a monthly
+legal threshold, so the average is the only number that actually means
+anything against the 30%-of-gross rule. Once confirmed, wiring it in is
+a small, contained change: `qualifyingResult()` would use
+`monthlyAverageGrossIncome ?? $grossIncome` (falling back to the raw sum
+when no months are given, e.g. a payslip-style single-month capture)
+as the figure tested against `max_rent_percent`, rather than adding a
+second, parallel decision path.
+
+### Verification — real headless-browser session, real database, every stated format
+
+Following the same disposable-clone methodology as Round 10 (real QA1
+data cloned into an isolated `corex_qa1_bugfix_verify` database, real
+QA1 code, never touching the shared checkout or shared database — QA1
+had just been restored by cc1 at the time and a second lane was
+mid-build on the shared checkout, so the same "don't touch the shared
+resource" reasoning from Round 10 applied again). On a real application
+(id 4, real agency, real historical rent of R10,000):
+
+1. **Item 2** — confirmed the assessment starts as exactly ONE income
+   row on a fresh capture.
+2. **Item 1** — typed each of Johan's six formats, one at a time, into
+   the current last (blank) row, character by character, and read back
+   what actually landed in `rental_application_income_items.amount`:
+
+   | Typed | DB value | |
+   |---|---|---|
+   | `40638.40` | `40638.40` | PASS |
+   | `40,638.40` | `40638.40` | PASS |
+   | `40 638.40` | `40638.40` | PASS |
+   | `R40 638.40` | `40638.40` | PASS |
+   | `40638,40` | `40638.40` | PASS |
+   | `40,638` | `40638.00` | PASS |
+
+   All six PASS. The DOM value was also captured after every single
+   keystroke for each format — the "." was never dropped at any point
+   mid-typing, proving the fix at the source, not just at the final
+   submitted value.
+3. **Item 2 continued** — after the six entries, the row list correctly
+   held 6 filled rows + 1 trailing blank = 7; Alpine's own internal
+   `incomeTotal()` state read directly (243830) matched the database sum
+   (243830.00) and the server's own `qualifyingResult()` gross_income
+   (243830.00) exactly — three independent reads, one number.
+4. **Item 3** — typed "3" into the new months field; DB
+   `statement_months` correctly stored 3; the monthly-average display
+   showed R81,276.67 (243830 ÷ 3, verified by direct calculation) with
+   its "not yet used in the guideline check" badge visible; the
+   Suggested Check box's own gross income figure remained the RAW
+   243830 (not divided), confirming the decision genuinely does not use
+   the average yet.
+5. Also confirmed the authoriser's approve-amount field renders as
+   `type="text" inputmode="decimal"` (the same fix), by direct
+   inspection of the compiled view and a PHPUnit `assertSee` — a full
+   second browser session against that screen hit an unrelated 404
+   (route-model-binding scope issue in the disposable clone's data, not
+   this fix) and was not chased further given the identical, already-
+   proven mechanism and the time already spent; flagged here rather than
+   silently claimed as separately browser-verified.
+
+**Cleanup:** the disposable database, dump files, and the read-only
+`node_modules` symlink were all removed afterward. The real shared
+`corex_qa1` database and the shared `/corex-qa1` checkout were never
+touched.
+
+`tests/Feature/RentalApplications/RentalApplicationRound11DecimalAndStatementMonthsTest.php`
+(new) — every one of Johan's stated formats plus all pre-existing Round
+8 cases via a data provider, the "keystroke never wipes what's typed"
+guard, regression guards that the income/authoriser fields never revert
+to `type="number"`, the settings-percentage-field exclusion, and the
+full statement-months/monthly-average behaviour including the "does not
+yet affect the decision" proof. Full run across Rounds 8–11:
+40 tests, 40 passed, 133 assertions.
+
+### Files touched
+
+- `database/migrations/2026_09_08_190000_add_statement_months_to_rental_application_assessments.php` (new)
+- `app/Models/RentalApplication.php` — `sanitizeNumericInput()` rewritten to the disambiguation rule
+- `app/Models/RentalApplicationAssessment.php` — `statement_months` fillable/cast, `monthly_average_*` display fields in `qualifyingResult()`
+- `app/Http/Controllers/CoreX/RentalApplicationReviewController.php` — `statement_months` validation/persistence
+- `app/Http/Controllers/CoreX/RentalApplicationSettingsController.php` — percentage field no longer uses the money sanitizer
+- `resources/views/corex/rental-applications/review.blade.php` — `type="text"` money inputs, months field, monthly-average display
+- `resources/views/corex/rental-applications/authorisation/show.blade.php` — `type="text"` approve-amount field
+- `resources/views/components/rental-application-field.blade.php` — new `inputmode` prop
+- `resources/views/corex/rental-applications/show.blade.php` / `resources/views/rental-applications/public/show.blade.php` — money fields use the new prop
+- `tests/Feature/RentalApplications/RentalApplicationRound11DecimalAndStatementMonthsTest.php` (new)
+
+Branch: `rental-applications-affordability-2026-09-08` (continued). QA1
+only — still not merged into the shared `QA1` checkout; coordinating
+that landing separately given item 1's urgency.

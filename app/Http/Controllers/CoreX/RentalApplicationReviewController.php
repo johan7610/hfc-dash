@@ -177,6 +177,10 @@ class RentalApplicationReviewController extends Controller
             'expense_items.*.description' => ['nullable', 'string', 'max:255'],
             'expense_items.*.amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'notes' => ['nullable', 'string', 'max:5000'],
+            // Round 11 — Johan: "we have to ask the nr of months the bank
+            // statement is for." A bank statement's captured lines are a
+            // lump sum over this many months, not a monthly figure.
+            'statement_months' => ['nullable', 'integer', 'min:1', 'max:36'],
         ]);
 
         // A row the agent never filled in (no description, no amount) is the
@@ -192,6 +196,7 @@ class RentalApplicationReviewController extends Controller
             [
                 'agency_id' => $rentalApplication->agency_id,
                 'notes' => ($validated['notes'] ?? '') === '' ? null : ($validated['notes'] ?? null),
+                'statement_months' => ($validated['statement_months'] ?? '') === '' ? null : ($validated['statement_months'] ?? null),
                 'updated_by_user_id' => $request->user()->id,
             ],
         );

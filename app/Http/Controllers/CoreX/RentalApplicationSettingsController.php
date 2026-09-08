@@ -160,12 +160,15 @@ class RentalApplicationSettingsController extends Controller
     {
         $agencyId = $request->user()->effectiveAgencyId();
 
-        // RA-02 (cc5 re-test, Round 8) — same sanitizer as every other
-        // numeric money field on this feature.
-        $request->merge(RentalApplication::sanitizeNumericInput(
-            $request->only(['max_rent_percent_of_gross_income']),
-            ['max_rent_percent_of_gross_income'],
-        ));
+        // 2026-09-08 — deliberately NOT RentalApplication::sanitizeNumericInput().
+        // That sanitizer now applies Johan's own money-format disambiguation
+        // rule (last separator + exactly two digits = decimal point), which
+        // assumes a Rand-and-cents shape. A percentage like "28.5" has only
+        // ONE digit after its decimal point — that rule would misread it as
+        // a thousands-separated whole number ("285"). Percentages never
+        // carry a thousands separator in the first place, so a plain trim
+        // is the correct (and only needed) cleanup here.
+        $request->merge(['max_rent_percent_of_gross_income' => trim((string) $request->input('max_rent_percent_of_gross_income', ''))]);
 
         $validated = $request->validate([
             'max_rent_percent_of_gross_income' => ['required', 'numeric', 'min:0.1', 'max:100'],

@@ -25,7 +25,11 @@ class RentalApplicationAssessment extends Model
     use BelongsToAgency;
 
     protected $fillable = [
-        'agency_id', 'rental_application_id', 'notes', 'updated_by_user_id',
+        'agency_id', 'rental_application_id', 'notes', 'statement_months', 'updated_by_user_id',
+    ];
+
+    protected $casts = [
+        'statement_months' => 'integer',
     ];
 
     public function updatedBy(): BelongsTo
@@ -81,6 +85,20 @@ class RentalApplicationAssessment extends Model
         $totalExpenses = (float) $this->expenseItems->sum('amount');
         $netIncome = $grossIncome === null ? null : $grossIncome - $totalExpenses;
 
+        // Round 11 — Johan: "I keep capturing expenses and income and by
+        // what do I divide once ready to get a monthly avg? we have to ask
+        // the nr of months the bank statement is for." DISPLAY ONLY for
+        // now — deliberately does NOT feed gross_income/meets_threshold
+        // below until Johan confirms replacing the raw sum with this
+        // average is the actual decision he wants (his own stated view:
+        // yes, but he asked to confirm before it's wired in).
+        $monthlyAverageGrossIncome = ($grossIncome !== null && $this->statement_months)
+            ? round($grossIncome / $this->statement_months, 2)
+            : null;
+        $monthlyAverageExpenses = ($this->statement_months && $totalExpenses > 0)
+            ? round($totalExpenses / $this->statement_months, 2)
+            : null;
+
         $rentalApplication = $this->rentalApplication;
         $rent = $rentalApplication?->current_rental_amount !== null
             ? (float) $rentalApplication->current_rental_amount
@@ -99,6 +117,9 @@ class RentalApplicationAssessment extends Model
         return [
             'gross_income' => $grossIncome,
             'net_income' => $netIncome,
+            'statement_months' => $this->statement_months,
+            'monthly_average_gross_income' => $monthlyAverageGrossIncome,
+            'monthly_average_expenses' => $monthlyAverageExpenses,
             'rent' => $rent,
             'max_rent_percent' => $maxRentPercent,
             'max_affordable_rent' => $maxAffordableRent,

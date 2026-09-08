@@ -27,6 +27,7 @@
          saveUrl: '{{ route('corex.rental-applications.review.assessment', $rentalApplication) }}',
          initial: {
              notes: {{ Js::from($assessment->notes) }},
+             statement_months: {{ Js::from($assessment->statement_months) }},
          },
          initialIncomeItems: {{ Js::from($initialIncomeItems) }},
          initialExpenseItems: {{ Js::from($initialExpenseItems) }},
@@ -435,6 +436,24 @@
             </p>
 
             <div class="space-y-4">
+                {{-- Round 11 — Johan: "we have to ask the nr of months the
+                     bank statement is for... by what do I divide once
+                     ready to get a monthly avg?" A lump sum captured from a
+                     multi-month statement is meaningless for the
+                     affordability rule (which needs a MONTHLY gross
+                     figure) without this. Placed above both lists since it
+                     applies to the whole capture, not just income. --}}
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
+                        Number of months this bank statement covers
+                    </label>
+                    <input type="number" step="1" min="1" max="36" class="corex-input text-sm w-20"
+                           x-model="statementMonths" @blur="save()" placeholder="e.g. 3">
+                    <p class="text-[11px] mt-1" style="color: var(--text-muted);">
+                        Used to turn the totals below into a monthly average — leave blank if you're
+                        only capturing a single month.
+                    </p>
+                </div>
                 {{-- Round 9 (item 5) — Johan: "filling the last row auto-adds
                      a fresh empty one, income and expenses both, total
                      recalculating live." Growable lists, not fixed fields —
@@ -456,13 +475,22 @@
                             <div class="flex items-center gap-1.5">
                                 <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Salary"
                                        x-model="item.description" @input="onIncomeRowInput()" @blur="save()">
-                                <input type="number" step="0.01" min="0" class="corex-input text-sm w-24" placeholder="0.00"
+                                <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
                                        x-model="item.amount" @input="onIncomeRowInput()" @blur="save()">
                             </div>
                         </template>
                     </div>
                     <p class="text-xs mt-2" style="color: var(--text-secondary);">
                         Total gross income: <strong x-text="formatR(incomeTotal())"></strong>
+                    </p>
+                    {{-- Round 11 — DISPLAY ONLY. Does not feed the
+                         affordability decision below until Johan confirms
+                         replacing the raw total with this average is what
+                         he wants (his own stated view: yes — pending). --}}
+                    <p class="text-xs mt-1" x-show="statementMonths" style="color: var(--text-secondary);">
+                        Monthly average (÷ <span x-text="statementMonths"></span> months):
+                        <strong x-text="formatR(monthlyAverage(incomeTotal()))"></strong>
+                        <span class="ds-badge ds-badge-muted" style="margin-left: 4px;">not yet used in the guideline check</span>
                     </p>
                 </div>
                 <div>
@@ -472,13 +500,17 @@
                             <div class="flex items-center gap-1.5">
                                 <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Car payment"
                                        x-model="item.description" @input="onExpenseRowInput()" @blur="save()">
-                                <input type="number" step="0.01" min="0" class="corex-input text-sm w-24" placeholder="0.00"
+                                <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
                                        x-model="item.amount" @input="onExpenseRowInput()" @blur="save()">
                             </div>
                         </template>
                     </div>
                     <p class="text-xs mt-2" style="color: var(--text-secondary);">
                         Total expenses: <strong x-text="formatR(expenseTotal())"></strong>
+                    </p>
+                    <p class="text-xs mt-1" x-show="statementMonths" style="color: var(--text-secondary);">
+                        Monthly average (÷ <span x-text="statementMonths"></span> months):
+                        <strong x-text="formatR(monthlyAverage(expenseTotal()))"></strong>
                     </p>
                 </div>
                 <div>
@@ -657,6 +689,14 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
         expenseTotal() {
             return this.expenseItems.filter(r => !this.rowIsBlank(r)).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
         },
+        // Round 11 — display only (see the field's own comment above).
+        statementMonths: initial.statement_months ?? '',
+        monthlyAverage(total) {
+            const months = parseInt(this.statementMonths, 10);
+            if (!months || months < 1) return null;
+
+            return total / months;
+        },
         // ── Affordability assessment (unchanged) ──────────────────────────
         fields: initial,
         markedUpDocIds: initialMarkedUpDocIds || [],
@@ -763,6 +803,7 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
                         income_items: sentIncomeRows,
                         expense_items: sentExpenseRows,
                         notes: this.fields.notes,
+                        statement_months: this.statementMonths,
                     }),
                 }).then(r => r.json()).then(data => {
                     if (data.ok) {
