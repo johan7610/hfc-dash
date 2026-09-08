@@ -4072,3 +4072,218 @@ Branch: `rental-applications-affordability-2026-09-08` (continued). QA1
 only. cc1 was told the "hold" instruction changed and is confirming
 through their own coordinator channel before landing — not landed
 directly on my say-so.
+
+## Round 16 — full assessment panel redesign, rent source corrected to the linked property (2026-09-08)
+
+Johan approved a full redesign of the review screen's right-hand panel,
+specified block by block. His own words, condensed: "top down - income
+- fields where agent captures... split that block - desc half and
+amount half... display a total of the income captured. Then we have
+expenses... same as income... Then we need to add - unpaid amounts...
+we need the heading, the highlighter and a tick - unpaid transactions
+on bank statement... an applicant with declined transactions are
+generally immediately declined... Then we just show an info box -
+income * 30% = Rx... So we dont need a massive hooha." On the old
+panel's length: "you are putting a lot of text on the panel which
+makes the panel extremenly long. why not use the helper? and put the
+tooltip in there rather than having a hell of a lot of info."
+
+Four blocks, exactly as specified, nothing else:
+
+1. **Income (gross)** — description/amount split 50/50 via CSS Grid
+   (`grid grid-cols-2 gap-1.5`, not flexbox — see "Layout mechanism"
+   below), "Total captured" underneath.
+2. **Expenses** — identical structure, own total.
+3. **Unpaid transactions** — one heading, one tick
+   ("Unpaid transactions on statement"), not a list of amounts. This is
+   the red flag the authoriser (cc5's screen) reads.
+4. **One info box** — the qualifying rand figure large, the arithmetic
+   (gross income ÷ statement months × max %) in small type underneath.
+   Nothing else.
+
+Every explanatory paragraph the old panel carried is now a `?` tooltip
+(`<span class="ds-badge ds-badge-muted" title="...">?</span>`) next to
+its block's heading, collapsing the panel from a scroll of prose to a
+narrow working column.
+
+### Wording attribution (Johan caught this himself)
+
+The old panel implied CoreX itself had totalled the bank statement.
+Corrected: "Monthly gross income — from figures the agent captured off
+the bank statement, ÷ N months" for the derived figure, "Applicant's
+stated income — as entered by them on their application" for the
+comparison figure. Reason, Johan's own: "If a declined application is
+ever challenged, the record must show who asserted what" — the
+figures are attributed to whoever actually typed them, never
+attributed to the system.
+
+### The rent source was wrong — now corrected
+
+Johan: "the affordability check is currently testing the applicant's
+SELF-REPORTED CURRENT RENT, not the rent of the property being applied
+for" (surfaced when application 9 showed "No property linked" but the
+check still ran against `current_rental_amount` — the applicant's
+existing, pre-move residence, entirely irrelevant to whether they can
+afford the NEW property). His ruling: "you own what the check does
+with the rent once a property is linked. If no property is linked, the
+check must say it cannot run rather than testing the wrong number."
+
+`RentalApplicationAssessment::qualifyingResult()`: `rent` now sources
+from `$rentalApplication->property->rental_amount`, never
+`current_rental_amount`. New `property_linked` boolean returned
+explicitly. New `label` value `'no_property'` — the qualifying ceiling
+(`max_affordable_rent`) still computes and displays as soon as
+income+months exist (it's purely a function of captured income), but
+`meets_threshold`/`'sufficient'`/`'insufficient'` cannot exist without
+a real rent to compare against, so the screen says plainly why no
+pass/fail exists yet rather than silently showing nothing or falling
+back to the wrong number. `current_rental_amount` remains on the
+applicant's own form (their existing residence, still a legitimate
+field) — it simply plays no part in this calculation any more.
+
+Property-linking itself (the agent's control to attach a property to
+an application) is cc3's work on the same controller file, in a
+separate branch, landed alongside this one — non-overlapping methods,
+confirmed at coordination time.
+
+### Unpaid transactions flag
+
+New `has_unpaid_transactions` boolean column on
+`rental_application_assessments` (migration
+`2026_09_08_200000_add_has_unpaid_transactions_to_rental_application_assessments.php`).
+Surfaced as a single checkbox, autosaved like every other field on the
+panel. Deliberately NOT a list of amounts — Johan's instruction was one
+tick, one red flag, because "an applicant with declined transactions
+are generally immediately declined" and the point is visibility to the
+authoriser (cc5's screen — out of scope here), not detail capture.
+
+### Colour tokens — one definitive source
+
+Johan specified exact hex values for three categories (income,
+expense, unpaid), each with an agent-panel shade and a darker
+authoriser/highlighter shade plus an underline colour, so the same
+category reads consistently across the panel (this screen), the
+document highlighter (cc6), and the authoriser screen (cc5). Defined
+once in `resources/css/corex.css` as CSS custom properties
+(`--ra-income-agent` / `--ra-income-authoriser` / `--ra-income-underline`,
+and the `--ra-expense-*` / `--ra-unpaid-*` equivalents) so none of the
+three consuming screens redefines its own copy. Each panel block now
+carries a small colour dot in its category's agent shade next to its
+heading, so the link between the panel and the marks on the document
+is visible rather than remembered. Verified via
+`getComputedStyle(document.documentElement)` that all nine tokens
+resolve to the exact approved values, and that each dot's rendered
+`backgroundColor` matches exactly.
+
+### Net income — removed from display, not from the model
+
+Kept since Round 9/10 as "reference only, labelled unmistakably
+separate from the pass/fail badge" — not among Johan's four enumerated
+Round 16 blocks, and his "we dont need a massive hooha" instruction
+reads as a mandate to cut it. Removed from the panel entirely (still
+computed by `qualifyingResult()` — `net_income` stays in the returned
+array in case another screen needs it later — just no longer
+displayed here). Superseding judgement call, recorded here since the
+earlier round's decision to keep-and-label was itself deliberate.
+
+### A second focus-race, found before it reached Johan
+
+The Enter-driven row-advance from Round 13 (`focusNextAmountRow()`)
+wrapped the actual `.focus()` call in `this.$nextTick(() => {...})`.
+Under continuous, zero-delay scripted typing — three values typed with
+Enter between each, no pauses — the deferred callback could lose a
+race against the very next keystroke, landing it in the OLD field
+before the refocus completed. Reproduced exactly: typing "15000" then
+Enter then "8500" produced a single field reading "150008500" instead
+of two separate rows. Root cause: the target row is already
+synchronously created by an earlier, fully-completed `@input` event
+before the later `@keydown.enter` can even fire, so the deferral
+served no purpose and only introduced a timing window. Fixed by
+removing `$nextTick()` — the focus call now runs synchronously in the
+same handler. Re-verified: typing "15000", "8500", "2200" continuously
+with Enter between each produces exactly 4 rows (3 filled + 1 trailing
+blank), values `["15000","8500","2200",""]`, matching what the
+database shows — no orphans, no concatenation.
+
+### Layout mechanism — CSS Grid, not flexbox
+
+The original clipping bug (amount fields rendering off the panel's
+right edge) was `flex-1` + fixed-width competing for space inside a
+260px column with `overflow-x:hidden` — a `<input>`'s own default
+intrinsic content width wins the flex negotiation regardless of the
+`flex-1`/`w-24` sizing declared on it. Round 14 fixed this with a
+stacked (description-above-amount) layout; THIS round supersedes that
+with Johan's own explicit preference for a true 50/50 split
+(`grid grid-cols-2 gap-1.5`) — a grid column is always exactly half
+the row's width regardless of either input's own content, so the class
+of bug cannot recur at any panel width. The SAME bug class recurred
+once more in new markup this round (see next section) and was caught
+the same way — by measuring, not by reading the CSS.
+
+### Badge-overflow — the same bug class, caught before Johan saw it
+
+The info box's status badge originally combined the pass/fail label
+and the rent figure into one string
+(`"Exceeds guideline — property rent R 6 000,00"`) rendered inside a
+single-line `<span class="ds-badge">` — confirmed via screenshot to
+overflow the 260px panel exactly like the amount-field bug ("EXCEEDS
+GUIDELINE — PROPERTY REN" then cut off). Fixed by splitting into a
+short, never-wrapping badge ("Within guideline" / "Exceeds guideline"
+only) plus a separate `<p>` below it for "Property rent: R X,XXX.XX",
+which wraps normally like any other text block.
+
+### Verification
+
+Disposable isolated-database clone methodology (same as prior rounds —
+structure + specific real tables dumped via `mysqldump`, never touching
+the shared QA1 checkout or database), driven with Puppeteer against a
+real headless browser session:
+
+- **Widths**: panel and every amount field measured via
+  `getBoundingClientRect()` at 1024/1280/1366/1522/1920px — full
+  visible width at every size, confirmed by screenshot as well as
+  measurement, not CSS inspection alone.
+- **Continuous typing**: three income rows typed with zero artificial
+  delay, Enter between each, no clicking — exactly 3 filled + 1
+  trailing blank row, no concatenation, no duplication, no orphaned
+  rows; confirmed against the database directly.
+- **Unpaid checkbox**: ticked, autosaved, persisted and reloaded
+  correctly.
+- **Colour tokens**: all nine CSS custom properties and every colour
+  dot's rendered background verified to resolve to the exact approved
+  hex values.
+- **Property-state scenarios**: `'incomplete'` (no income/months yet),
+  `'no_property'` (income+months present, nothing linked — shows "Link
+  a property to check against its rent," never a wrong pass/fail),
+  `'sufficient'`/`'insufficient'` (property linked, badge + rent line
+  both render fully, no overflow) — all four states screenshotted.
+- **Automated regression**: `RentalApplicationRound9AffordabilityTest`,
+  `RentalApplicationRound10ReviewScreenTest`,
+  `RentalApplicationRound11DecimalAndStatementMonthsTest`,
+  `RentalApplicationAgentControllerTest`,
+  `RentalApplicationInputPreservationTest` — 43 tests, all passing,
+  against the project's own PHPUnit schema-snapshot test database (not
+  the manual walkthrough clone). Three pre-existing worked-example
+  tests in Rounds 9 and 11 needed updating: they had exercised the
+  affordability check via `current_rental_amount` on the application
+  itself, which the rent-source fix in this round makes irrelevant to
+  the decision — updated to link a `Property` with the matching
+  `rental_amount` instead, since that is now the correct way to set up
+  a "sufficient"/"insufficient" scenario at all.
+
+### Files touched
+
+- `app/Models/RentalApplicationAssessment.php` — `qualifyingResult()` rent source changed to `property.rental_amount`, new `property_linked` field, new `'no_property'` label state; `has_unpaid_transactions` added to `$fillable`/`$casts`
+- `app/Http/Controllers/CoreX/RentalApplicationReviewController.php` — `saveAssessment()` validates and persists `has_unpaid_transactions`
+- `database/migrations/2026_09_08_200000_add_has_unpaid_transactions_to_rental_application_assessments.php` — new column
+- `resources/css/corex.css` — new `--ra-income-*`/`--ra-expense-*`/`--ra-unpaid-*` custom properties
+- `resources/views/corex/rental-applications/review.blade.php` — full aside-panel rewrite (four blocks, tooltips, colour dots, corrected wording, `focusNextAmountRow()` race fix, net-income display removed)
+- `tests/Feature/RentalApplications/RentalApplicationRound9AffordabilityTest.php` / `RentalApplicationRound10ReviewScreenTest.php` / `RentalApplicationRound11DecimalAndStatementMonthsTest.php` — updated for the rent-source change and the redesigned markup
+
+Branch: `rental-applications-affordability-2026-09-08`, commit
+`3753f75597c9ab6083d8bc83cbcf9404e824b72e` (parent `8a5cc02c2`), pushed
+to origin. QA1 only — not landed by me; cc1 lands via the shared
+checkout per the standing coordination process. The
+`has_unpaid_transactions` migration still needs `php artisan migrate`
+run on QA1's shared database once this lands, since it adds a new
+column.
