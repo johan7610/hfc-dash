@@ -2500,6 +2500,11 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/{mailbox}/edit', [\App\Http\Controllers\Compliance\CommunicationMailboxController::class, 'edit'])->name('edit');
         Route::put('/{mailbox}', [\App\Http\Controllers\Compliance\CommunicationMailboxController::class, 'update'])->name('update');
         Route::delete('/{mailbox}', [\App\Http\Controllers\Compliance\CommunicationMailboxController::class, 'destroy'])->name('destroy');
+        // AT-395 §6 — CommunicationMailboxController::testConnection() shipped
+        // with 582ec0762/dac5a5a02 but this route was never registered, so the
+        // list view's "Test" button (index.blade.php) 500s on any agency with
+        // at least one mailbox row. 2026-09-08 hotfix.
+        Route::post('/{mailbox}/test-connection', [\App\Http\Controllers\Compliance\CommunicationMailboxController::class, 'testConnection'])->name('test-connection');
     });
 
     // ── WhatsApp capture device registration (AT-34) — agent self-service. ──
