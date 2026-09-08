@@ -322,7 +322,12 @@ class PropertyController extends Controller
         // stored value to a sane range so a missing/invalid value can't break paging.
         $perPage = (int) PerformanceSetting::get('properties_per_page', 20);
         $perPage = $perPage > 0 ? min($perPage, 200) : 20;
-        $properties = $query->paginate($perPage)->withQueryString();
+        // ->appends($this->paginationQuery()), not ->withQueryString() — the session
+        // fallback above already absorbs a bare re-visit, but the page=2+ links
+        // themselves still lost blank filters (e.g. "All Listings" -> ?agent_ids=)
+        // to ConvertEmptyStringsToNull, so a copied/bookmarked page-2 URL silently
+        // reverted to the recipient's own "my listings" default. See that method's doc.
+        $properties = $query->paginate($perPage)->appends($this->paginationQuery($request));
 
         // AT-394 — of THIS page's widened-search results, which fall outside the user's TRUE
         // permission breadth (role-default all/branch/own — never the transient agent_ids UI
