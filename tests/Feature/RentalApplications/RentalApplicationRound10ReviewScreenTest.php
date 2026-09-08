@@ -72,15 +72,17 @@ final class RentalApplicationRound10ReviewScreenTest extends TestCase
         return User::factory()->create(['agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'role' => 'admin']);
     }
 
-    // ── Item 1 — net_income labelled unmistakably as reference-only ──────
+    // ── Item 1 — Round 16 superseded this: net_income is no longer shown ─
 
-    public function test_review_screen_labels_net_income_as_reference_only_separate_from_badge(): void
+    public function test_review_screen_no_longer_displays_net_income_at_all(): void
     {
+        // Round 16 — Johan's full panel redesign lists exactly four
+        // blocks (income, expenses, unpaid, one qualifying info box) and
+        // says "we dont need a massive hooha" — net_income (kept-but-
+        // labelled-reference-only since Round 9) isn't among them and was
+        // removed from the panel outright, not just relabelled again.
         $agent = $this->agent();
-        $app = $this->application(['current_rental_amount' => 5000]);
-        // Round 12 — the decision now requires statement_months to
-        // compute anything at all; without it the whole box reads
-        // "incomplete" and this test's assertions would never render.
+        $app = $this->application();
         $assessment = RentalApplicationAssessment::create(['agency_id' => $this->agency->id, 'rental_application_id' => $app->id, 'statement_months' => 1]);
         RentalApplicationIncomeItem::create(['agency_id' => $this->agency->id, 'rental_application_assessment_id' => $assessment->id, 'description' => 'Salary', 'amount' => 20000]);
         RentalApplicationExpenseItem::create(['agency_id' => $this->agency->id, 'rental_application_assessment_id' => $assessment->id, 'description' => 'Car', 'amount' => 3000]);
@@ -88,9 +90,28 @@ final class RentalApplicationRound10ReviewScreenTest extends TestCase
         $response = $this->actingAs($agent)->get(route('corex.rental-applications.review', $app));
 
         $response->assertOk();
-        $response->assertSee('For your reference only', false);
-        $response->assertSee('does not affect the guideline check above', false);
-        $response->assertSee('Within the affordability guideline', false);
+        $response->assertDontSee('For your reference only', false);
+        $response->assertDontSee('Income left after expenses', false);
+    }
+
+    public function test_review_screen_shows_property_rent_check_when_property_linked(): void
+    {
+        $agent = $this->agent();
+        $property = \App\Models\Property::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'agent_id' => $agent->id,
+            'title' => 'House to let in Ramsgate', 'status' => 'active', 'property_type' => 'house', 'listing_type' => 'rental',
+            'suburb' => 'Ramsgate', 'city' => 'Margate', 'province' => 'KwaZulu-Natal', 'address' => '1 Test Road',
+            'rental_amount' => 6000,
+        ]);
+        $app = $this->application(['property_id' => $property->id]);
+        $assessment = RentalApplicationAssessment::create(['agency_id' => $this->agency->id, 'rental_application_id' => $app->id, 'statement_months' => 3]);
+        RentalApplicationIncomeItem::create(['agency_id' => $this->agency->id, 'rental_application_assessment_id' => $assessment->id, 'description' => 'Salary', 'amount' => 25700]);
+
+        $response = $this->actingAs($agent)->get(route('corex.rental-applications.review', $app));
+
+        $response->assertOk();
+        $response->assertSee('Exceeds guideline', false);
+        $response->assertSee('Property rent', false);
     }
 
     // ── Item 2/3 — gross-income labelling on the agent panel ─────────────
@@ -103,8 +124,8 @@ final class RentalApplicationRound10ReviewScreenTest extends TestCase
         $response = $this->actingAs($agent)->get(route('corex.rental-applications.review', $app));
 
         $response->assertOk();
-        $response->assertSee('Income (gross, before deductions)', false);
-        $response->assertSee('before tax and other deductions', false);
+        $response->assertSee('Income (gross)', false);
+        $response->assertSee('BEFORE tax and other deductions', false);
     }
 
     // ── Item 5 — income/expense line items ────────────────────────────────
@@ -208,7 +229,13 @@ final class RentalApplicationRound10ReviewScreenTest extends TestCase
     public function test_the_displayed_total_matches_exactly_what_the_affordability_check_uses(): void
     {
         $agent = $this->agent();
-        $app = $this->application(['current_rental_amount' => 5400]);
+        $property = \App\Models\Property::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'agent_id' => $agent->id,
+            'title' => 'House to let in Ramsgate', 'status' => 'active', 'property_type' => 'house', 'listing_type' => 'rental',
+            'suburb' => 'Ramsgate', 'city' => 'Margate', 'province' => 'KwaZulu-Natal', 'address' => '1 Test Road',
+            'rental_amount' => 5400,
+        ]);
+        $app = $this->application(['current_rental_amount' => 5400, 'property_id' => $property->id]);
 
         $saved = $this->actingAs($agent)->post(
             route('corex.rental-applications.review.assessment', $app),
