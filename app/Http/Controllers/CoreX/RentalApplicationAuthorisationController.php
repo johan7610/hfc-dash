@@ -117,8 +117,8 @@ class RentalApplicationAuthorisationController extends Controller
             ['agency_id' => $rentalApplication->agency_id],
         );
 
-        $multiplier = RentalApplicationQualifyingSetting::multiplierFor((int) $rentalApplication->agency_id);
-        $result = $assessment->exists ? $assessment->qualifyingResult($multiplier) : null;
+        $maxRentPercent = RentalApplicationQualifyingSetting::maxRentPercentFor((int) $rentalApplication->agency_id);
+        $result = $assessment->exists ? $assessment->qualifyingResult($maxRentPercent) : null;
 
         $highlightedByDocId = RentalApplicationDocumentHighlight::whereIn('document_id', $rentalApplication->documents->pluck('id'))
             ->whereNotNull('highlighted_file_path')

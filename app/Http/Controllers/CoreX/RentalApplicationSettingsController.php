@@ -40,7 +40,14 @@ class RentalApplicationSettingsController extends Controller
 
         // AT-392 Phase 2 — Johan: "qualifying formula - agency can set this."
         // Reuses this SAME settings screen rather than a second settings home.
-        $qualifyingMultiplier = RentalApplicationQualifyingSetting::multiplierFor($agencyId);
+        // 2026-09-08 — the figure itself: rent must not exceed this % of
+        // GROSS income (the law's own 30% ceiling by default; an agency
+        // may set stricter). $qualifyingExceedsLegalCeiling drives a
+        // PERSISTENT banner on this screen (not just a one-time toast on
+        // save) for as long as a configured figure stays above the legal
+        // guideline — Johan: "do not silently accept it as normal."
+        $qualifyingMaxRentPercent = RentalApplicationQualifyingSetting::maxRentPercentFor($agencyId);
+        $qualifyingExceedsLegalCeiling = RentalApplicationQualifyingSetting::exceedsLegalCeiling($qualifyingMaxRentPercent);
 
         // AT-392 authoriser flow — Johan: "ro then co approval process...
         // Both configured as agency settings, multi-select from users,
@@ -59,7 +66,7 @@ class RentalApplicationSettingsController extends Controller
         $declineEmail = RentalApplicationDeclineEmailSetting::forAgency($agencyId);
 
         return view('corex.settings.rental-applications', compact(
-            'documentTypes', 'checklists', 'isConfigured', 'qualifyingMultiplier', 'agencyUsers', 'roUserIds', 'coUserIds', 'declineEmail'
+            'documentTypes', 'checklists', 'isConfigured', 'qualifyingMaxRentPercent', 'qualifyingExceedsLegalCeiling', 'agencyUsers', 'roUserIds', 'coUserIds', 'declineEmail'
         ));
     }
 
@@ -138,29 +145,45 @@ class RentalApplicationSettingsController extends Controller
      * here can never interfere with the document-checklist form's own
      * all-3-types-at-once submission shape.
      */
+    /**
+     * 2026-09-08 — Johan, from his own reading of the law: "the law states
+     * you may not spend more than 30% of your gross income on rentals."
+     * The law sets a CEILING, not a fixed number — an agency may set a
+     * STRICTER (lower) figure. If they set higher than 30%, the screen
+     * must make that unmistakable rather than silently accept it as
+     * normal — a toast on save PLUS a persistent banner on this screen
+     * for as long as the configured figure stays above the legal
+     * guideline (a toast alone vanishes after a few seconds; a legal
+     * compliance concern shouldn't be that easy to miss on a later visit).
+     */
     public function updateQualifyingFormula(Request $request)
     {
         $agencyId = $request->user()->effectiveAgencyId();
 
         // RA-02 (cc5 re-test, Round 8) — same sanitizer as every other
-        // numeric money field on this feature; this one is a ratio rather
-        // than a rand amount, but agents type it the same way.
+        // numeric money field on this feature.
         $request->merge(RentalApplication::sanitizeNumericInput(
-            $request->only(['income_to_rent_multiplier']),
-            ['income_to_rent_multiplier'],
+            $request->only(['max_rent_percent_of_gross_income']),
+            ['max_rent_percent_of_gross_income'],
         ));
 
         $validated = $request->validate([
-            'income_to_rent_multiplier' => ['required', 'numeric', 'min:0.1', 'max:99.99'],
+            'max_rent_percent_of_gross_income' => ['required', 'numeric', 'min:0.1', 'max:100'],
         ]);
 
         RentalApplicationQualifyingSetting::updateOrCreate(
             ['agency_id' => $agencyId],
-            ['income_to_rent_multiplier' => $validated['income_to_rent_multiplier']],
+            ['max_rent_percent_of_gross_income' => $validated['max_rent_percent_of_gross_income']],
         );
 
-        return redirect()->route('corex.settings.rental-applications.edit')
+        $redirect = redirect()->route('corex.settings.rental-applications.edit')
             ->with('success', 'Qualifying formula saved.');
+
+        if (RentalApplicationQualifyingSetting::exceedsLegalCeiling((float) $validated['max_rent_percent_of_gross_income'])) {
+            $redirect->with('warning', 'This is above the legal guideline of 30% of gross income (Rental Housing Act affordability guideline). Confirm this is intentional.');
+        }
+
+        return $redirect;
     }
 
     public function update(Request $request)

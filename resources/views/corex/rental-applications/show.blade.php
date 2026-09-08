@@ -302,7 +302,8 @@
                 <x-rental-application-field name="employer_name" label="Employer" :value="$rentalApplication->employer_name" />
                 <x-rental-application-field name="employer_position" label="Position" :value="$rentalApplication->employer_position" />
                 <x-rental-application-field name="employer_tel" label="Employer tel number" :value="$rentalApplication->employer_tel" />
-                <x-rental-application-field name="monthly_salary" label="Monthly salary (R)" type="number" :value="$rentalApplication->monthly_salary" />
+                <x-rental-application-field name="monthly_salary" label="Gross monthly income, before deductions (R)" type="number" :value="$rentalApplication->monthly_salary"
+                    hint="The amount on the applicant's payslip BEFORE tax and other deductions — not their take-home pay." />
             </div>
             <div class="mt-3">
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Employer address</label>
