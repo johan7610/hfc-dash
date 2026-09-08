@@ -24,6 +24,9 @@
 <div class="w-full"
      x-data="rentalAuthorisationViewer({
          initialMarkedUpDocIds: {{ Js::from($initialMarkedUpDocIds) }},
+         currentUserId: {{ Js::from(auth()->id()) }},
+         currentUserName: {{ Js::from(auth()->user()->name) }},
+         currentUserRole: 'authoriser',
      })">
 
     <div class="rounded-md px-6 py-4 corex-page-banner flex items-center justify-between">
@@ -209,10 +212,17 @@
                                             <button type="button" class="text-xs px-2 py-1 rounded-md" @click="activeTool = 'note'"
                                                     :style="{ border:'1px solid var(--border)', background: activeTool === 'note' ? 'var(--ds-blue-soft, #eff6ff)' : 'transparent', fontWeight: activeTool === 'note' ? '700' : '400' }">Note</button>
                                         </div>
+                                        {{-- Category picker, 2026-09-08 — Johan-approved six-colour
+                                             scheme: the authoriser picks WHAT this mark is (Income,
+                                             Expense, Unpaid), not a raw colour. The authoriser's own
+                                             marks render in the DARKER shade of that category (role
+                                             = treatment) — the same category the agent picked reads
+                                             as a lighter shade of the same hue on their own marks. --}}
                                         <div class="flex items-center gap-1">
-                                            <template x-for="c in colors" :key="c.key">
-                                                <button type="button" :title="c.label" @click="activeColor = c.key"
-                                                        :style="{ width:'16px', height:'16px', borderRadius:'9999px', background: c.css, cursor:'pointer', border: activeColor === c.key ? '2px solid var(--text-primary,#111)' : '1px solid rgba(0,0,0,0.2)' }"></button>
+                                            <template x-for="c in categories" :key="c.key">
+                                                <button type="button" class="text-xs px-2 py-1 rounded-md" @click="activeCategory = c.key"
+                                                        :style="{ border: '1px solid var(--border)', background: activeCategory === c.key ? fillFor({category: c.key, authorRole: currentUserRole}) : 'transparent', fontWeight: activeCategory === c.key ? '700' : '400', borderBottom: activeCategory === c.key ? ('3px solid ' + markPalette[c.key].underline) : '1px solid var(--border)' }"
+                                                        x-text="c.label"></button>
                                             </template>
                                         </div>
                                         <div class="flex items-center gap-1" x-show="activeTool === 'highlight'">
@@ -238,77 +248,7 @@
                                         <button type="button" class="corex-btn-outline text-xs" @click="closeHighlighter()">Done</button>
                                     </div>
 
-                                    <template x-if="loading">
-                                        <p class="text-sm py-4" style="color: var(--text-secondary);">Loading document…</p>
-                                    </template>
-                                    <template x-if="loadError">
-                                        <p class="text-sm py-4" style="color: var(--ds-crimson, #dc2626);" x-text="loadError"></p>
-                                    </template>
-                                    <p class="text-xs py-2" style="color: var(--text-muted);" x-show="!loading && !loadError">
-                                        <span x-show="activeTool === 'highlight'">Click and drag across the document, like a marker pen, to highlight.</span>
-                                        <span x-show="activeTool === 'note'">Click anywhere on the document to pin a note.</span>
-                                        Marks are saved for this document — anyone who opens it next sees the same marks.
-                                    </p>
-
-                                    <div class="flex items-center gap-2 text-xs py-2 px-3 rounded-md mb-2" x-show="pagesLoading" x-cloak
-                                         style="background: var(--ds-blue-soft, #eff6ff); color: var(--ds-blue, #2563eb);">
-                                        <span>Page 1 of <span x-text="totalPages"></span> shown — loading the remaining <span x-text="totalPages - pages.length"></span> pages. You can start marking up page 1 now.</span>
-                                    </div>
-
-                                    <div class="space-y-4 pt-2" x-show="!loading && !loadError">
-                                        <template x-for="page in pages" :key="page.index">
-                                            <div>
-                                                <div class="flex items-center justify-between mb-1">
-                                                    <span class="text-xs font-semibold" style="color: var(--text-muted);">Page <span x-text="page.index + 1"></span></span>
-                                                    <button type="button" class="text-xs" style="color: var(--ds-crimson, #dc2626);" @click="clearPage(page.index)">Clear marks on this page</button>
-                                                </div>
-                                                <div class="relative inline-block select-none" style="max-width:100%;">
-                                                    <img :src="page.data_uri" class="rah-page-img block" :data-page="page.index"
-                                                         style="max-width:100%; height:auto; border:1px solid var(--border);"
-                                                         draggable="false" @dragstart.prevent>
-                                                    <div class="absolute inset-0" style="cursor:crosshair; touch-action:none;"
-                                                         :data-page="page.index"
-                                                         @pointerdown.prevent="startDraw($event, page.index)"
-                                                         @pointermove.prevent="moveDraw($event, page.index)"
-                                                         @pointerup.prevent="endDraw($event, page.index)"
-                                                         @pointercancel.prevent="endDraw($event, page.index)"
-                                                         @dragstart.prevent>
-                                                        <svg class="absolute inset-0" style="pointer-events:none; width:100%; height:100%;"
-                                                             x-html="strokesSvgFor(page.index)"></svg>
-                                                        <template x-for="(mark, mi) in strokesFor(page.index)" :key="'r'+mi">
-                                                            <button type="button" title="Remove this mark"
-                                                                    @pointerdown.stop.prevent="removeMark(page.index, mi, 'highlight')"
-                                                                    :style="{ position:'absolute', left:(mark.points[0].x-9)+'px', top:(mark.points[0].y-9)+'px', width:'18px', height:'18px', borderRadius:'9999px', background:'#475569', color:'#fff', fontSize:'12px', lineHeight:'16px', textAlign:'center', border:'1px solid #fff', padding:'0', pointerEvents:'auto', cursor:'pointer' }">&times;</button>
-                                                        </template>
-                                                        <template x-for="(note, ni) in notesFor(page.index)" :key="'n'+ni">
-                                                            <div @pointerdown.stop :style="{ position:'absolute', left:note.x+'px', top:note.y+'px', transform:'translate(-50%,-50%)', pointerEvents:'auto' }">
-                                                                <div class="rounded-full" :style="{ width:'16px', height:'16px', background: colorCss(note.color), border:'2px solid #fff', boxShadow:'0 0 0 1px rgba(0,0,0,0.3)', cursor:'pointer' }"
-                                                                     @click="toggleNotePopover(page.index, ni)"></div>
-                                                                <div x-show="openNote && openNote.page === page.index && openNote.index === ni" x-cloak
-                                                                     class="rounded-md p-2 text-xs" style="position:absolute; top:20px; left:0; width:220px; background: var(--surface); border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10;">
-                                                                    <p class="mb-2" style="white-space:pre-wrap; color: var(--text-primary);" x-text="note.text"></p>
-                                                                    <div class="flex justify-end gap-2">
-                                                                        <button type="button" style="color: var(--ds-crimson, #dc2626);" @click="removeMark(page.index, ni, 'note')">Remove</button>
-                                                                        <button type="button" style="color: var(--text-muted);" @click="openNote = null">Close</button>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </template>
-                                                        <div x-show="pendingNote && pendingNote.page === page.index" x-cloak @pointerdown.stop
-                                                             :style="{ position:'absolute', left:(pendingNote ? pendingNote.x : 0)+'px', top:(pendingNote ? pendingNote.y : 0)+'px', transform:'translate(-50%,-50%)', pointerEvents:'auto' }">
-                                                            <div class="rounded-md p-2" style="width:220px; background: var(--surface); border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                                                                <textarea x-model="pendingNoteText" rows="3" class="corex-input text-xs w-full" placeholder="Note text…" @click.stop :data-pending-note-page="page.index"></textarea>
-                                                                <div class="flex justify-end gap-2 mt-1">
-                                                                    <button type="button" class="text-xs" style="color: var(--text-muted);" @click.stop="pendingNote = null; pendingNoteText = ''">Cancel</button>
-                                                                    <button type="button" class="text-xs font-semibold" style="color: var(--ds-blue, #2563eb);" @click.stop="commitNote()">Add note</button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </div>
+                                    @include('corex.rental-applications.partials.document-highlighter-pages')
                                 </div>
                             </div>
                         @endforeach
@@ -403,10 +343,10 @@
 @include('corex.rental-applications.partials.document-highlighter-script')
 
 <script>
-function rentalAuthorisationViewer({ initialMarkedUpDocIds }) {
+function rentalAuthorisationViewer({ initialMarkedUpDocIds, currentUserId, currentUserName, currentUserRole }) {
     return {
         // Shared highlight/note viewer — see partials/document-highlighter-script.blade.php.
-        ...rentalDocumentHighlighter({ initialMarkedUpDocIds }),
+        ...rentalDocumentHighlighter({ initialMarkedUpDocIds, currentUserId, currentUserName, currentUserRole }),
 
         // Decision panel fields — unchanged from before this screen grew a document viewer.
         approveAmount: '',
@@ -419,5 +359,6 @@ function rentalAuthorisationViewer({ initialMarkedUpDocIds }) {
         },
     };
 }
+
 </script>
 @endsection

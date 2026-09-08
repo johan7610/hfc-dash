@@ -60,6 +60,12 @@ class RentalApplicationAuthorisationController extends Controller
         $this->guardDocumentBelongsToApplication($rentalApplication, $document);
     }
 
+    /** Every mark this controller's save creates is stamped 'authoriser' — this is the authorisation screen. */
+    protected function markAuthorRole(): string
+    {
+        return 'authoriser';
+    }
+
     /**
      * @return array{tier: string, is_override: bool}
      */

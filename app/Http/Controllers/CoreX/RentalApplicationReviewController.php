@@ -47,6 +47,12 @@ class RentalApplicationReviewController extends Controller
         $this->guardDocumentBelongsToApplication($rentalApplication, $document);
     }
 
+    /** Every mark this controller's save creates is stamped 'agent' — this is the review screen. */
+    protected function markAuthorRole(): string
+    {
+        return 'agent';
+    }
+
     /** Mime types the browser can render natively — everything else gets a download-only fallback. */
     private const INLINE_VIEWABLE_MIME_PREFIXES = ['application/pdf', 'image/'];
 

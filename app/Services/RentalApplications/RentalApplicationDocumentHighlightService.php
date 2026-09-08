@@ -28,13 +28,31 @@ use Symfony\Component\Process\Process;
  * feature — is never touched by this screen.
  *
  * Mark shapes, unified in one array (marks_json), page-index keyed:
- *   {type: 'highlight', points: [{x,y}, ...], width: int, color: string}
- *   {type: 'note', x: float, y: float, text: string, color: string}
+ *   {id: string, type: 'highlight', points: [{x,y}, ...], width: int,
+ *    category: 'income'|'expense'|'unpaid'|null, author_user_id: int|null,
+ *    author_name: string|null, author_role: 'agent'|'authoriser'|null}
+ *   {id: string, type: 'note', x: float, y: float, text: string,
+ *    category, author_user_id, author_name, author_role — same as above}
+ * `color` (the old yellow/green/pink/blue scheme) may still appear on marks
+ * saved before the six-colour category system landed — kept and rendered
+ * as-is rather than force-migrated (see burnMark()).
+ *
+ * 2026-09-08 — Johan approved a six-colour scheme: HUE = category (income
+ * green / expense amber / unpaid red), ROLE = treatment (agent = light fill,
+ * authoriser = darker fill + a solid underline in a third, role-neutral
+ * shade) — readable in greyscale and colour-blind-safe by design (light vs
+ * dark carries role even when hue doesn't). Each mark also now carries a
+ * stable id and its author, so a user can edit only their own marks
+ * (RentalApplicationMarkOwnershipException) and a genuine save-time
+ * collision is caught rather than silently overwritten
+ * (RentalApplicationMarkVersionConflictException, backed by the
+ * `marks_version` column — see this table's own migration).
  */
 class RentalApplicationDocumentHighlightService
 {
     private const DPI = 150;
 
+    /** Legacy 4-colour scheme — still rendered as-is for marks saved before the category system (see burnMark()), never assigned to a new mark. */
     public const COLORS = [
         'yellow' => [255, 235, 59],
         'green'  => [76, 217, 100],
@@ -44,11 +62,44 @@ class RentalApplicationDocumentHighlightService
 
     private const DEFAULT_COLOR = 'yellow';
 
+    public const CATEGORIES = ['income', 'expense', 'unpaid'];
+
+    private const DEFAULT_CATEGORY = 'unpaid';
+
+    /**
+     * Six-colour scheme, approved by Johan 2026-09-08. RGB triples — GD has
+     * no notion of a CSS custom property, so this is necessarily its own
+     * literal copy; the single source of truth for the browser side is the
+     * CSS custom properties consumed in
+     * partials/document-highlighter-script.blade.php (cc4 owns their
+     * definition). If these two ever need to change, they change together.
+     */
+    public const CATEGORY_COLORS = [
+        'income' => [
+            'agent' => [167, 243, 207],       // #a7f3cf
+            'authoriser' => [78, 201, 154],   // #4ec99a
+            'underline' => [4, 108, 78],      // #046c4e
+        ],
+        'expense' => [
+            'agent' => [253, 232, 168],       // #fde8a8
+            'authoriser' => [242, 179, 61],   // #f2b33d
+            'underline' => [154, 91, 6],      // #9a5b06
+        ],
+        'unpaid' => [
+            'agent' => [251, 205, 201],       // #fbcdc9
+            'authoriser' => [238, 124, 114],  // #ee7c72
+            'underline' => [169, 29, 19],     // #a91d13
+        ],
+    ];
+
     /** Alpha 0 (opaque) – 127 (fully transparent), GD scale. ~35% opacity, like a real marker. */
     private const ALPHA = 82;
 
     /** Highlighter stroke thickness in RASTER px at DPI above. */
     private const STROKE_WIDTH = 26;
+
+    /** Underline stroke thickness in RASTER px — a fixed thin rule under the fill, not proportional to the highlighter's own width. */
+    private const UNDERLINE_WIDTH = 8;
 
     /**
      * The document's real, true page count. Public so the controller can
@@ -75,7 +126,7 @@ class RentalApplicationDocumentHighlightService
      * before, so a document already fully cached (a repeat open) is just as
      * fast as it always was — this only changes the FIRST-ever open.
      *
-     * @return array{page: array{index:int,width:int,height:int,data_uri:string}, total_pages: int, marks: array}
+     * @return array{page: array{index:int,width:int,height:int,data_uri:string}, total_pages: int, marks: array, marks_version: int}
      */
     public function firstPagePreview(Document $document): array
     {
@@ -96,6 +147,10 @@ class RentalApplicationDocumentHighlightService
             'page' => ['index' => 0, 'width' => $w, 'height' => $h, 'data_uri' => 'data:image/png;base64,' . base64_encode(file_get_contents($path))],
             'total_pages' => $totalPages,
             'marks' => $existing->marks_json ?? [],
+            // 2026-09-08 — the client must echo this back as `base_version`
+            // on its next save; a mismatch means someone else's save landed
+            // first (see RentalApplicationMarkVersionConflictException).
+            'marks_version' => $existing->marks_version ?? 0,
         ];
     }
 
@@ -139,13 +194,24 @@ class RentalApplicationDocumentHighlightService
      * genuinely removes it. An empty mark set clears the artifact entirely —
      * the next viewer then sees the plain original, not a needless one.
      *
+     * 2026-09-08 — ownership + version, Johan-approved. Marks the CLIENT
+     * says are unchanged from a page it already had loaded pass straight
+     * through untouched (there is no in-place "move/resize an existing
+     * mark" feature — only draw-new and remove); a mark missing from the
+     * incoming payload that PREVIOUSLY existed is being removed, and a mark
+     * with no matching id is new. Ownership is enforced only on removal —
+     * removing someone else's identified mark is refused
+     * (RentalApplicationMarkOwnershipException); creating a new one always
+     * stamps the CURRENT caller as its author, never trusting a
+     * client-supplied author. `$baseVersion` must match the document's
+     * current `marks_version` or the whole save is refused
+     * (RentalApplicationMarkVersionConflictException) — someone else's save
+     * landed first and this client's view is stale.
+     *
      * @param  array<int, array<int, array>>  $marksByPage  page-index (0-based) => list of marks, RASTER pixel coords.
      */
-    public function applyMarks(Document $document, int $agencyId, ?int $userId, array $marksByPage): RentalApplicationDocumentHighlight
+    public function applyMarks(Document $document, int $agencyId, int $userId, string $userName, string $authorRole, array $marksByPage, ?int $baseVersion): RentalApplicationDocumentHighlight
     {
-        $normalized = $this->normalizeForStorage($marksByPage);
-        $flatCount = array_sum(array_map('count', $normalized));
-
         // RA-06, 2026-09-08 — `document_id` is uniquely constrained (one
         // highlight-state row per document, ever — never two live rows for
         // the same document). A plain firstOrNew() only queries through the
@@ -164,9 +230,20 @@ class RentalApplicationDocumentHighlightService
         if ($highlight->trashed()) {
             $highlight->restore();
         }
+
+        $currentVersion = (int) ($highlight->marks_version ?? 0);
+        if ($highlight->exists && $currentVersion > 0 && $baseVersion !== null && $baseVersion !== $currentVersion) {
+            throw new \App\Exceptions\RentalApplicationMarkVersionConflictException($currentVersion);
+        }
+
+        $existingByPage = (array) ($highlight->marks_json ?? []);
+        $normalized = $this->normalizeForStorage($marksByPage, $existingByPage, $userId, $userName, $authorRole);
+        $flatCount = array_sum(array_map('count', $normalized));
+
         $highlight->agency_id = $agencyId;
         $highlight->updated_by_user_id = $userId;
         $highlight->marks_json = $normalized;
+        $highlight->marks_version = $currentVersion + 1;
 
         if ($flatCount === 0) {
             $this->deleteArtifactIfAny($highlight->highlighted_file_path);
@@ -206,14 +283,39 @@ class RentalApplicationDocumentHighlightService
         return $highlight;
     }
 
+    /**
+     * Resolves a mark's fill + underline RGB. Category+role marks (every
+     * mark drawn since 2026-09-08) use the six-colour scheme; a genuinely
+     * legacy mark (saved before that — has an old `color` key, no
+     * `category`) keeps rendering in its original yellow/green/pink/blue,
+     * never force-migrated to a category it was never given.
+     *
+     * @return array{fill: array{int,int,int}, underline: ?array{int,int,int}}
+     */
+    private function resolveMarkColors(array $m): array
+    {
+        $category = $m['category'] ?? null;
+        if ($category !== null && isset(self::CATEGORY_COLORS[$category])) {
+            $role = ($m['author_role'] ?? null) === 'authoriser' ? 'authoriser' : 'agent';
+            $scheme = self::CATEGORY_COLORS[$category];
+
+            return ['fill' => $scheme[$role], 'underline' => $scheme['underline']];
+        }
+
+        $legacy = self::COLORS[$m['color'] ?? self::DEFAULT_COLOR] ?? self::COLORS[self::DEFAULT_COLOR];
+
+        return ['fill' => $legacy, 'underline' => null];
+    }
+
     /** @param \GdImage $img */
     private function burnMark($img, array $m): void
     {
-        $rgb = self::COLORS[$m['color'] ?? self::DEFAULT_COLOR] ?? self::COLORS[self::DEFAULT_COLOR];
+        $colors = $this->resolveMarkColors($m);
+        $rgb = $colors['fill'];
         $fill = imagecolorallocatealpha($img, $rgb[0], $rgb[1], $rgb[2], self::ALPHA);
 
         if (($m['type'] ?? null) === 'note') {
-            $this->burnNote($img, $m, $fill, $rgb);
+            $this->burnNote($img, $m, $fill, $rgb, $colors['underline']);
 
             return;
         }
@@ -236,6 +338,29 @@ class RentalApplicationDocumentHighlightService
             imagefilledellipse($img, (int) $p['x'], (int) $p['y'], $half * 2, $half * 2, $fill);
         }
         imagesetthickness($img, 1);
+
+        // Six-colour scheme, 2026-09-08 — a solid, OPAQUE thin rule under
+        // the stroke in the category's role-neutral "underline" shade. Same
+        // vertical-offset simplification the live client uses (see
+        // strokesSvgFor() in the shared JS factory): real strokes on this
+        // screen are drawn over roughly-horizontal statement lines, so a
+        // fixed downward offset reads as an underline for the documents
+        // this tool actually sees, without needing true perpendicular-to-
+        // path geometry for an arbitrary drag angle.
+        if ($colors['underline'] !== null) {
+            $u = imagecolorallocate($img, $colors['underline'][0], $colors['underline'][1], $colors['underline'][2]);
+            $offset = (int) round($half * 0.9);
+            imagesetthickness($img, self::UNDERLINE_WIDTH);
+            for ($i = 1; $i < count($points); $i++) {
+                imageline(
+                    $img,
+                    (int) $points[$i - 1]['x'], (int) $points[$i - 1]['y'] + $offset,
+                    (int) $points[$i]['x'], (int) $points[$i]['y'] + $offset,
+                    $u,
+                );
+            }
+            imagesetthickness($img, 1);
+        }
     }
 
     /**
@@ -252,7 +377,7 @@ class RentalApplicationDocumentHighlightService
      * to DPI, matching how Docuperfect\DocumentFlattener sizes its own
      * burned-in text elsewhere in this codebase.
      */
-    private function burnNote($img, array $m, int $fill, array $rgb): void
+    private function burnNote($img, array $m, int $fill, array $rgb, ?array $underlineRgb): void
     {
         $x = (int) round((float) ($m['x'] ?? 0));
         $y = (int) round((float) ($m['y'] ?? 0));
@@ -268,7 +393,13 @@ class RentalApplicationDocumentHighlightService
         $boxH = 36 + (count($lines) * $lineHeight);
 
         $opaque = imagecolorallocate($img, $rgb[0], $rgb[1], $rgb[2]);
-        $border = imagecolorallocate($img, max(0, $rgb[0] - 60), max(0, $rgb[1] - 60), max(0, $rgb[2] - 60));
+        // Six-colour scheme, 2026-09-08 — the marker dot's border carries the
+        // category's role-neutral "underline" shade (same signal an
+        // underline gives a stroke); legacy marks with no category keep the
+        // old darkened-fill border they always had.
+        $border = $underlineRgb !== null
+            ? imagecolorallocate($img, $underlineRgb[0], $underlineRgb[1], $underlineRgb[2])
+            : imagecolorallocate($img, max(0, $rgb[0] - 60), max(0, $rgb[1] - 60), max(0, $rgb[2] - 60));
         $textColor = imagecolorallocate($img, 40, 40, 40);
 
         imagefilledellipse($img, $x, $y, 18, 18, $opaque);
@@ -312,50 +443,192 @@ class RentalApplicationDocumentHighlightService
 
     /**
      * Keep only well-shaped mark data in storage — never trust the raw
-     * request payload verbatim into a JSON column.
+     * request payload verbatim into a JSON column. Also where ownership is
+     * enforced (2026-09-08, Johan): every mark id already present in
+     * $existingByPage is matched against the incoming payload —
+     *   - present in both → pass through the STORED copy untouched (there is
+     *     no in-place edit of an existing mark's shape/text, only draw-new
+     *     and remove, so the incoming copy is never trusted over storage);
+     *   - missing from incoming but present in storage → being removed;
+     *     only allowed if its author is $userId or unattributed (null);
+     *   - present in incoming with no matching id → a genuinely new mark,
+     *     always stamped with the CURRENT caller as author, never a
+     *     client-supplied one.
+     *
+     * @throws \App\Exceptions\RentalApplicationMarkOwnershipException
      */
-    private function normalizeForStorage(array $marksByPage): array
+    private function normalizeForStorage(array $marksByPage, array $existingByPage, int $userId, string $userName, string $authorRole): array
     {
         $out = [];
-        foreach ($marksByPage as $page => $marks) {
-            if (! is_array($marks)) {
-                continue;
-            }
-            $pageIndex = (int) $page;
-            foreach ($marks as $m) {
-                $color = array_key_exists($m['color'] ?? null, self::COLORS) ? $m['color'] : self::DEFAULT_COLOR;
-                $type = ($m['type'] ?? null) === 'note' ? 'note' : 'highlight';
+        $pages = array_unique(array_merge(
+            array_map('intval', array_keys($marksByPage)),
+            array_map('intval', array_keys($existingByPage)),
+        ));
 
-                if ($type === 'note') {
-                    $text = trim((string) ($m['text'] ?? ''));
-                    if ($text === '') {
+        foreach ($pages as $pageIndex) {
+            $incoming = (array) ($marksByPage[$pageIndex] ?? $marksByPage[(string) $pageIndex] ?? []);
+
+            // Marks saved before the category/id/author scheme have no id at
+            // all — kept in a separate pool matched by CONTENT below, so an
+            // unchanged legacy mark round-trips exactly instead of being
+            // silently "claimed" by whoever happens to save next (Johan:
+            // legacy marks stay honestly unattributed, never guessed).
+            $existingById = [];
+            $legacyPool = [];
+            foreach ((array) ($existingByPage[$pageIndex] ?? $existingByPage[(string) $pageIndex] ?? []) as $idx => $m) {
+                if (isset($m['id']) && is_string($m['id']) && $m['id'] !== '') {
+                    $existingById[$m['id']] = $m;
+                } else {
+                    $legacyPool[$idx] = $m;
+                }
+            }
+
+            $claimedIds = [];
+            $normalizedPage = [];
+
+            foreach ($incoming as $m) {
+                if (! is_array($m)) {
+                    continue;
+                }
+                $id = isset($m['id']) && is_string($m['id']) && $m['id'] !== '' ? $m['id'] : null;
+
+                if ($id !== null && isset($existingById[$id])) {
+                    // Existing mark, echoed back — pass through storage's own
+                    // copy verbatim. Never trust the client's copy of a mark
+                    // it doesn't necessarily own (see docblock above).
+                    $claimedIds[$id] = true;
+                    $normalizedPage[] = $existingById[$id];
+
+                    continue;
+                }
+
+                if ($id === null) {
+                    $legacyIdx = $this->findLegacyMatch($m, $legacyPool);
+                    if ($legacyIdx !== null) {
+                        $normalizedPage[] = $legacyPool[$legacyIdx];
+                        unset($legacyPool[$legacyIdx]);
+
                         continue;
                     }
-                    $out[$pageIndex][] = [
-                        'type' => 'note',
-                        'x' => (float) ($m['x'] ?? 0),
-                        'y' => (float) ($m['y'] ?? 0),
-                        'text' => mb_substr($text, 0, 1000),
-                        'color' => $color,
-                    ];
-
-                    continue;
                 }
 
-                $points = array_values(array_filter((array) ($m['points'] ?? []), fn ($p) => is_array($p) && isset($p['x'], $p['y'])));
-                if (count($points) < 2) {
+                // A genuinely new mark.
+                $normalized = $this->normalizeNewMark($m, $userId, $userName, $authorRole);
+                if ($normalized === null) {
                     continue;
                 }
-                $out[$pageIndex][] = [
-                    'type' => 'highlight',
-                    'points' => array_map(fn ($p) => ['x' => (float) $p['x'], 'y' => (float) $p['y']], $points),
-                    'width' => max(4, min(120, (float) ($m['width'] ?? self::STROKE_WIDTH))),
-                    'color' => $color,
-                ];
+                if ($id !== null) {
+                    $claimedIds[$id] = true;
+                }
+                $normalizedPage[] = $normalized;
+            }
+
+            // Anything in storage but NOT echoed back is being removed —
+            // only the mark's own author (or nobody, if unattributed) may do
+            // that. Unmatched legacy-pool marks are always removable
+            // (nothing to protect — no author).
+            foreach ($existingById as $id => $existingMark) {
+                if (isset($claimedIds[$id])) {
+                    continue;
+                }
+                $author = $existingMark['author_user_id'] ?? null;
+                if ($author !== null && (int) $author !== $userId) {
+                    throw new \App\Exceptions\RentalApplicationMarkOwnershipException($id);
+                }
+                // else: legitimately removed (own mark, or unattributed legacy mark).
+            }
+
+            if (! empty($normalizedPage)) {
+                $out[$pageIndex] = $normalizedPage;
             }
         }
 
         return $out;
+    }
+
+    /**
+     * Legacy marks (saved before the id/category/author scheme) have
+     * nothing to match on except their own shape — finds an existing
+     * legacy-pool mark that is the SAME mark as $incoming (same type, same
+     * geometry/text, small float tolerance for the raster<->display px
+     * round trip), so it can pass through unchanged rather than being
+     * treated as newly created.
+     */
+    private function findLegacyMatch(array $incoming, array $pool): ?int
+    {
+        foreach ($pool as $idx => $existing) {
+            if (($existing['type'] ?? null) !== ($incoming['type'] ?? null)) {
+                continue;
+            }
+            if (($existing['type'] ?? null) === 'note') {
+                if (abs((float) ($existing['x'] ?? 0) - (float) ($incoming['x'] ?? 0)) < 1.5
+                    && abs((float) ($existing['y'] ?? 0) - (float) ($incoming['y'] ?? 0)) < 1.5
+                    && (string) ($existing['text'] ?? '') === (string) ($incoming['text'] ?? '')) {
+                    return $idx;
+                }
+
+                continue;
+            }
+
+            $ep = (array) ($existing['points'] ?? []);
+            $ip = (array) ($incoming['points'] ?? []);
+            if (count($ep) !== count($ip)) {
+                continue;
+            }
+            $match = true;
+            foreach ($ep as $i => $pt) {
+                if (! isset($ip[$i]) || abs((float) ($pt['x'] ?? 0) - (float) ($ip[$i]['x'] ?? 0)) > 1.5 || abs((float) ($pt['y'] ?? 0) - (float) ($ip[$i]['y'] ?? 0)) > 1.5) {
+                    $match = false;
+                    break;
+                }
+            }
+            if ($match) {
+                return $idx;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return array|null null if the mark is malformed and should be silently dropped (shape already validated at the HTTP layer — this is the belt to that braces). */
+    private function normalizeNewMark(array $m, int $userId, string $userName, string $authorRole): ?array
+    {
+        $type = ($m['type'] ?? null) === 'note' ? 'note' : 'highlight';
+        $category = in_array($m['category'] ?? null, self::CATEGORIES, true) ? $m['category'] : self::DEFAULT_CATEGORY;
+        $id = isset($m['id']) && is_string($m['id']) && $m['id'] !== '' ? mb_substr($m['id'], 0, 64) : (string) \Illuminate\Support\Str::uuid();
+
+        $base = [
+            'id' => $id,
+            'category' => $category,
+            'author_user_id' => $userId,
+            'author_name' => mb_substr($userName, 0, 100),
+            'author_role' => $authorRole,
+        ];
+
+        if ($type === 'note') {
+            $text = trim((string) ($m['text'] ?? ''));
+            if ($text === '') {
+                return null;
+            }
+
+            return $base + [
+                'type' => 'note',
+                'x' => (float) ($m['x'] ?? 0),
+                'y' => (float) ($m['y'] ?? 0),
+                'text' => mb_substr($text, 0, 1000),
+            ];
+        }
+
+        $points = array_values(array_filter((array) ($m['points'] ?? []), fn ($p) => is_array($p) && isset($p['x'], $p['y'])));
+        if (count($points) < 2) {
+            return null;
+        }
+
+        return $base + [
+            'type' => 'highlight',
+            'points' => array_map(fn ($p) => ['x' => (float) $p['x'], 'y' => (float) $p['y']], $points),
+            'width' => max(4, min(120, (float) ($m['width'] ?? self::STROKE_WIDTH))),
+        ];
     }
 
     private function deleteArtifactIfAny(?string $path): void

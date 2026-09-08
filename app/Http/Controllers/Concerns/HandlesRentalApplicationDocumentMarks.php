@@ -26,15 +26,20 @@ use Illuminate\Http\Request;
  * the mark-handling logic itself (validation, the completeness gate,
  * the save, the response shape) is shared.
  *
- * Marks currently carry no per-user ownership (that work is explicitly
- * on hold — see the rental-applications spec's ownership design entry).
- * Until it lands, either role can edit or clear any mark on a shared
- * document; this trait does not attempt to enforce ownership it has no
- * data to check.
+ * 2026-09-08 — Johan approved mark ownership + the six-colour category
+ * scheme: a user may edit their own marks and never another's, every mark
+ * knows which screen (role) drew it, and a save-time version check makes a
+ * genuine collision visible rather than silent. Each consuming controller
+ * also supplies markAuthorRole() — 'agent' or 'authoriser' — so newly
+ * created marks are stamped with the CURRENT caller's role, never a
+ * client-supplied one.
  */
 trait HandlesRentalApplicationDocumentMarks
 {
     abstract protected function guardDocumentMarkAccess(RentalApplication $rentalApplication, Document $document): void;
+
+    /** 'agent' for the review screen, 'authoriser' for the authorisation screen — stamped onto every NEW mark this controller's save creates. */
+    abstract protected function markAuthorRole(): string;
 
     /**
      * Progressive load, 2026-09-08 — page 1 fast, total page count, and
@@ -109,6 +114,7 @@ trait HandlesRentalApplicationDocumentMarks
             }],
             'marks.*' => ['array'],
             'marks.*.*' => ['array'],
+            'base_version' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $totalPages = $highlights->totalPageCount($document);
@@ -125,8 +131,22 @@ trait HandlesRentalApplicationDocumentMarks
                 $document,
                 (int) $rentalApplication->agency_id,
                 $request->user()->id,
+                (string) $request->user()->name,
+                $this->markAuthorRole(),
                 (array) ($validated['marks'] ?? []),
+                array_key_exists('base_version', $validated) ? (int) $validated['base_version'] : null,
             );
+        } catch (\App\Exceptions\RentalApplicationMarkVersionConflictException $e) {
+            return response()->json([
+                'error' => 'Someone else\'s changes were saved to this document since you opened it. Reload the document, then reapply your marks.',
+                'reason' => 'version_conflict',
+                'current_version' => $e->currentVersion,
+            ], 409);
+        } catch (\App\Exceptions\RentalApplicationMarkOwnershipException $e) {
+            return response()->json([
+                'error' => 'One of these marks belongs to a different user and can\'t be changed or removed. Reload the document to see the current marks.',
+                'reason' => 'ownership_conflict',
+            ], 422);
         } catch (\Throwable $e) {
             \Log::error('Rental application document highlight apply failed', ['document' => $document->id, 'error' => $e->getMessage()]);
 
@@ -137,6 +157,7 @@ trait HandlesRentalApplicationDocumentMarks
             'ok' => true,
             'has_highlights' => $highlight->highlighted_file_path !== null,
             'mark_count' => collect($highlight->marks_json ?? [])->flatten(1)->count(),
+            'marks_version' => $highlight->marks_version,
             'saved_at' => $highlight->updated_at?->toIso8601String(),
         ]);
     }

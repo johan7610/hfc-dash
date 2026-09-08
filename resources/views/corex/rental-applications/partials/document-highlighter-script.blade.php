@@ -9,21 +9,46 @@
      restore race) that a second independently-maintained copy would risk
      drifting away from or reintroducing one at a time. Both screens spread
      this factory's return value into their own root x-data object:
-       return { ...rentalDocumentHighlighter({ initialMarkedUpDocIds }), ... own fields ... }
+       return { ...rentalDocumentHighlighter({ initialMarkedUpDocIds, currentUserId, currentUserName, currentUserRole }), ... own fields ... }
      Zero cross-references to either screen's own state (income/expense rows,
      approve/decline forms) — this factory only ever touches its own
      pages/marks/activeDocId-shaped state, which is what makes the split
-     safe. --}}
+     safe.
+
+     Six-colour scheme + ownership, Johan-approved 2026-09-08:
+       HUE = category (income green / expense amber / unpaid red).
+       ROLE = treatment (agent = lighter fill, authoriser = darker fill; a
+       third, role-neutral "underline" shade per category carries role even
+       when hue can't — readable in greyscale, safe for red/green colour-
+       blindness). Colours come from CSS custom properties cc4 owns the
+       definition of (var(--rah-mark-<category>-<agent|authoriser>-fill, #hex)
+       / var(--rah-mark-<category>-underline, #hex)) — the hex values below
+       are ONLY the fallback if those properties are never defined; they are
+       never read directly by anything that draws a mark. If cc4's tokens
+       use different names, only the var() names below need to change.
+
+       Every mark stores a stable id, its author (id/name/role), and its
+       category. A user may edit (remove) only their own marks —
+       canEditMark() gates every remove control in the shared page-rendering
+       partial. A save sends `base_version` (the marks_version this tab
+       loaded) and the server refuses (409) if it has since moved — a
+       genuine collision is visible and recoverable (reloadHighlighter()),
+       never silently overwritten. No live locking — Johan: "more machinery
+       than the problem needs." --}}
 <script>
-function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
+function rentalDocumentHighlighter({ initialMarkedUpDocIds, currentUserId, currentUserName, currentUserRole } = {}) {
     return {
         markedUpDocIds: initialMarkedUpDocIds || [],
+        currentUserId: currentUserId ?? null,
+        currentUserName: currentUserName || '',
+        currentUserRole: currentUserRole === 'authoriser' ? 'authoriser' : 'agent',
 
         activeDocId: null,
         activeTool: 'highlight', // default tool = highlighter (Johan)
         loading: false,
         loadError: '',
         applyError: '',
+        applyErrorReason: '',
         applying: false,
         justSaved: false,
         label: '',
@@ -40,15 +65,39 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
         // restored the moment their page actually arrives — never dropped.
         pagesLoading: false,
         _savedByPage: {},
-        marks: [],   // FLAT array: {type:'highlight', page, points:[{x,y}], width, color} | {type:'note', page, x, y, text, color}
+        loadedVersion: 0, // marks_version at the moment this document was (re)loaded — sent back as base_version on save
+        marks: [],   // FLAT array: {id, type:'highlight', page, points:[{x,y}], width, category, authorUserId, authorName, authorRole} | {id, type:'note', page, x, y, text, category, authorUserId, authorName, authorRole}
         dirty: false,
-        colors: [
-            { key: 'yellow', label: 'Yellow', css: '#ffeb3b' },
-            { key: 'green',  label: 'Green',  css: '#4cd964' },
-            { key: 'pink',   label: 'Pink',   css: '#ff69b4' },
-            { key: 'blue',   label: 'Blue',   css: '#5ac8fa' },
+
+        // Six-colour scheme — category is what the agent/authoriser picks;
+        // role (which shade of it) comes from whoever authored the mark, not
+        // whoever is currently looking at it.
+        categories: [
+            { key: 'income',  label: 'Income' },
+            { key: 'expense', label: 'Expense' },
+            { key: 'unpaid',  label: 'Unpaid' },
         ],
-        activeColor: 'yellow',
+        markPalette: {
+            income:  { agentFill: 'var(--rah-mark-income-agent-fill, #a7f3cf)',  authoriserFill: 'var(--rah-mark-income-authoriser-fill, #4ec99a)',  underline: 'var(--rah-mark-income-underline, #046c4e)' },
+            expense: { agentFill: 'var(--rah-mark-expense-agent-fill, #fde8a8)', authoriserFill: 'var(--rah-mark-expense-authoriser-fill, #f2b33d)', underline: 'var(--rah-mark-expense-underline, #9a5b06)' },
+            unpaid:  { agentFill: 'var(--rah-mark-unpaid-agent-fill, #fbcdc9)',  authoriserFill: 'var(--rah-mark-unpaid-authoriser-fill, #ee7c72)',  underline: 'var(--rah-mark-unpaid-underline, #a91d13)' },
+        },
+        activeCategory: 'income',
+        fillFor(mark) {
+            const p = this.markPalette[mark && mark.category] || this.markPalette.unpaid;
+            return (mark && mark.authorRole === 'authoriser') ? p.authoriserFill : p.agentFill;
+        },
+        underlineFor(mark) {
+            const p = this.markPalette[mark && mark.category] || this.markPalette.unpaid;
+            return p.underline;
+        },
+        canEditMark(mark) {
+            return mark.authorUserId === null || mark.authorUserId === undefined || mark.authorUserId === this.currentUserId;
+        },
+        generateMarkId() {
+            try { return crypto.randomUUID(); } catch (_) { return 'm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10); }
+        },
+
         // Highlighter size, 2026-09-08 — Johan: "current on highlights too
         // much lines on bank statement - lines are small there." Three
         // presets, not a slider. 'medium' (22) is the unchanged prior
@@ -114,21 +163,28 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
             this.remainingPagesUrl = detail.remainingPagesUrl;
             this.postUrl = detail.postUrl;
             this.label = detail.label || '';
+            await this.loadDocument();
+        },
+
+        /** The actual fetch-and-populate — split out of openHighlighter() so reloadHighlighter() (version-conflict recovery) can rerun it without the open/close toggling logic. */
+        async loadDocument() {
             this.activeTool = 'highlight';
             this.pages = [];
             this.totalPages = 0;
             this.marks = [];
             this._savedByPage = {};
+            this.loadedVersion = 0;
             this.dirty = false;
             this.undoStack = [];
             this.redoStack = [];
             this.loadError = '';
             this.applyError = '';
+            this.applyErrorReason = '';
             this.justSaved = false;
             this.pagesLoading = false;
             this.openNote = null;
             this.pendingNote = null;
-            this.activeColor = 'yellow';
+            this.activeCategory = 'income';
             this.loading = true;
             try {
                 const res = await fetch(this.firstPageUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
@@ -143,14 +199,32 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
                 if (!data.page) { this.loadError = 'The document opened but produced no pages.'; this.loading = false; return; }
                 this.pages = [data.page];
                 this.totalPages = data.total_pages || 1;
+                this.loadedVersion = data.marks_version || 0;
                 // Existing saved marks come back in ONE blob (RASTER px, keyed by
                 // page index) — never split per page, so a mark for a page that
                 // hasn't loaded yet is never at risk of being dropped; it's just
                 // restored later, the moment its page actually arrives (see
                 // fetchRemainingPages() below).
                 this._savedByPage = data.marks || {};
-                await this.restoreSavedMarksForPages([0]); // same reasoning as fetchRemainingPages() below — await before the "loading" gate lifts
+                // 2026-09-08 — `loading` flips false BEFORE restoring, not
+                // after. It used to be the other way round (restore, THEN
+                // reveal), which reads safer but is actually a circular
+                // dependency: the page images sit inside a container gated
+                // by `x-show="!loading"`, so while `loading` is still true
+                // that container — and every <img> inside it — has ZERO
+                // rendered size no matter how long restoreSavedMarksForPages()
+                // waits for layout. No amount of polling breaks a genuine
+                // deadlock. Revealing first means marks can lag the document
+                // by a beat on a slow render (WHEN this document isn't
+                // already cached) — real, but far better than the marks
+                // silently never restoring at all, which is what actually
+                // happened: reproduced consistently on the authoriser
+                // screen, which mounts a second, independent Alpine
+                // component (the assessment editor) at the same moment,
+                // measurably slowing how long the reveal takes to actually
+                // land in the DOM.
                 this.loading = false;
+                await this.restoreSavedMarksForPages([0]);
 
                 if (this.totalPages > 1) {
                     this.fetchRemainingPages();
@@ -159,6 +233,10 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
                 this.loadError = 'This document could not be opened: ' + (e && e.message ? e.message : 'network error') + '.';
                 this.loading = false;
             }
+        },
+        /** Version-conflict recovery (Johan: visible and recoverable, not silent — no live locking). Discards this tab's unsaved marks and re-fetches the current, now-authoritative state. */
+        async reloadHighlighter() {
+            await this.loadDocument();
         },
         // Progressive load, 2026-09-08 — runs AFTER page 1 is already on
         // screen; deliberately not awaited by openHighlighter() so the viewer
@@ -194,6 +272,27 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
             }
             this.pagesLoading = false;
         },
+        // Waits for an already-decoded <img> to actually have LAID OUT (a
+        // non-zero clientWidth) — genuinely a different thing from decoding.
+        // 2026-09-08 — root-caused the SAME "marks silently missing" symptom
+        // recurring on the authoriser screen after the img.decode() fix:
+        // decode() only guarantees the PIXEL DATA is ready, not that the
+        // browser has finished a LAYOUT pass assigning the element real box
+        // dimensions (this <img> is `max-width:100%; height:auto`, so its
+        // size depends on layout, a separate pipeline stage from decode).
+        // Two rAF callbacks reliably straddle a real layout/paint cycle in
+        // every evergreen browser; the short poll below is pure defence for
+        // the rare case that still isn't enough (e.g. a very busy main
+        // thread — the authoriser screen also initialises a second,
+        // independent Alpine component for its assessment editor at the
+        // same moment a document is opened, which measurably slowed this
+        // down in testing).
+        async _waitForLayout(img) {
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            for (let attempt = 0; attempt < 10 && !img.clientWidth; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+        },
         // Shared by both the first-page load and the remaining-pages load —
         // converts saved marks (RASTER px) to DISPLAY px for the given page
         // indexes, once their images have actually laid out.
@@ -204,7 +303,9 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
         // exists with its src set) — not that the browser has finished
         // DECODING it, which clientWidth/clientHeight need to be reliable.
         // Fixed with img.decode() — a real Promise that resolves only once
-        // decode is complete — before reading layout metrics.
+        // decode is complete — before reading layout metrics. Decode alone
+        // still wasn't always enough (see _waitForLayout() above) — decoded
+        // pixels and a finished layout pass are two different guarantees.
         async restoreSavedMarksForPages(pageIndexes) {
             for (const pageIndex of pageIndexes) {
                 const saved = this._savedByPage[String(pageIndex)] || this._savedByPage[pageIndex];
@@ -213,19 +314,32 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
                 const img = document.querySelector('img.rah-page-img[data-page="' + pageIndex + '"]');
                 if (!img) continue;
                 try { if (img.decode) await img.decode(); } catch (_) {} // decode() can reject on a since-removed <img> (fast document switching) — fall through to the clientWidth guard below either way
+                if (!img.clientWidth) { await this._waitForLayout(img); }
                 const page = this.pages.find(p => p.index === pageIndex);
                 if (!page || !img.clientWidth) continue;
                 const scaleX = img.clientWidth / page.width;
                 const scaleY = img.clientHeight / page.height;
                 saved.forEach(m => {
+                    // category/id/author survive round-trips verbatim — the
+                    // server pass-through of an unchanged mark preserves them
+                    // exactly (see RentalApplicationDocumentHighlightService::
+                    // normalizeForStorage()). A mark with no category/author
+                    // is a genuinely legacy one, saved before this scheme
+                    // existed — left honestly unattributed, not guessed.
+                    const common = {
+                        id: m.id || null,
+                        category: m.category || null,
+                        authorUserId: m.author_user_id ?? null,
+                        authorName: m.author_name || null,
+                        authorRole: m.author_role || null,
+                    };
                     if (m.type === 'note') {
-                        this.marks.push({ type: 'note', page: pageIndex, x: m.x * scaleX, y: m.y * scaleY, text: m.text, color: m.color || 'yellow' });
+                        this.marks.push({ ...common, type: 'note', page: pageIndex, x: m.x * scaleX, y: m.y * scaleY, text: m.text });
                     } else {
                         this.marks.push({
-                            type: 'highlight', page: pageIndex,
+                            ...common, type: 'highlight', page: pageIndex,
                             points: (m.points || []).map(p => ({ x: p.x * scaleX, y: p.y * scaleY })),
                             width: (m.width || 26) * scaleX,
-                            color: m.color || 'yellow',
                         });
                     }
                 });
@@ -244,10 +358,6 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
             }
             this.activeDocId = null;
         },
-        colorCss(key) {
-            const c = this.colors.find(c => c.key === key);
-            return c ? c.css : this.colors[0].css;
-        },
         strokesFor(p) { return this.marks.filter(m => m.type === 'highlight' && m.page === p); },
         notesFor(p) { return this.marks.filter(m => m.type === 'note' && m.page === p); },
         // 2026-09-08 — built as a markup STRING and bound via x-html on the
@@ -260,16 +370,37 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
         // change exactly like x-text/x-show does, and every value here comes
         // from this component's own numeric drag/mark state, never free-typed
         // text, so there is nothing here that needs HTML-escaping.
+        //
+        // Six-colour scheme, 2026-09-08 — TWO polylines per stroke: the wide
+        // translucent fill (the category+role colour) plus a thin, fully
+        // opaque "underline" polyline offset downward — the role-neutral
+        // signal that survives a bad greyscale scan or red/green colour-
+        // blindness. The offset is a fixed vertical shift, not a true
+        // perpendicular-to-path one: strokes on this screen are drawn over
+        // roughly-horizontal statement lines, so this reads as an underline
+        // for the documents the tool actually sees without needing full
+        // perpendicular-vector geometry for an arbitrary drag angle.
         strokesSvgFor(p) {
-            const poly = (points, color, width) =>
-                '<polyline points="' + points.map(pt => Number(pt.x) + ',' + Number(pt.y)).join(' ') + '" fill="none" stroke="' + this.colorCss(color) + '" stroke-opacity="0.4" stroke-width="' + Number(width) + '" stroke-linecap="round" stroke-linejoin="round"></polyline>';
-            let svg = this.strokesFor(p).map(m => poly(m.points, m.color, m.width)).join('');
+            const poly = (points, color, width, opacity) =>
+                '<polyline points="' + points.map(pt => Number(pt.x) + ',' + Number(pt.y)).join(' ') + '" fill="none" stroke="' + color + '" stroke-opacity="' + opacity + '" stroke-width="' + Number(width) + '" stroke-linecap="round" stroke-linejoin="round"></polyline>';
+            let svg = '';
+            this.strokesFor(p).forEach(m => {
+                svg += poly(m.points, this.fillFor(m), m.width, 0.4);
+                const offset = (m.width || this.strokeWidth) * 0.45;
+                svg += poly(m.points.map(pt => ({ x: pt.x, y: pt.y + offset })), this.underlineFor(m), 3, 1);
+            });
             if (this.drag.active && this.drag.page === p && this.activeTool === 'highlight') {
-                svg += poly(this.drag.points, this.activeColor, this.strokeWidth);
+                const preview = { category: this.activeCategory, authorRole: this.currentUserRole };
+                svg += poly(this.drag.points, this.fillFor(preview), this.strokeWidth, 0.4);
             }
             return svg;
         },
-        clearPage(p) { this.pushHistory(); this.marks = this.marks.filter(m => m.page !== p); this.dirty = true; },
+        /** Clears only the CURRENT USER's own marks on this page — leaving anyone else's untouched (mark ownership, Johan-approved 2026-09-08). */
+        clearPage(p) {
+            this.pushHistory();
+            this.marks = this.marks.filter(m => m.page !== p || !this.canEditMark(m));
+            this.dirty = true;
+        },
         markCount() { return this.marks.length; },
 
         _snapshot() { return JSON.parse(JSON.stringify(this.marks)); },
@@ -292,10 +423,11 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
             this.marks = this.redoStack.pop();
             this.dirty = true;
         },
+        /** Mark ownership, 2026-09-08 — no-ops silently if the mark isn't the current user's (or unattributed); the shared page-rendering partial already hides the control in that case, this is the same rule enforced at the one call site, not a UI decision. */
         removeMark(page, idxWithinType, type) {
             const list = type === 'note' ? this.notesFor(page) : this.strokesFor(page);
             const target = list[idxWithinType];
-            if (!target) return;
+            if (!target || !this.canEditMark(target)) return;
             const idx = this.marks.indexOf(target);
             if (idx === -1) return;
             this.pushHistory();
@@ -363,7 +495,10 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
             try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
             if (this.drag.points.length >= 2) {
                 this.pushHistory();
-                this.marks.push({ type: 'highlight', page, points: this.drag.points, width: this.strokeWidth, color: this.activeColor });
+                this.marks.push({
+                    id: this.generateMarkId(), type: 'highlight', page, points: this.drag.points, width: this.strokeWidth,
+                    category: this.activeCategory, authorUserId: this.currentUserId, authorName: this.currentUserName, authorRole: this.currentUserRole,
+                });
                 this.dirty = true;
             }
             this.drag = { active: false, page: null, points: [] };
@@ -373,7 +508,10 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
             const text = this.pendingNoteText.trim();
             if (text !== '') {
                 this.pushHistory();
-                this.marks.push({ type: 'note', page: this.pendingNote.page, x: this.pendingNote.x, y: this.pendingNote.y, text, color: this.activeColor });
+                this.marks.push({
+                    id: this.generateMarkId(), type: 'note', page: this.pendingNote.page, x: this.pendingNote.x, y: this.pendingNote.y, text,
+                    category: this.activeCategory, authorUserId: this.currentUserId, authorName: this.currentUserName, authorRole: this.currentUserRole,
+                });
                 this.dirty = true;
             }
             this.pendingNote = null;
@@ -390,9 +528,11 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
             // the "silently lose it" Johan ruled out. Refuse, don't guess.
             if (this.pagesLoading) {
                 this.applyError = 'Still loading the rest of this document — wait a moment, then save.';
+                this.applyErrorReason = '';
                 return;
             }
             this.applyError = '';
+            this.applyErrorReason = '';
             this.justSaved = false;
             this.applying = true;
             try {
@@ -403,16 +543,28 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
                     const scaleX = page.width / img.clientWidth;
                     const scaleY = page.height / img.clientHeight;
 
+                    const toServerMark = m => ({
+                        id: m.id, category: m.category,
+                        // author fields are NOT sent — the server always
+                        // stamps the CURRENT caller onto a genuinely new
+                        // mark (unrecognised id) and never trusts a client-
+                        // supplied author; for an existing id it ignores
+                        // whatever the client sends entirely and echoes
+                        // back its own stored copy (see
+                        // RentalApplicationDocumentHighlightService::
+                        // normalizeForStorage()).
+                    });
                     const strokes = this.strokesFor(page.index).map(m => ({
+                        ...toServerMark(m),
                         type: 'highlight',
                         points: m.points.map(p => ({ x: Math.round(p.x * scaleX), y: Math.round(p.y * scaleY) })),
                         width: Math.round(m.width * scaleX),
-                        color: m.color,
                     }));
                     const notes = this.notesFor(page.index).map(m => ({
+                        ...toServerMark(m),
                         type: 'note',
                         x: Math.round(m.x * scaleX), y: Math.round(m.y * scaleY),
-                        text: m.text, color: m.color,
+                        text: m.text,
                     }));
                     // 2026-09-08 — ALWAYS assign, even an empty array. The
                     // server requires the payload to name every one of the
@@ -433,17 +585,20 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
                         'X-Requested-With': 'XMLHttpRequest',
                     },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ marks: marksByPage }),
+                    body: JSON.stringify({ marks: marksByPage, base_version: this.loadedVersion }),
                 });
                 if (!res.ok) {
-                    let msg = '';
-                    try { msg = (await res.json()).error || ''; } catch (_) {}
+                    let msg = '', reason = '';
+                    try { const j = await res.json(); msg = j.error || ''; reason = j.reason || ''; } catch (_) {}
                     this.applyError = msg || ('Saving failed (HTTP ' + res.status + ').');
+                    this.applyErrorReason = reason;
                     this.applying = false;
                     return;
                 }
+                const data = await res.json().catch(() => ({}));
                 this.applying = false;
                 this.dirty = false;
+                if (typeof data.marks_version === 'number') { this.loadedVersion = data.marks_version; }
                 // Keep the document list's "Marked up" badge in sync without a full
                 // reload — a reload would collapse the inline viewer.
                 const hasAny = this.markCount() > 0;
@@ -457,6 +612,7 @@ function rentalDocumentHighlighter({ initialMarkedUpDocIds } = {}) {
                 setTimeout(() => { this.justSaved = false; }, 3000);
             } catch (err) {
                 this.applyError = 'Saving failed: ' + (err && err.message ? err.message : 'network error') + '.';
+                this.applyErrorReason = '';
                 this.applying = false;
             }
         },
