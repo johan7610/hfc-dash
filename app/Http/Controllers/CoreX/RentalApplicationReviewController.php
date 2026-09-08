@@ -181,6 +181,11 @@ class RentalApplicationReviewController extends Controller
             // statement is for." A bank statement's captured lines are a
             // lump sum over this many months, not a monthly figure.
             'statement_months' => ['nullable', 'integer', 'min:1', 'max:36'],
+            // Round 16 — Johan: "unpaid transactions on bank statement...
+            // this is a dangerous app." A single flag, not a list of
+            // amounts — individual declined lines are marked on the
+            // document itself via the highlighter.
+            'has_unpaid_transactions' => ['nullable', 'boolean'],
         ]);
 
         // A row the agent never filled in (no description, no amount) is the
@@ -197,6 +202,7 @@ class RentalApplicationReviewController extends Controller
                 'agency_id' => $rentalApplication->agency_id,
                 'notes' => ($validated['notes'] ?? '') === '' ? null : ($validated['notes'] ?? null),
                 'statement_months' => ($validated['statement_months'] ?? '') === '' ? null : ($validated['statement_months'] ?? null),
+                'has_unpaid_transactions' => $request->boolean('has_unpaid_transactions'),
                 'updated_by_user_id' => $request->user()->id,
             ],
         );

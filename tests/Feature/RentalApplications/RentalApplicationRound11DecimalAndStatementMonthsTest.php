@@ -7,6 +7,7 @@ namespace Tests\Feature\RentalApplications;
 use App\Models\Agency;
 use App\Models\Branch;
 use App\Models\Contact;
+use App\Models\Property;
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationAssessment;
 use App\Models\User;
@@ -65,6 +66,20 @@ final class RentalApplicationRound11DecimalAndStatementMonthsTest extends TestCa
     private function agent(): User
     {
         return User::factory()->create(['agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'role' => 'admin']);
+    }
+
+    // Round 16 — the affordability check now tests the rent of the LINKED
+    // PROPERTY, never the applicant's current_rental_amount. Tests that
+    // need meets_threshold to resolve to a real true/false (not null) must
+    // link a property carrying the rent figure the worked example expects.
+    private function propertyWithRent(float $rent, User $agent): Property
+    {
+        return Property::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'agent_id' => $agent->id,
+            'title' => 'House to let in Ramsgate', 'status' => 'active', 'property_type' => 'house', 'listing_type' => 'rental',
+            'suburb' => 'Ramsgate', 'city' => 'Margate', 'province' => 'KwaZulu-Natal', 'address' => '1 Test Road',
+            'rental_amount' => $rent,
+        ]);
     }
 
     // ── Item 1 — Johan's exact disambiguation rule, every stated format ──
@@ -165,7 +180,8 @@ final class RentalApplicationRound11DecimalAndStatementMonthsTest extends TestCa
     public function test_johans_exact_worked_example(): void
     {
         $agent = $this->agent();
-        $app = $this->application(['current_rental_amount' => 3300]);
+        $property = $this->propertyWithRent(3300, $agent);
+        $app = $this->application(['current_rental_amount' => 3300, 'property_id' => $property->id]);
 
         $response = $this->actingAs($agent)->post(
             route('corex.rental-applications.review.assessment', $app),
@@ -200,13 +216,15 @@ final class RentalApplicationRound11DecimalAndStatementMonthsTest extends TestCa
         // sum, is what the 30% rule runs against.
         $agent = $this->agent();
 
-        $oneMonth = $this->application(['current_rental_amount' => 5400]);
+        $oneMonthProperty = $this->propertyWithRent(5400, $agent);
+        $oneMonth = $this->application(['current_rental_amount' => 5400, 'property_id' => $oneMonthProperty->id]);
         $oneMonthResult = $this->actingAs($agent)->post(route('corex.rental-applications.review.assessment', $oneMonth), [
             'income_items' => [['description' => 'Salary', 'amount' => '18000']],
             'statement_months' => 1,
         ])->json();
 
-        $threeMonths = $this->application(['current_rental_amount' => 5400]);
+        $threeMonthsProperty = $this->propertyWithRent(5400, $agent);
+        $threeMonths = $this->application(['current_rental_amount' => 5400, 'property_id' => $threeMonthsProperty->id]);
         $threeMonthsResult = $this->actingAs($agent)->post(route('corex.rental-applications.review.assessment', $threeMonths), [
             'income_items' => [['description' => 'Salary', 'amount' => '18000']],
             'statement_months' => 3,

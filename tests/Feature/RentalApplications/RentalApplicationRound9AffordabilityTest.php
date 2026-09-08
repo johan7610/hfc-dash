@@ -12,6 +12,7 @@ use App\Models\RentalApplicationAssessment;
 use App\Models\RentalApplicationExpenseItem;
 use App\Models\RentalApplicationIncomeItem;
 use App\Models\RentalApplicationQualifyingSetting;
+use App\Models\Property;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -88,6 +89,22 @@ final class RentalApplicationRound9AffordabilityTest extends TestCase
         return $assessment->fresh();
     }
 
+    // Round 16 — the affordability check now tests the rent of the LINKED
+    // PROPERTY, never the applicant's current_rental_amount. Worked
+    // examples that need meets_threshold to resolve true/false (not null,
+    // 'no_property') must link a property carrying the rent figure.
+    private function propertyWithRent(float $rent): Property
+    {
+        $agent = User::factory()->create(['agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'role' => 'admin']);
+
+        return Property::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'agent_id' => $agent->id,
+            'title' => 'House to let in Ramsgate', 'status' => 'active', 'property_type' => 'house', 'listing_type' => 'rental',
+            'suburb' => 'Ramsgate', 'city' => 'Margate', 'province' => 'KwaZulu-Natal', 'address' => '1 Test Road',
+            'rental_amount' => $rent,
+        ]);
+    }
+
     private function authoriser(): User
     {
         $user = User::factory()->create(['agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'role' => 'admin']);
@@ -107,7 +124,8 @@ final class RentalApplicationRound9AffordabilityTest extends TestCase
 
     public function test_worked_example_eighteen_thousand_gross_qualifies_up_to_fifty_four_hundred_rent(): void
     {
-        $app = $this->application(['current_rental_amount' => 5400]);
+        $property = $this->propertyWithRent(5400);
+        $app = $this->application(['current_rental_amount' => 5400, 'property_id' => $property->id]);
         $assessment = $this->assessmentWithAmounts($app, income: 18000, expenses: 4000);
 
         $result = $assessment->qualifyingResult(30.00);
@@ -119,8 +137,9 @@ final class RentalApplicationRound9AffordabilityTest extends TestCase
         $this->assertSame('sufficient', $result['label']);
 
         // One rand over the ceiling must flip the verdict — proves this is a
-        // real boundary check, not a loose approximation.
-        $app->update(['current_rental_amount' => 5401]);
+        // real boundary check, not a loose approximation. The rent now
+        // comes from the linked PROPERTY, not the application.
+        $property->update(['rental_amount' => 5401]);
         $overResult = $assessment->fresh()->qualifyingResult(30.00);
         $this->assertFalse($overResult['meets_threshold']);
         $this->assertSame('insufficient', $overResult['label']);
@@ -196,7 +215,8 @@ final class RentalApplicationRound9AffordabilityTest extends TestCase
     public function test_authorisation_screen_shows_the_worked_example_arithmetic(): void
     {
         $ro = $this->authoriser();
-        $app = $this->application(['current_rental_amount' => 5400, 'submitted_for_approval_at' => now()]);
+        $property = $this->propertyWithRent(5400);
+        $app = $this->application(['current_rental_amount' => 5400, 'property_id' => $property->id, 'submitted_for_approval_at' => now()]);
         $this->assessmentWithAmounts($app, income: 18000, expenses: 4000);
 
         $response = $this->actingAs($ro)->get(route('corex.rental-applications.authorisation.show', $app));

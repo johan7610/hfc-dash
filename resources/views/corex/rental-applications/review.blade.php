@@ -28,6 +28,7 @@
          initial: {
              notes: {{ Js::from($assessment->notes) }},
              statement_months: {{ Js::from($assessment->statement_months) }},
+             has_unpaid_transactions: {{ Js::from((bool) $assessment->has_unpaid_transactions) }},
          },
          initialIncomeItems: {{ Js::from($initialIncomeItems) }},
          initialExpenseItems: {{ Js::from($initialExpenseItems) }},
@@ -417,217 +418,173 @@
              Narrow, fixed 260px working column. Never covered by anything —
              see the in-place-annotation note above the layout <style> block. --}}
         <div class="rental-review-aside rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
-            <div class="flex items-center justify-between gap-2 mb-1">
+            {{-- Round 16 — Johan: "you are putting a lot of text on the
+                 panel which makes the panel extremenly long. why not use
+                 the helper? and put the tooltip in there rather than
+                 having a hell of a lot of info." Every explanatory
+                 paragraph that used to live in this panel is now a "?"
+                 helper badge (native title="" tooltip — the same pattern
+                 already used on the Autosaves badge below) next to its
+                 heading, never body text. --}}
+            <div class="flex items-center gap-1.5 mb-3">
                 <h2 class="text-sm font-semibold" style="color: var(--text-primary);">Affordability Assessment</h2>
-                {{-- 2026-09-08 — Johan: "how do I save the work on the right hand
-                     panel? does it auto save?" He'd already been told once in
-                     body text below (easy to miss, and not visible until the
-                     panel scrolls past it); this is now a standing, permanent
-                     badge next to the title itself, visible from the moment the
-                     screen loads — before he has typed anything, not only after
-                     — the same visual weight as "Marked up" and the highlighter's
-                     own "Saved" toast elsewhere on this screen. He should never
-                     need to ask this again by looking at the screen. --}}
-                <span class="ds-badge ds-badge-info flex-shrink-0" title="Every field below saves the moment you click away from it — no button needed.">Autosaves</span>
+                <span class="ds-badge ds-badge-muted" style="cursor: help; padding: 0 5px;"
+                      title="You type these — nothing here is pre-filled from the application, and nothing here is sent to the applicant or shown anywhere else.">?</span>
+                <span class="ds-badge ds-badge-info flex-shrink-0 ml-auto" title="Every field below saves the moment you click away from it — no button needed.">Autosaves</span>
             </div>
-            <p class="text-xs mb-4" style="color: var(--text-muted);">
-                You type these — nothing here is pre-filled from the application, and nothing here is
-                sent to the applicant or shown anywhere else.
-            </p>
 
-            <div class="space-y-4">
-                {{-- Round 12 — Johan, plainly: "whatever the agent captured
-                     get averaged by the months selected... so the avg
-                     income is? 11000? THAT monthly average is the gross
-                     monthly income the 30% affordability rule runs
-                     against." This is now REQUIRED to get a result at
-                     all — a lump sum over an unstated number of months
-                     means nothing against a monthly legal threshold, so
-                     the guideline check below reads "incomplete" until
-                     this is filled in, never a wrong answer or a pass
-                     based on the raw total. Placed above both lists since
-                     it applies to the whole capture, not just income. --}}
-                <div>
-                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
-                        Number of months this bank statement covers
-                    </label>
-                    <input type="number" step="1" min="1" max="36" class="corex-input text-sm w-20"
-                           x-model="statementMonths" @blur="save()" placeholder="e.g. 3">
-                    <p class="text-[11px] mt-1" style="color: var(--text-muted);">
-                        Required to turn the totals below into the monthly figure the affordability
-                        guideline actually runs against — the raw total alone is not enough.
-                    </p>
+            <div class="mb-4">
+                <div class="flex items-center gap-1.5 mb-1">
+                    <label class="text-xs font-medium" style="color: var(--text-secondary);">Months covered</label>
+                    <span class="ds-badge ds-badge-muted" style="cursor: help; padding: 0 5px;"
+                          title="How many months this bank statement covers. Required to turn the totals below into the MONTHLY figure the affordability guideline actually runs against — the raw total alone means nothing against a monthly legal threshold.">?</span>
                 </div>
-                {{-- Round 9 (item 5) — Johan: "filling the last row auto-adds
-                     a fresh empty one, income and expenses both, total
-                     recalculating live." Growable lists, not fixed fields —
-                     see incomeItems/expenseItems in rentalReview() below.
-                     "Gross" stated once at the section heading (Round 9 item
-                     2/3) rather than per-row, since a row's own label is
-                     free text the agent chooses ("Salary", "Side income"),
-                     unlike the applicant/agent-detail-page forms' single
-                     fixed field. --}}
-                <div>
-                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
-                        Income (gross, before deductions)
-                    </label>
-                    <p class="text-[11px] mb-2" style="color: var(--text-muted);">
-                        What's on the payslip before tax and other deductions — not take-home pay.
-                    </p>
-                    {{-- Johan, live on QA1, watching this exact panel at 1522px:
-                         "the amount input is clipped at the panel's right edge —
-                         only the leftmost couple of pixels of its border are
-                         visible." Root cause: this is a fixed 260px sticky
-                         column (`.rental-review-aside`) with overflow-x:hidden
-                         (deliberately no horizontal scrollbar) — a flex-1
-                         description input next to a fixed w-24 amount input
-                         cannot both fit; the browser's default text-input
-                         intrinsic width won the flex negotiation and pushed
-                         the amount field almost entirely outside the panel.
-                         Fixed by stacking description above amount within
-                         each row instead of side by side — both fields then
-                         always get the panel's FULL available width,
-                         regardless of how narrow the column ever gets, so
-                         this can't recur at some other width. --}}
-                    <div class="space-y-2" x-ref="incomeRows">
-                        <template x-for="(item, index) in incomeItems" :key="index">
-                            <div class="space-y-1">
-                                <input type="text" class="corex-input text-sm w-full" placeholder="e.g. Salary"
-                                       x-model="item.description" @input="onIncomeRowInput()" @blur="save()">
-                                <input type="text" inputmode="decimal" class="corex-input text-sm w-full" placeholder="0.00"
-                                       data-role="amount" x-model="item.amount" @input="onIncomeRowInput()" @blur="save()"
-                                       @keydown.enter.prevent="focusNextAmountRow('incomeRows', index)">
+                <input type="number" step="1" min="1" max="36" class="corex-input text-sm w-20"
+                       x-model="statementMonths" @blur="save()" placeholder="e.g. 3">
+            </div>
+
+            {{-- Round 16 — Johan: "why can we not split that block - desc
+                 half and amount half? so it fits next to each other." A
+                 real 50/50 grid column split (grid-cols-2), not a flex-1 +
+                 fixed-width row (the shape that caused the amount field to
+                 render almost entirely off the panel's right edge earlier
+                 today) — a grid column is always exactly half the row's
+                 width regardless of either input's own content, so this
+                 cannot recur at any panel width. --}}
+            <div class="mb-4">
+                <div class="flex items-center gap-1.5 mb-1">
+                    <span class="rounded-full flex-shrink-0" style="width: 9px; height: 9px; background: var(--ra-income-agent); border: 1px solid var(--ra-income-underline);"></span>
+                    <label class="text-xs font-medium" style="color: var(--text-secondary);">Income (gross)</label>
+                    <span class="ds-badge ds-badge-muted" style="cursor: help; padding: 0 5px;"
+                          title="What's on the payslip / bank statement BEFORE tax and other deductions — not take-home pay. One line per deposit; pressing Enter in the amount field adds the next line.">?</span>
+                </div>
+                <div class="space-y-1.5" x-ref="incomeRows">
+                    <template x-for="(item, index) in incomeItems" :key="index">
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <input type="text" class="corex-input text-sm w-full" placeholder="e.g. Salary"
+                                   x-model="item.description" @input="onIncomeRowInput()" @blur="save()">
+                            <input type="text" inputmode="decimal" class="corex-input text-sm w-full" placeholder="0.00"
+                                   data-role="amount" x-model="item.amount" @input="onIncomeRowInput()" @blur="save()"
+                                   @keydown.enter.prevent="focusNextAmountRow('incomeRows', index)">
+                        </div>
+                    </template>
+                </div>
+                <p class="text-xs mt-1.5" style="color: var(--text-secondary);">
+                    Total captured: <strong x-text="formatR(incomeTotal())"></strong>
+                </p>
+            </div>
+
+            <div class="mb-4">
+                <div class="flex items-center gap-1.5 mb-1">
+                    <span class="rounded-full flex-shrink-0" style="width: 9px; height: 9px; background: var(--ra-expense-agent); border: 1px solid var(--ra-expense-underline);"></span>
+                    <label class="text-xs font-medium" style="color: var(--text-secondary);">Expenses / existing debt</label>
+                    <span class="ds-badge ds-badge-muted" style="cursor: help; padding: 0 5px;"
+                          title="Recurring debt/expense lines off the same bank statement — car payment, store account, and so on. For reference only; does not affect the qualifying figure below.">?</span>
+                </div>
+                <div class="space-y-1.5" x-ref="expenseRows">
+                    <template x-for="(item, index) in expenseItems" :key="index">
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <input type="text" class="corex-input text-sm w-full" placeholder="e.g. Car payment"
+                                   x-model="item.description" @input="onExpenseRowInput()" @blur="save()">
+                            <input type="text" inputmode="decimal" class="corex-input text-sm w-full" placeholder="0.00"
+                                   data-role="amount" x-model="item.amount" @input="onExpenseRowInput()" @blur="save()"
+                                   @keydown.enter.prevent="focusNextAmountRow('expenseRows', index)">
+                        </div>
+                    </template>
+                </div>
+                <p class="text-xs mt-1.5" style="color: var(--text-secondary);">
+                    Total captured: <strong x-text="formatR(expenseTotal())"></strong>
+                </p>
+            </div>
+
+            {{-- Round 16 — Johan: "we need the heading, the highlighter and
+                 a tick - unpaid transactions on bank statement... an
+                 applicant with declined transactions are generally
+                 immediately declined... the tick tells the auth that this
+                 is a dangerous app." A single flag, not a list of amounts
+                 — individual declined lines are marked directly on the
+                 document (the highlighter, cc6's own territory, untouched
+                 here). This flag is what the authoriser's screen (cc5)
+                 reads to show the red flag; the colour dot below is the
+                 SAME --ra-unpaid-* token cc5 renders it with, so the two
+                 screens read as visually linked. --}}
+            <div class="mb-4">
+                <div class="flex items-center gap-1.5 mb-1">
+                    <span class="rounded-full flex-shrink-0" style="width: 9px; height: 9px; background: var(--ra-unpaid-agent); border: 1px solid var(--ra-unpaid-underline);"></span>
+                    <label class="text-xs font-medium" style="color: var(--text-secondary);">Unpaid transactions</label>
+                    <span class="ds-badge ds-badge-muted" style="cursor: help; padding: 0 5px;"
+                          title="Tick this if the bank statement shows any declined, unpaid, or returned transactions. An applicant with declined transactions is generally an immediate decline — this is the one-glance red flag the authoriser sees.">?</span>
+                </div>
+                <label class="flex items-center gap-2 text-sm cursor-pointer" style="color: var(--text-secondary);">
+                    <input type="checkbox" x-model="hasUnpaidTransactions" @change="save()">
+                    Unpaid transactions on statement
+                </label>
+            </div>
+
+            {{-- Round 16 — Johan: "we just show an info box - income * 30%
+                 = Rx - based on income captured the applicant qualifies
+                 for... so we dont need a massive hooha." ONE box, the
+                 qualifying ceiling as a large figure with its own
+                 arithmetic underneath in small type — nothing else. Wording
+                 fix, Johan caught this himself: the OLD copy said "bank
+                 statement total" as though CoreX opened and totalled the
+                 statement itself; it did not — the agent typed these
+                 figures in. Every number now says who asserted it. --}}
+            <div class="rounded-md p-3" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px solid var(--border);">
+                <template x-if="result.label === 'incomplete'">
+                    <p class="text-xs" style="color: var(--text-muted);">Capture income above and the number of months covered to see what the applicant qualifies for.</p>
+                </template>
+                <template x-if="result.label !== 'incomplete'">
+                    <div>
+                        <p class="text-[11px] uppercase tracking-wide font-semibold" style="color: var(--text-muted);">Qualifies for up to</p>
+                        <p class="text-2xl font-bold" style="color: var(--text-primary);" x-text="formatR(result.max_affordable_rent)"></p>
+                        <p class="text-[11px] mt-0.5" style="color: var(--text-muted);">
+                            Monthly gross income — from figures the agent captured off the bank statement, ÷ <span x-text="result.statement_months"></span> months —
+                            × <span x-text="result.max_rent_percent"></span>%
+                        </p>
+                        <p class="text-xs mt-1.5" x-show="result.applicant_reported_income !== null" style="color: var(--text-muted);">
+                            Applicant's stated income — as entered by them on their application: <span x-text="formatR(result.applicant_reported_income)"></span>
+                        </p>
+                        {{-- Round 16 — Johan: "the affordability check is
+                             currently testing the applicant's SELF-REPORTED
+                             CURRENT RENT, not the rent of the property
+                             being applied for... If no property is linked,
+                             the check must say it cannot run." cc3 is
+                             building the property-link control elsewhere on
+                             this screen; this line just reflects whatever
+                             qualifyingResult() reports once it's set. --}}
+                        <template x-if="result.label === 'no_property'">
+                            <p class="text-xs mt-2 font-medium" style="color: var(--ds-amber, #b45309);">Link a property to check against its rent.</p>
+                        </template>
+                        {{-- Round 16 — a single-line badge with the rent
+                             figure crammed into it overflowed the panel at
+                             1522px, the exact same class of bug as the
+                             clipped amount fields earlier today. Split into
+                             a short badge (never wraps, always fits) plus
+                             the rent figure as plain text below it, which
+                             wraps normally like any other text in the box. --}}
+                        <template x-if="result.label === 'sufficient' || result.label === 'insufficient'">
+                            <div class="mt-2">
+                                <span class="ds-badge" :class="result.label === 'sufficient' ? 'ds-badge-success' : 'ds-badge-warning'"
+                                      x-text="result.label === 'sufficient' ? 'Within guideline' : 'Exceeds guideline'"></span>
+                                <p class="text-xs mt-1" style="color: var(--text-muted);">
+                                    Property rent: <strong x-text="formatR(result.rent)"></strong>
+                                </p>
                             </div>
                         </template>
                     </div>
-                    <p class="text-xs mt-2" style="color: var(--text-secondary);">
-                        Total captured (all lines): <strong x-text="formatR(incomeTotal())"></strong>
-                    </p>
-                    {{-- Round 12 — THIS is now the figure the guideline
-                         check uses; formatR() sourced from result.gross_income
-                         (the server's own, authoritative figure) once
-                         saved, matching the live client-side division
-                         exactly in the meantime so the two can never
-                         meaningfully disagree. --}}
-                    <p class="text-xs mt-1" x-show="statementMonths" style="color: var(--text-secondary);">
-                        Monthly average (÷ <span x-text="statementMonths"></span> months —
-                        <strong>used in the affordability check below</strong>):
-                        <strong x-text="formatR(monthlyAverage(incomeTotal()))"></strong>
-                    </p>
-                    <p class="text-xs mt-1" x-show="!statementMonths" style="color: var(--ds-amber, #b45309);">
-                        Enter the number of months above to calculate the monthly figure the
-                        guideline check needs.
-                    </p>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Expenses / existing debt</label>
-                    <div class="space-y-2" x-ref="expenseRows">
-                        <template x-for="(item, index) in expenseItems" :key="index">
-                            <div class="space-y-1">
-                                <input type="text" class="corex-input text-sm w-full" placeholder="e.g. Car payment"
-                                       x-model="item.description" @input="onExpenseRowInput()" @blur="save()">
-                                <input type="text" inputmode="decimal" class="corex-input text-sm w-full" placeholder="0.00"
-                                       data-role="amount" x-model="item.amount" @input="onExpenseRowInput()" @blur="save()"
-                                       @keydown.enter.prevent="focusNextAmountRow('expenseRows', index)">
-                            </div>
-                        </template>
-                    </div>
-                    <p class="text-xs mt-2" style="color: var(--text-secondary);">
-                        Total captured (all lines): <strong x-text="formatR(expenseTotal())"></strong>
-                    </p>
-                    <p class="text-xs mt-1" x-show="statementMonths" style="color: var(--text-secondary);">
-                        Monthly average (÷ <span x-text="statementMonths"></span> months):
-                        <strong x-text="formatR(monthlyAverage(expenseTotal()))"></strong>
-                    </p>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Notes</label>
-                    <textarea rows="3" class="corex-input text-sm w-full" x-model="fields.notes" @blur="save()"></textarea>
-                </div>
+                </template>
             </div>
 
-            {{-- Unmistakable save state, 2026-09-07 — Johan: "no save button visible
-                 anywhere?" and "is that filled in from where? ... no save to save
-                 this." Two real gaps, not one: (1) autosave-on-blur DOES fire and
-                 DOES persist (confirmed against the DB — this is real agent-entered
-                 data, not seeded), but a plain 12px text line with no background is
-                 easy to miss; (2) the indicator only ever reflected THIS session's
-                 own save events — on a fresh page load with already-saved data it
-                 showed nothing at all, which looks identical to "never saved."
-                 Fixed: seeded from the record's real updated_at on load, shown as a
-                 persistent badge (icon + background), not a message that can vanish
-                 unnoticed. --}}
+            <div class="mt-4">
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Notes</label>
+                <textarea rows="3" class="corex-input text-sm w-full" x-model="fields.notes" @blur="save()"></textarea>
+            </div>
+
             <div class="flex items-center gap-1.5 text-xs mt-2 px-2 py-1 rounded-md" x-show="saveStatus"
                  :style="saveError ? 'background: var(--ds-red-soft, #fef2f2); color: var(--ds-red, #dc2626);' : 'background: var(--ds-emerald-soft, #ecfdf5); color: var(--ds-emerald, #059669);'">
                 <span x-show="!saveError && saveStatus !== 'Saving…'">&check;</span>
                 <span x-text="saveStatus"></span>
-            </div>
-
-            {{-- The calculation — SUGGESTIVE ONLY. Johan: "The marking is only
-                 suggestive to the agent to spot. not rule of thumb." Never a
-                 blocking gate, never an auto-decision — text only. --}}
-            <div class="rounded-md p-3 mt-4" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px solid var(--border);">
-                <p class="text-[11px] font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Suggested check — not a rule</p>
-                <template x-if="result.label === 'incomplete'">
-                    <p class="text-sm" style="color: var(--text-muted);">Enter income above, fill in the number of months the statement covers, and make sure "Current rental amount" is filled in on the application itself, to see a suggestion here.</p>
-                </template>
-                {{-- 2026-09-08 — Johan: "right hand panel? is that filled in
-                     from where?" This calculation's RENT figure was never
-                     shown — an agent could see a suggestion without knowing
-                     what rent it was measured against. Naming the source
-                     (the applicant's own self-reported current rent, from
-                     the application form) here, not just in a tooltip. --}}
-                {{-- Round 9 — the rule is now stated as the law states it:
-                     rent as a percentage of GROSS income, checked directly
-                     against the agency's configured ceiling (default 30%,
-                     the legal guideline) — not a rent multiplier. Same
-                     wording style as authorisation/show.blade.php, so an
-                     agent and an authoriser see the identical arithmetic. --}}
-                <template x-if="result.label !== 'incomplete'">
-                    <div class="text-sm space-y-1">
-                        <p>Monthly gross income (bank statement total ÷ <span x-text="result.statement_months"></span> months):
-                           <strong x-text="formatR(result.gross_income)"></strong></p>
-                        {{-- Round 12 — Johan: "make sure the screen shows
-                             both clearly so the agent can see the
-                             difference, since that difference is exactly
-                             what they are assessing" — the applicant's own
-                             claimed figure next to the agent's derived,
-                             bank-statement-verified one. Only the derived
-                             figure above feeds the check. --}}
-                        <p x-show="result.applicant_reported_income !== null">
-                            Applicant's own stated income (from their application form):
-                            <strong x-text="formatR(result.applicant_reported_income)"></strong>
-                        </p>
-                        <p>Rent (applicant's self-reported current rent, from the application): <strong x-text="formatR(result.rent)"></strong></p>
-                        <p>Rent must not exceed <span x-text="result.max_rent_percent"></span>% of monthly gross income
-                           (<strong x-text="formatR(result.max_affordable_rent)"></strong>).
-                           Actual rent is <span x-text="result.rent_as_percent_of_gross"></span>% of monthly gross income.</p>
-                        <p class="mt-2">
-                            <span class="ds-badge" :class="result.meets_threshold ? 'ds-badge-success' : 'ds-badge-warning'"
-                                  x-text="result.meets_threshold ? 'Within the affordability guideline — worth a closer look either way' : 'Exceeds the affordability guideline — worth a closer look'"></span>
-                        </p>
-                    </div>
-                </template>
-                {{-- Round 9 (item 1) — cc5: "an agent sees a net figure
-                     sitting next to a pass or fail badge and reasonably
-                     assumes net is what was tested. It is not." Deliberately
-                     NOT inside the box above, with its own heading and
-                     colour so it can never be read as part of the
-                     guideline check — net income plays no part in
-                     meets_threshold (see RentalApplicationAssessment::
-                     qualifyingResult()'s own docblock). Kept, not removed
-                     (Johan's call) — genuinely useful context for the agent,
-                     what's left after the expenses typed in above. --}}
-                <template x-if="result.label !== 'incomplete'">
-                    <div class="rounded-md p-2 mt-3" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px dashed var(--border);">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide" style="color: var(--text-muted);">
-                            For your reference only — does not affect the guideline check above
-                        </p>
-                        <p class="text-sm mt-1">
-                            Income left after expenses: <strong x-text="formatR(result.net_income)"></strong>
-                        </p>
-                    </div>
-                </template>
             </div>
 
             {{-- Authoriser flow, 2026-09-08 — the agent's own two actions.
@@ -745,11 +702,24 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
         // has already created, from the characters typed before Enter was
         // pressed) — never on plain typing, so a run of digits can never
         // trigger it more than the one time the agent actually asks for it.
+        //
+        // Round 16 — a SECOND, subtler bug found verifying this under fast,
+        // continuous (scripted, zero-delay) typing through three rows: the
+        // original version wrapped the focus move in $nextTick(), which
+        // defers it to Alpine's next microtask. That's unnecessary here —
+        // the target row was already created by an EARLIER, already-
+        // completed @input event (events on one element are strictly
+        // sequential; the row-creating keystroke fully finishes, DOM
+        // patch included, before this LATER keydown.enter can even fire)
+        // — and worse, it's actively harmful: a fast enough next keystroke
+        // can land before that deferred callback runs, landing in the
+        // OLD field instead and concatenating onto whatever was already
+        // there ("15000" + "8500" typed fast enough became "150008500" in
+        // one field, not two). Focusing synchronously, with no deferral,
+        // removed the race entirely.
         focusNextAmountRow(ref, currentIndex) {
-            this.$nextTick(() => {
-                const inputs = this.$refs[ref].querySelectorAll('[data-role="amount"]');
-                inputs[currentIndex + 1]?.focus();
-            });
+            const inputs = this.$refs[ref].querySelectorAll('[data-role="amount"]');
+            inputs[currentIndex + 1]?.focus();
         },
         // Sums exactly what the server will sum (RentalApplicationAssessment::
         // qualifyingResult() sums the same persisted amounts) — this MUST
@@ -763,6 +733,8 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
         },
         // Round 11 — display only (see the field's own comment above).
         statementMonths: initial.statement_months ?? '',
+        // Round 16 — the unpaid-transactions red flag.
+        hasUnpaidTransactions: initial.has_unpaid_transactions ?? false,
         monthlyAverage(total) {
             const months = parseInt(this.statementMonths, 10);
             if (!months || months < 1) return null;
@@ -902,6 +874,7 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
                     expense_items: sentExpenseRows,
                     notes: this.fields.notes,
                     statement_months: this.statementMonths,
+                    has_unpaid_transactions: this.hasUnpaidTransactions,
                 }),
             }).then(r => r.json()).then(data => {
                 if (data.ok) {

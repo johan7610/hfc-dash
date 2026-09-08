@@ -25,11 +25,13 @@ class RentalApplicationAssessment extends Model
     use BelongsToAgency;
 
     protected $fillable = [
-        'agency_id', 'rental_application_id', 'notes', 'statement_months', 'updated_by_user_id',
+        'agency_id', 'rental_application_id', 'notes', 'statement_months',
+        'has_unpaid_transactions', 'updated_by_user_id',
     ];
 
     protected $casts = [
         'statement_months' => 'integer',
+        'has_unpaid_transactions' => 'boolean',
     ];
 
     public function updatedBy(): BelongsTo
@@ -95,6 +97,22 @@ class RentalApplicationAssessment extends Model
      * unmistakably as reference-only, separated from the pass/fail badge —
      * the OLD screen showed it unlabelled next to the badge, which is
      * exactly what made an agent reasonably assume it was being tested.
+     *
+     * Round 16 — Johan: "the affordability check is currently testing the
+     * applicant's SELF-REPORTED CURRENT RENT, not the rent of the property
+     * being applied for... If no property is linked, the check must say
+     * it cannot run rather than testing the wrong number." `rent` now
+     * comes from the LINKED PROPERTY's own rental_amount, never
+     * current_rental_amount (that column is the applicant's own current,
+     * pre-move residence — irrelevant to whether they can afford the
+     * property they're actually applying for). `property_linked` is
+     * returned explicitly so the view can say plainly why no pass/fail
+     * exists yet, rather than silently showing nothing or (worse) falling
+     * back to the wrong rent. The QUALIFYING CEILING itself
+     * (max_affordable_rent) does NOT need a property — it's purely a
+     * function of captured income — so it still computes and displays as
+     * soon as income+months exist; only the pass/fail comparison against
+     * an actual rent additionally needs the property link.
      */
     public function qualifyingResult(float $maxRentPercent): array
     {
@@ -119,9 +137,9 @@ class RentalApplicationAssessment extends Model
             : $grossIncome - $monthlyExpenses;
 
         $rentalApplication = $this->rentalApplication;
-        $rent = $rentalApplication?->current_rental_amount !== null
-            ? (float) $rentalApplication->current_rental_amount
-            : null;
+        $property = $rentalApplication?->property;
+        $propertyLinked = $property !== null;
+        $rent = $property?->rental_amount !== null ? (float) $property->rental_amount : null;
 
         $maxAffordableRent = $grossIncome !== null ? round($grossIncome * ($maxRentPercent / 100), 2) : null;
 
@@ -140,6 +158,19 @@ class RentalApplicationAssessment extends Model
             ? (float) $rentalApplication->monthly_salary
             : null;
 
+        // 'incomplete' — no income/months captured yet, nothing to show at
+        // all. 'no_property' — the qualifying ceiling IS computable but
+        // there's no linked property to test a real rent against yet.
+        // 'sufficient' | 'insufficient' — the actual pass/fail, once both
+        // exist.
+        if ($maxAffordableRent === null) {
+            $label = 'incomplete';
+        } elseif (! $propertyLinked) {
+            $label = 'no_property';
+        } else {
+            $label = $meetsThreshold ? 'sufficient' : 'insufficient';
+        }
+
         return [
             'gross_income' => $grossIncome,
             'net_income' => $netIncome,
@@ -147,15 +178,13 @@ class RentalApplicationAssessment extends Model
             'total_captured_expenses' => $this->expenseItems->isEmpty() ? null : $totalExpenses,
             'statement_months' => $months,
             'applicant_reported_income' => $applicantReportedIncome,
+            'property_linked' => $propertyLinked,
             'rent' => $rent,
             'max_rent_percent' => $maxRentPercent,
             'max_affordable_rent' => $maxAffordableRent,
             'rent_as_percent_of_gross' => $rentAsPercentOfGross,
             'meets_threshold' => $meetsThreshold,
-            // 'sufficient' | 'insufficient' | 'incomplete' — incomplete
-            // when there isn't enough input, INCLUDING a missing/zero
-            // statement_months, to say anything at all.
-            'label' => $meetsThreshold === null ? 'incomplete' : ($meetsThreshold ? 'sufficient' : 'insufficient'),
+            'label' => $label,
         ];
     }
 
