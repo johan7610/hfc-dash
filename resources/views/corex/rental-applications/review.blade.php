@@ -478,9 +478,10 @@
                         <template x-for="(item, index) in incomeItems" :key="index">
                             <div class="flex items-center gap-1.5">
                                 <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Salary"
-                                       x-model="item.description" @input="onIncomeRowInput(false)" @blur="save()">
+                                       x-model="item.description" @input="onIncomeRowInput()" @blur="save()">
                                 <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
-                                       data-role="amount" x-model="item.amount" @input="onIncomeRowInput(true)" @blur="save()">
+                                       data-role="amount" x-model="item.amount" @input="onIncomeRowInput()" @blur="save()"
+                                       @keydown.enter.prevent="focusNextAmountRow('incomeRows', index)">
                             </div>
                         </template>
                     </div>
@@ -509,9 +510,10 @@
                         <template x-for="(item, index) in expenseItems" :key="index">
                             <div class="flex items-center gap-1.5">
                                 <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Car payment"
-                                       x-model="item.description" @input="onExpenseRowInput(false)" @blur="save()">
+                                       x-model="item.description" @input="onExpenseRowInput()" @blur="save()">
                                 <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
-                                       data-role="amount" x-model="item.amount" @input="onExpenseRowInput(true)" @blur="save()">
+                                       data-role="amount" x-model="item.amount" @input="onExpenseRowInput()" @blur="save()"
+                                       @keydown.enter.prevent="focusNextAmountRow('expenseRows', index)">
                             </div>
                         </template>
                     </div>
@@ -684,46 +686,54 @@ function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItem
         },
         // Removes any blank row that isn't the last one (how an agent
         // "deletes" a row — clear both its fields), then guarantees exactly
-        // one blank trailing row is always available to type into. Returns
-        // true only on the call that actually pushed a fresh row, so the
-        // caller can react exactly once, not on every subsequent keystroke
-        // into that new row.
+        // one blank trailing row is always available to type into. This
+        // fires on every keystroke (via @input) — it must NEVER also move
+        // focus, or it re-fires on every character once the new row itself
+        // starts filling (see the 2026-09-08 postmortem below).
         compactAndEnsureTrailing(list) {
             for (let i = list.length - 2; i >= 0; i--) {
                 if (this.rowIsBlank(list[i])) list.splice(i, 1);
             }
             if (!list.length || !this.rowIsBlank(list[list.length - 1])) {
                 list.push({ id: null, description: '', amount: '' });
-                return true;
             }
-            return false;
+        },
+        onIncomeRowInput() {
+            this.compactAndEnsureTrailing(this.incomeItems);
+            this.save();
+        },
+        onExpenseRowInput() {
+            this.compactAndEnsureTrailing(this.expenseItems);
+            this.save();
         },
         // 2026-09-08 — Johan, live on QA1: "added values in right hand
-        // panel totals do not populate." Root cause, found on the real
-        // record: the typed amounts had landed in the DESCRIPTION column,
-        // amount left null — an agent racing down a bank statement, typing
-        // one amount after another, has no reason to click/tab into each
-        // new row's amount box specifically; a new row appearing next to
-        // whatever they're already doing is not the same as the cursor
-        // actually being IN that row's amount field. Fixed by moving focus
-        // there automatically the instant a fresh row appears — but ONLY
-        // when the AMOUNT field is what triggered the row (fromAmountField),
-        // never the description field, so someone deliberately typing a
-        // longer description never has their cursor ripped away mid-word.
-        onIncomeRowInput(fromAmountField) {
-            const added = this.compactAndEnsureTrailing(this.incomeItems);
-            if (added && fromAmountField) this.focusLastAmountField('incomeRows');
-            this.save();
-        },
-        onExpenseRowInput(fromAmountField) {
-            const added = this.compactAndEnsureTrailing(this.expenseItems);
-            if (added && fromAmountField) this.focusLastAmountField('expenseRows');
-            this.save();
-        },
-        focusLastAmountField(ref) {
+        // panel totals do not populate." Root cause found on the real
+        // record: typed amounts had landed in the DESCRIPTION column,
+        // amount left null.
+        //
+        // FIRST attempt at a fix moved focus to a freshly-created row's
+        // amount field the instant that row was pushed (triggered from
+        // @input, "the last row just became non-blank"). cc1 reproduced a
+        // WORSE bug from that fix before it ever reached Johan: that
+        // trigger condition is true on literally every keystroke once the
+        // newly-created row itself starts filling, not just once — the
+        // row just focused goes non-blank on its very next character,
+        // which creates ANOTHER row and jumps focus AGAIN, forever. Typing
+        // "10000" produced five single-digit rows instead of one row
+        // holding "10000". Reverted off QA1 before Johan ever saw it.
+        //
+        // Correct fix: never infer "the agent is done with this row" from
+        // an input event — a keystroke can't tell a completed value apart
+        // from a value still being typed. Use an explicit signal instead:
+        // Enter. Pressing Enter in an amount field moves focus to the
+        // NEXT row's amount field (which @input's own compactAndEnsureTrailing
+        // has already created, from the characters typed before Enter was
+        // pressed) — never on plain typing, so a run of digits can never
+        // trigger it more than the one time the agent actually asks for it.
+        focusNextAmountRow(ref, currentIndex) {
             this.$nextTick(() => {
                 const inputs = this.$refs[ref].querySelectorAll('[data-role="amount"]');
-                inputs[inputs.length - 1]?.focus();
+                inputs[currentIndex + 1]?.focus();
             });
         },
         // Sums exactly what the server will sum (RentalApplicationAssessment::
