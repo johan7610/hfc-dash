@@ -135,7 +135,14 @@
                 <div>
                     {{ optional($entry->from_status)  ? str_replace('_', ' ', $entry->from_status) . ' → ' : '' }}{{ str_replace('_', ' ', $entry->to_status) }}
                     — {{ $entry->changedBy?->name ?? 'System' }}, {{ $entry->created_at->format('d M Y H:i') }}
-                    @if($entry->note) — "{{ $entry->note }}" @endif
+                    {{-- 2026-09-08 — Johan: a multi-line "request more info"
+                         note (numbered points) must preserve line breaks
+                         "when it reaches the applicant or agent." The email
+                         already did (white-space:pre-wrap); this log — the
+                         agent's own later view of what they asked for — did
+                         not, and a numbered note collapsed into one run-on
+                         line. --}}
+                    @if($entry->note) — "<span style="white-space: pre-wrap;">{{ $entry->note }}</span>" @endif
                 </div>
             @endforeach
         </div>

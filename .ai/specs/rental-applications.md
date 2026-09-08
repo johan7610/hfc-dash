@@ -3434,3 +3434,94 @@ not a helpful setup step.
 **Files touched:** `resources/views/corex/rental-applications/
 review.blade.php` (the `x-ref` → `data-` attribute fix) and
 `.ai/BUILD_STANDARD.md` (§5b, docs only).
+
+---
+
+## Highlighter size, and "request more info" reachable while a document is open (Johan, 2026-09-08)
+
+Three items, all about the screen fighting the agent instead of letting
+them work.
+
+### Highlighter size — "too much lines on bank statement"
+
+Three presets in the header (Thin 10px / Medium 22px / Thick 36px,
+raster px at the existing 150 DPI) — not a slider. Medium is the
+unchanged prior default, so an agent who never touches this sees no
+change. Only shown for the highlight tool (a note's marker size never
+varies). Remembered in `localStorage`, restored in `init()`, so it
+survives switching documents in one sitting AND coming back tomorrow —
+the stronger reading of "not resetting it on every document."
+
+**Verified by actually drawing, not by reading the code:** clicked
+Thick, dragged a real stroke, read the mark that was just pushed to
+state directly (not "the last polyline in the DOM" — this document
+already had 29 pre-existing marks from other testing, and the first
+pass at this check was fooled by picking up one of those instead of the
+one just drawn) — width **36**. Same for Thin — **10**. Same for
+Medium — **22**. Reloaded the page fresh and confirmed the picked size
+(`thin`) came back from `localStorage`, not just component memory.
+
+### Request more information — reachable and fillable while a document is open
+
+Johan, verbatim: *"request more info only appears if a document is not
+open... I have to write down somewhere else because its only available
+once the doc is closed?"* — and separately, *"the simple modal that
+loads on request extra info will not suffice. Allow a free text box."*
+Treated as one problem, per instruction, because they are one problem:
+the request needs to live somewhere reachable AND sized for real writing
+WHILE the evidence it's about is on screen.
+
+**Fix:** removed the header's "Request more info" button and the
+`prompt()` built for it last round (on reflection, a prompt is the same
+mistake in miniature — still a one-line interruption, still invisible
+while a document is open). "Submit to authoriser" stays in the header —
+a single decisive click once he's ready, not something composed while
+reading, and already confirmed working there. The request itself moved
+into the aside — a real six-row textarea, always visible, never covered
+by an open document, for the same reason the highlighter itself is
+inline rather than a modal.
+
+**The draft-survives-navigation requirement needed no new code.** The
+field it's bound to (`moreInfoNote`) was never part of `openHighlighter()`
+/`closeHighlighter()`'s reset list — checked directly before assuming —
+so it was already independent of the document lifecycle. Moving the UI
+to somewhere that stays on screen was the entire fix.
+
+**Verified the exact sequence asked for:** opened a document, confirmed
+the textarea was visible and usable the whole time (not just before
+opening), typed:
+
+```
+1. Three months' bank statements
+2. Payslip for August
+3. Proof of the R12,000 deposit on 14 August
+```
+
+closed the document (Done), confirmed the text was still there, reopened
+the same document, confirmed it was STILL there, and read the actual
+textarea's DOM value to match — not just the framework's internal state.
+Then sent it for real: a real POST, a real 200, and the database read
+back the exact three lines with real `\n` characters intact.
+
+### Line breaks reaching "the applicant or agent" — one side already worked, the other didn't
+
+Checked both instead of assuming either: the email to the applicant
+already renders with `white-space: pre-wrap` — numbered points were
+already going to arrive intact, no change needed there. The AGENT's own
+later view of the same note — the status history log on the full
+application page — had no such handling and would have collapsed a
+numbered request into one run-on line. Fixed with the same CSS property
+on that one span. Verified by sending a real multi-line request and
+reading the rendered history entry's computed style (`white-space:
+pre-wrap`) and rendered height (63px — several lines, not one).
+
+**Sequencing:** built these three before the marks-ownership work, as
+discussed — they're entirely inside `review.blade.php` plus one line in
+`show.blade.php`; ownership touches the shared highlight service/
+controller and the authoriser's own screen, a different surface.
+
+**Files touched:** `resources/views/corex/rental-applications/
+review.blade.php` (size presets + localStorage, request-more-info moved
+to the aside, `promptRequestMoreInfo()` removed), `resources/views/corex/
+rental-applications/show.blade.php` (one line, `white-space: pre-wrap` on
+the status history note).
