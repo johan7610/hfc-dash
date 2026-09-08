@@ -156,44 +156,55 @@ final class RentalApplicationRound11DecimalAndStatementMonthsTest extends TestCa
         $this->assertSame(28.50, \App\Models\RentalApplicationQualifyingSetting::maxRentPercentFor($this->agency->id));
     }
 
-    // ── Item 3 — statement months + monthly average, NOT wired into the decision ──
+    // ── Item 3, Round 12 — statement months WIRED into the decision ──────
+    // Johan, plainly, after the "confirm before wiring" question confused
+    // him: "whatever the agent captured get averaged by the months
+    // selected - 10000, 10000, 13000 tallies to 33000, agent selected 3
+    // months - so the avg income is? 11000? what else are you on about?"
 
-    public function test_statement_months_persists_and_produces_a_monthly_average_display_value(): void
+    public function test_johans_exact_worked_example(): void
     {
         $agent = $this->agent();
-        $app = $this->application(['current_rental_amount' => 5400]);
+        $app = $this->application(['current_rental_amount' => 3300]);
 
         $response = $this->actingAs($agent)->post(
             route('corex.rental-applications.review.assessment', $app),
             [
-                'income_items' => [['description' => 'Salary', 'amount' => '54000']],
+                'income_items' => [
+                    ['description' => 'Bank statement line 1', 'amount' => '10000'],
+                    ['description' => 'Bank statement line 2', 'amount' => '10000'],
+                    ['description' => 'Bank statement line 3', 'amount' => '13000'],
+                ],
                 'statement_months' => 3,
             ]
         );
 
         $response->assertOk();
         $data = $response->json();
-        $this->assertEquals(54000.0, $data['result']['gross_income']);
-        $this->assertEquals(3, $data['result']['statement_months']);
-        $this->assertEquals(18000.0, $data['result']['monthly_average_gross_income']);
+        $this->assertEquals(33000.0, $data['result']['total_captured_income'], 'the three lines must tally to 33,000');
+        $this->assertEquals(11000.0, $data['result']['gross_income'], '33,000 over 3 months must average to 11,000');
+        $this->assertEquals(3300.0, $data['result']['max_affordable_rent'], '30% of 11,000 must be exactly 3,300');
+        $this->assertTrue($data['result']['meets_threshold']);
+        $this->assertSame('sufficient', $data['result']['label']);
 
+        // The number stored must be the number displayed — no drift.
         $assessment = RentalApplicationAssessment::where('rental_application_id', $app->id)->first();
         $this->assertSame(3, $assessment->statement_months);
+        $this->assertEquals(33000.0, (float) $assessment->incomeItems->sum('amount'));
     }
 
-    public function test_monthly_average_does_not_affect_the_affordability_decision_yet(): void
+    public function test_monthly_average_now_drives_the_decision_not_the_raw_total(): void
     {
-        // Deliberate — Johan asked to confirm before wiring this in. Two
-        // assessments with the SAME raw total but different statement
-        // lengths must produce the IDENTICAL meets_threshold/gross_income,
-        // proving the decision still runs off the raw sum.
+        // Same raw total (18000), different statement lengths — the
+        // DECISION must now differ, proving the average, not the lump
+        // sum, is what the 30% rule runs against.
         $agent = $this->agent();
 
         $oneMonth = $this->application(['current_rental_amount' => 5400]);
-        $this->actingAs($agent)->post(route('corex.rental-applications.review.assessment', $oneMonth), [
+        $oneMonthResult = $this->actingAs($agent)->post(route('corex.rental-applications.review.assessment', $oneMonth), [
             'income_items' => [['description' => 'Salary', 'amount' => '18000']],
             'statement_months' => 1,
-        ]);
+        ])->json();
 
         $threeMonths = $this->application(['current_rental_amount' => 5400]);
         $threeMonthsResult = $this->actingAs($agent)->post(route('corex.rental-applications.review.assessment', $threeMonths), [
@@ -201,27 +212,63 @@ final class RentalApplicationRound11DecimalAndStatementMonthsTest extends TestCa
             'statement_months' => 3,
         ])->json();
 
-        // Same raw total (18000) either way — the decision must not
-        // silently divide by statement_months internally.
-        $this->assertEquals(18000.0, $threeMonthsResult['result']['gross_income']);
-        $this->assertEquals(5400.0, $threeMonthsResult['result']['max_affordable_rent']);
-        $this->assertTrue($threeMonthsResult['result']['meets_threshold']);
-        // But the monthly average IS different, proving it's computed
-        // independently and just not fed into the decision.
-        $this->assertEquals(6000.0, $threeMonthsResult['result']['monthly_average_gross_income']);
+        // 1 month: 18000 / 1 = 18000 -> 30% = 5400 -> exactly meets 5400 rent.
+        $this->assertEquals(18000.0, $oneMonthResult['result']['gross_income']);
+        $this->assertTrue($oneMonthResult['result']['meets_threshold']);
+
+        // 3 months: 18000 / 3 = 6000 -> 30% = 1800 -> 5400 rent now FAILS.
+        $this->assertEquals(6000.0, $threeMonthsResult['result']['gross_income']);
+        $this->assertEquals(1800.0, $threeMonthsResult['result']['max_affordable_rent']);
+        $this->assertFalse($threeMonthsResult['result']['meets_threshold']);
     }
 
-    public function test_no_statement_months_means_no_monthly_average(): void
+    public function test_missing_statement_months_never_divides_and_reports_incomplete_not_a_wrong_pass(): void
     {
         $agent = $this->agent();
-        $app = $this->application();
+        $app = $this->application(['current_rental_amount' => 100]); // trivially affordable if the raw total were ever used
 
         $response = $this->actingAs($agent)->post(route('corex.rental-applications.review.assessment', $app), [
             'income_items' => [['description' => 'Salary', 'amount' => '18000']],
         ]);
 
         $data = $response->json();
-        $this->assertNull($data['result']['monthly_average_gross_income']);
-        $this->assertNull($data['result']['statement_months']);
+        $this->assertNull($data['result']['gross_income'], 'no months -> no decision figure, never the raw total');
+        $this->assertNull($data['result']['max_affordable_rent']);
+        $this->assertNull($data['result']['meets_threshold']);
+        $this->assertSame('incomplete', $data['result']['label']);
+        // The raw total is still visible for the agent (total_captured_income),
+        // just never used as if it were monthly.
+        $this->assertEquals(18000.0, $data['result']['total_captured_income']);
+    }
+
+    public function test_zero_statement_months_is_rejected_at_validation_never_divides(): void
+    {
+        $agent = $this->agent();
+        $app = $this->application();
+
+        $response = $this->actingAs($agent)->post(route('corex.rental-applications.review.assessment', $app), [
+            'income_items' => [['description' => 'Salary', 'amount' => '18000']],
+            'statement_months' => 0,
+        ]);
+
+        $response->assertSessionHasErrors('statement_months');
+    }
+
+    public function test_applicant_reported_income_shown_for_comparison_never_affects_the_decision(): void
+    {
+        $agent = $this->agent();
+        // Applicant claimed 10,000; the bank statement (agent-captured,
+        // averaged) shows the real figure of 18,000 — Johan's own example.
+        $app = $this->application(['current_rental_amount' => 5000, 'monthly_salary' => 10000]);
+
+        $response = $this->actingAs($agent)->post(route('corex.rental-applications.review.assessment', $app), [
+            'income_items' => [['description' => 'Salary', 'amount' => '18000']],
+            'statement_months' => 1,
+        ]);
+
+        $data = $response->json();
+        $this->assertEquals(10000.0, $data['result']['applicant_reported_income']);
+        // The DECISION still runs off the bank-statement-derived figure.
+        $this->assertEquals(18000.0, $data['result']['gross_income']);
     }
 }

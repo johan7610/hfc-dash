@@ -78,7 +78,10 @@ final class RentalApplicationRound10ReviewScreenTest extends TestCase
     {
         $agent = $this->agent();
         $app = $this->application(['current_rental_amount' => 5000]);
-        $assessment = RentalApplicationAssessment::create(['agency_id' => $this->agency->id, 'rental_application_id' => $app->id]);
+        // Round 12 — the decision now requires statement_months to
+        // compute anything at all; without it the whole box reads
+        // "incomplete" and this test's assertions would never render.
+        $assessment = RentalApplicationAssessment::create(['agency_id' => $this->agency->id, 'rental_application_id' => $app->id, 'statement_months' => 1]);
         RentalApplicationIncomeItem::create(['agency_id' => $this->agency->id, 'rental_application_assessment_id' => $assessment->id, 'description' => 'Salary', 'amount' => 20000]);
         RentalApplicationExpenseItem::create(['agency_id' => $this->agency->id, 'rental_application_assessment_id' => $assessment->id, 'description' => 'Car', 'amount' => 3000]);
 
@@ -121,6 +124,10 @@ final class RentalApplicationRound10ReviewScreenTest extends TestCase
                 'expense_items' => [
                     ['description' => 'Car payment', 'amount' => 'R1 500'],
                 ],
+                // Round 12 — gross_income now requires statement_months;
+                // 1 month makes this a no-op division so the assertions
+                // below stay a direct check of the raw captured totals.
+                'statement_months' => 1,
             ]
         );
 
@@ -205,9 +212,12 @@ final class RentalApplicationRound10ReviewScreenTest extends TestCase
 
         $saved = $this->actingAs($agent)->post(
             route('corex.rental-applications.review.assessment', $app),
-            ['income_items' => [
-                ['description' => 'Salary', 'amount' => '18000'],
-            ]]
+            [
+                'income_items' => [
+                    ['description' => 'Salary', 'amount' => '18000'],
+                ],
+                'statement_months' => 1,
+            ]
         )->json();
 
         // The same number the aside panel's live JS total (incomeTotal())

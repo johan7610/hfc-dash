@@ -70,7 +70,10 @@ final class RentalApplicationRound9AffordabilityTest extends TestCase
      */
     private function assessmentWithAmounts(RentalApplication $app, ?float $income = null, ?float $otherIncome = null, ?float $expenses = null): RentalApplicationAssessment
     {
-        $assessment = RentalApplicationAssessment::create(['agency_id' => $this->agency->id, 'rental_application_id' => $app->id]);
+        // Round 12 — gross_income now requires statement_months; 1 month
+        // makes this a no-op division so these pre-existing worked
+        // examples keep meaning exactly what their numbers say.
+        $assessment = RentalApplicationAssessment::create(['agency_id' => $this->agency->id, 'rental_application_id' => $app->id, 'statement_months' => 1]);
 
         if ($income !== null) {
             RentalApplicationIncomeItem::create(['agency_id' => $this->agency->id, 'rental_application_assessment_id' => $assessment->id, 'description' => 'Salary', 'amount' => $income]);
