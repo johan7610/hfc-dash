@@ -462,13 +462,17 @@
             </p>
 
             <div class="space-y-4">
-                {{-- Round 11 — Johan: "we have to ask the nr of months the
-                     bank statement is for... by what do I divide once
-                     ready to get a monthly avg?" A lump sum captured from a
-                     multi-month statement is meaningless for the
-                     affordability rule (which needs a MONTHLY gross
-                     figure) without this. Placed above both lists since it
-                     applies to the whole capture, not just income. --}}
+                {{-- Round 12 — Johan, plainly: "whatever the agent captured
+                     get averaged by the months selected... so the avg
+                     income is? 11000? THAT monthly average is the gross
+                     monthly income the 30% affordability rule runs
+                     against." This is now REQUIRED to get a result at
+                     all — a lump sum over an unstated number of months
+                     means nothing against a monthly legal threshold, so
+                     the guideline check below reads "incomplete" until
+                     this is filled in, never a wrong answer or a pass
+                     based on the raw total. Placed above both lists since
+                     it applies to the whole capture, not just income. --}}
                 <div>
                     <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
                         Number of months this bank statement covers
@@ -476,8 +480,8 @@
                     <input type="number" step="1" min="1" max="36" class="corex-input text-sm w-20"
                            x-model="statementMonths" @blur="save()" placeholder="e.g. 3">
                     <p class="text-[11px] mt-1" style="color: var(--text-muted);">
-                        Used to turn the totals below into a monthly average — leave blank if you're
-                        only capturing a single month.
+                        Required to turn the totals below into the monthly figure the affordability
+                        guideline actually runs against — the raw total alone is not enough.
                     </p>
                 </div>
                 {{-- Round 9 (item 5) — Johan: "filling the last row auto-adds
@@ -507,16 +511,22 @@
                         </template>
                     </div>
                     <p class="text-xs mt-2" style="color: var(--text-secondary);">
-                        Total gross income: <strong x-text="formatR(incomeTotal())"></strong>
+                        Total captured (all lines): <strong x-text="formatR(incomeTotal())"></strong>
                     </p>
-                    {{-- Round 11 — DISPLAY ONLY. Does not feed the
-                         affordability decision below until Johan confirms
-                         replacing the raw total with this average is what
-                         he wants (his own stated view: yes — pending). --}}
+                    {{-- Round 12 — THIS is now the figure the guideline
+                         check uses; formatR() sourced from result.gross_income
+                         (the server's own, authoritative figure) once
+                         saved, matching the live client-side division
+                         exactly in the meantime so the two can never
+                         meaningfully disagree. --}}
                     <p class="text-xs mt-1" x-show="statementMonths" style="color: var(--text-secondary);">
-                        Monthly average (÷ <span x-text="statementMonths"></span> months):
+                        Monthly average (÷ <span x-text="statementMonths"></span> months —
+                        <strong>used in the affordability check below</strong>):
                         <strong x-text="formatR(monthlyAverage(incomeTotal()))"></strong>
-                        <span class="ds-badge ds-badge-muted" style="margin-left: 4px;">not yet used in the guideline check</span>
+                    </p>
+                    <p class="text-xs mt-1" x-show="!statementMonths" style="color: var(--ds-amber, #b45309);">
+                        Enter the number of months above to calculate the monthly figure the
+                        guideline check needs.
                     </p>
                 </div>
                 <div>
@@ -532,7 +542,7 @@
                         </template>
                     </div>
                     <p class="text-xs mt-2" style="color: var(--text-secondary);">
-                        Total expenses: <strong x-text="formatR(expenseTotal())"></strong>
+                        Total captured (all lines): <strong x-text="formatR(expenseTotal())"></strong>
                     </p>
                     <p class="text-xs mt-1" x-show="statementMonths" style="color: var(--text-secondary);">
                         Monthly average (÷ <span x-text="statementMonths"></span> months):
@@ -568,7 +578,7 @@
             <div class="rounded-md p-3 mt-4" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px solid var(--border);">
                 <p class="text-[11px] font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Suggested check — not a rule</p>
                 <template x-if="result.label === 'incomplete'">
-                    <p class="text-sm" style="color: var(--text-muted);">Enter income above, and make sure "Current rental amount" is filled in on the application itself, to see a suggestion here.</p>
+                    <p class="text-sm" style="color: var(--text-muted);">Enter income above, fill in the number of months the statement covers, and make sure "Current rental amount" is filled in on the application itself, to see a suggestion here.</p>
                 </template>
                 {{-- 2026-09-08 — Johan: "right hand panel? is that filled in
                      from where?" This calculation's RENT figure was never
@@ -584,11 +594,23 @@
                      agent and an authoriser see the identical arithmetic. --}}
                 <template x-if="result.label !== 'incomplete'">
                     <div class="text-sm space-y-1">
-                        <p>Gross income (your entries above): <strong x-text="formatR(result.gross_income)"></strong></p>
+                        <p>Monthly gross income (bank statement total ÷ <span x-text="result.statement_months"></span> months):
+                           <strong x-text="formatR(result.gross_income)"></strong></p>
+                        {{-- Round 12 — Johan: "make sure the screen shows
+                             both clearly so the agent can see the
+                             difference, since that difference is exactly
+                             what they are assessing" — the applicant's own
+                             claimed figure next to the agent's derived,
+                             bank-statement-verified one. Only the derived
+                             figure above feeds the check. --}}
+                        <p x-show="result.applicant_reported_income !== null">
+                            Applicant's own stated income (from their application form):
+                            <strong x-text="formatR(result.applicant_reported_income)"></strong>
+                        </p>
                         <p>Rent (applicant's self-reported current rent, from the application): <strong x-text="formatR(result.rent)"></strong></p>
-                        <p>Rent must not exceed <span x-text="result.max_rent_percent"></span>% of gross income
+                        <p>Rent must not exceed <span x-text="result.max_rent_percent"></span>% of monthly gross income
                            (<strong x-text="formatR(result.max_affordable_rent)"></strong>).
-                           Actual rent is <span x-text="result.rent_as_percent_of_gross"></span>% of gross income.</p>
+                           Actual rent is <span x-text="result.rent_as_percent_of_gross"></span>% of monthly gross income.</p>
                         <p class="mt-2">
                             <span class="ds-badge" :class="result.meets_threshold ? 'ds-badge-success' : 'ds-badge-warning'"
                                   x-text="result.meets_threshold ? 'Within the affordability guideline — worth a closer look either way' : 'Exceeds the affordability guideline — worth a closer look'"></span>

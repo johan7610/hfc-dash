@@ -4104,3 +4104,124 @@ review.blade.php` (size presets + localStorage, request-more-info moved
 to the aside, `promptRequestMoreInfo()` removed), `resources/views/corex/
 rental-applications/show.blade.php` (one line, `white-space: pre-wrap` on
 the status history note).
+
+## Round 12 — monthly average WIRED into the decision (2026-09-08)
+
+Round 11 asked Johan to confirm before wiring the monthly average into
+the actual affordability decision. The question itself was the mistake —
+Johan, plainly, after finding it confusing: "agent captures income on
+right panel. choses to say 3 months - so whatever the agent captured
+get averaged by the months selected - 10000, 10000, 13000 tallies to
+33000, agent selected 3 months - so the avg income is? 11000? what else
+are you on about?" There was nothing to decide; wired in immediately.
+
+### The rule, now exactly as Johan stated it
+
+`RentalApplicationAssessment::qualifyingResult()`: the figure the 30%
+rule runs against is now `total_captured_income ÷ statement_months`,
+never the raw multi-month total. Requires BOTH captured income AND a
+valid `statement_months` (a positive whole number) to compute anything —
+neither alone is enough. A missing or zero months figure returns
+`gross_income: null` → `label: 'incomplete'`, never a wrong number and
+never a silent fallback to treating the raw total as if it were monthly.
+Same division applied to expenses, so `net_income` stays an
+apples-to-apples monthly figure rather than mixing a monthly income
+against a multi-month expense total.
+
+**Rounding, stated explicitly (per Johan's own request):** `round($n, 2)`
+— PHP's own round-half-up to the nearest cent — applied once, at the
+division. Johan's own example (33,000 ÷ 3 = 11,000.00) needed no
+rounding to demonstrate; a real bank statement's total dividing
+unevenly will round the same way every other money figure on this
+feature already does.
+
+**Edge cases, built exactly as specified:**
+- `statement_months` validation already rejected 0/negative (`min:1`,
+  unchanged from Round 11) — confirmed with a new test rather than
+  assumed.
+- Missing months → `gross_income`/`max_affordable_rent`/`meets_threshold`
+  all `null`, `label: 'incomplete'` — the raw total is still returned
+  separately as `total_captured_income` so the agent can see what they've
+  typed, just never mistaken for a monthly figure.
+- The number displayed and the number decided are the SAME field:
+  `result.gross_income`, sourced from the one server-side calculation,
+  not a parallel client-only computation. The income panel's own live
+  "Monthly average (÷ N months — used in the affordability check below)"
+  line uses the identical division (client total ÷ months, rounded to 2)
+  as a live preview before each autosave settles, then the authoritative
+  server figure takes over once `result` refreshes — same arithmetic on
+  both sides, so the two can only ever differ for the width of one
+  debounce-and-round-trip, never diverge in the steady state.
+
+### Both figures shown, since the difference is what's being assessed
+
+Johan: "the applicant types their income on the form; the agent derives
+the real one from the bank statement... make sure the screen shows both
+clearly so the agent can see the difference." `qualifyingResult()` now
+also returns `applicant_reported_income` (the applicant's own
+self-reported `monthly_salary`, purely informational) alongside the
+bank-statement-derived `gross_income` that actually drives the decision
+— displayed as two separate lines in the Suggested Check box. The
+"not yet used in the guideline check" caveat from Round 11 is removed
+entirely — replaced with "used in the affordability check below."
+
+### Percentage-field bounds (conductor's check, on the settings screen)
+
+Confirmed already correct, no change needed:
+`RentalApplicationSettingsController::updateQualifyingFormula()`
+validates `max_rent_percent_of_gross_income` as
+`['required', 'numeric', 'min:0.1', 'max:100']` — a negative, zero, or a
+value over 100 was already rejected before this round; this predates
+Round 11's sanitizer change and was never touched by it.
+
+### Verification — Johan's own worked example, driven on the real screen
+
+Same disposable-clone methodology as Rounds 10/11 (real QA1 data —
+already updated with cc1's landing of Rounds 9–11's schema by the time
+of this round — cloned into an isolated database, never touching the
+shared checkout or database). On a real application:
+
+1. Typed three income lines — 10000, 10000, 13000 — one at a time into
+   the real screen.
+2. Set "Number of months this bank statement covers" to 3.
+3. **Screen showed:** "Total captured (all lines): R 33,000.00" /
+   "Monthly average (÷ 3 months — used in the affordability check
+   below): R 11,000.00" in the income panel, and in the Suggested Check
+   box: "Monthly gross income (bank statement total ÷ 3 months):
+   R 11,000.00" / "Applicant's own stated income (from their application
+   form): R 40,000.00" / "Rent must not exceed 30% of monthly gross
+   income (R 3,300.00). Actual rent is 30% of monthly gross income." /
+   "WITHIN THE AFFORDABILITY GUIDELINE" (rent set to exactly R3,300 for
+   this test — an exact-boundary case, correctly passing since the rule
+   is "must not exceed", i.e. ≤).
+4. **Database, read directly:** `SUM(amount)` across the three income
+   rows = 33000.00; `statement_months` = 3; 33000.00 ÷ 3 = 11000.00 —
+   identical to the cent to what both the income panel and the Suggested
+   Check box displayed.
+
+`tests/Feature/RentalApplications/RentalApplicationRound11DecimalAndStatementMonthsTest.php`
+updated: the old "does not affect the decision yet" test replaced with
+`test_johans_exact_worked_example()` (asserts 33,000 → 11,000 → 3,300
+exactly), a test proving the SAME raw total now produces a DIFFERENT
+decision at different statement lengths (18,000 over 1 month passes at
+5,400 rent; the same 18,000 over 3 months averages to 6,000 and FAILS
+the same 5,400 rent), a test proving missing months reports
+`'incomplete'` rather than a wrong pass off the raw total, a test
+confirming zero months is rejected at validation, and a test confirming
+the applicant's own figure is shown but never affects the decision.
+Round 9 and Round 10's existing tests updated to pass an explicit
+`statement_months` (1, where a no-op division preserves each test's
+original worked numbers) since `gross_income` now requires it. Full run
+across Rounds 8–12: 42 tests, 42 passed, 144 assertions.
+
+### Files touched
+
+- `app/Models/RentalApplicationAssessment.php` — `qualifyingResult()` divides by `statement_months`, adds `applicant_reported_income`/`total_captured_income`/`total_captured_expenses`
+- `resources/views/corex/rental-applications/review.blade.php` — removed the "not yet used" caveat, relabelled totals, added the applicant-comparison line
+- `tests/Feature/RentalApplications/RentalApplicationRound11DecimalAndStatementMonthsTest.php` — monthly-average tests rewritten for the wired behaviour
+- `tests/Feature/RentalApplications/RentalApplicationRound10ReviewScreenTest.php` / `RentalApplicationRound9AffordabilityTest.php` — added `statement_months` to existing fixtures
+
+Branch: `rental-applications-affordability-2026-09-08` (continued). QA1
+only. cc1 was told the "hold" instruction changed and is confirming
+through their own coordinator channel before landing — not landed
+directly on my say-so.

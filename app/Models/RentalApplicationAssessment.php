@@ -62,6 +62,25 @@ class RentalApplicationAssessment extends Model
      * "gross" basis by coincidence of arithmetic direction, not by
      * design — this version makes that basis explicit and correct).
      *
+     * Round 12 — Johan, plainly, after being asked to confirm and finding
+     * the question itself confusing: "agent captures income on right
+     * panel. choses to say 3 months - so whatever the agent captured get
+     * averaged by the months selected - 10000, 10000, 13000 tallies to
+     * 33000, agent selected 3 months - so the avg income is? 11000?"
+     * THE FIGURE THE 30% RULE RUNS AGAINST IS NOW THE MONTHLY AVERAGE
+     * (captured total ÷ statement_months), never the raw multi-month lump
+     * sum — a bank statement's total is meaningless against a MONTHLY
+     * legal threshold without dividing it down first. Same arithmetic for
+     * expenses, so net_income stays an apples-to-apples monthly figure.
+     *
+     * Requires BOTH captured income AND a valid statement_months (a
+     * positive whole number — enforced at validation, defended again
+     * here) to compute anything: neither alone is enough, and a missing/
+     * zero months figure must never divide, silently show a wrong number,
+     * or fall back to treating the raw total as if it were monthly.
+     * Rounding: round-half-up to the nearest cent (PHP's own round($n, 2)
+     * default), same as every other money figure this method returns.
+     *
      * SUGGESTIVE, NEVER A RULE. Johan, verbatim: "The marking is only
      * suggestive to the agent to spot. not rule of thumb." This method
      * never blocks, never auto-declines, never writes a decision anywhere
@@ -80,24 +99,24 @@ class RentalApplicationAssessment extends Model
     public function qualifyingResult(float $maxRentPercent): array
     {
         $incomeItems = $this->incomeItems;
-        $grossIncome = $incomeItems->isEmpty() ? null : (float) $incomeItems->sum('amount');
-
+        $totalIncome = $incomeItems->isEmpty() ? null : (float) $incomeItems->sum('amount');
         $totalExpenses = (float) $this->expenseItems->sum('amount');
-        $netIncome = $grossIncome === null ? null : $grossIncome - $totalExpenses;
 
-        // Round 11 — Johan: "I keep capturing expenses and income and by
-        // what do I divide once ready to get a monthly avg? we have to ask
-        // the nr of months the bank statement is for." DISPLAY ONLY for
-        // now — deliberately does NOT feed gross_income/meets_threshold
-        // below until Johan confirms replacing the raw sum with this
-        // average is the actual decision he wants (his own stated view:
-        // yes, but he asked to confirm before it's wired in).
-        $monthlyAverageGrossIncome = ($grossIncome !== null && $this->statement_months)
-            ? round($grossIncome / $this->statement_months, 2)
+        $months = $this->statement_months;
+        $hasValidMonths = $months !== null && $months > 0;
+
+        // THE figure the affordability rule runs against — never the raw
+        // total. Null (⇒ 'incomplete' below) whenever either half of the
+        // division is missing, rather than a wrong number or a silent
+        // fallback to the un-divided total.
+        $grossIncome = ($totalIncome !== null && $hasValidMonths)
+            ? round($totalIncome / $months, 2)
             : null;
-        $monthlyAverageExpenses = ($this->statement_months && $totalExpenses > 0)
-            ? round($totalExpenses / $this->statement_months, 2)
-            : null;
+        $monthlyExpenses = $hasValidMonths ? round($totalExpenses / $months, 2) : null;
+
+        $netIncome = ($grossIncome === null || $monthlyExpenses === null)
+            ? null
+            : $grossIncome - $monthlyExpenses;
 
         $rentalApplication = $this->rentalApplication;
         $rent = $rentalApplication?->current_rental_amount !== null
@@ -114,19 +133,28 @@ class RentalApplicationAssessment extends Model
             ? $rent <= $maxAffordableRent
             : null;
 
+        // Johan: "make sure the screen shows both clearly so the agent
+        // can see the difference" — the applicant's own self-reported
+        // figure, purely for comparison, never part of the decision.
+        $applicantReportedIncome = $rentalApplication?->monthly_salary !== null
+            ? (float) $rentalApplication->monthly_salary
+            : null;
+
         return [
             'gross_income' => $grossIncome,
             'net_income' => $netIncome,
-            'statement_months' => $this->statement_months,
-            'monthly_average_gross_income' => $monthlyAverageGrossIncome,
-            'monthly_average_expenses' => $monthlyAverageExpenses,
+            'total_captured_income' => $totalIncome,
+            'total_captured_expenses' => $this->expenseItems->isEmpty() ? null : $totalExpenses,
+            'statement_months' => $months,
+            'applicant_reported_income' => $applicantReportedIncome,
             'rent' => $rent,
             'max_rent_percent' => $maxRentPercent,
             'max_affordable_rent' => $maxAffordableRent,
             'rent_as_percent_of_gross' => $rentAsPercentOfGross,
             'meets_threshold' => $meetsThreshold,
-            // 'sufficient' | 'insufficient' | 'incomplete' — incomplete when
-            // there isn't enough input to say anything at all.
+            // 'sufficient' | 'insufficient' | 'incomplete' — incomplete
+            // when there isn't enough input, INCLUDING a missing/zero
+            // statement_months, to say anything at all.
             'label' => $meetsThreshold === null ? 'incomplete' : ($meetsThreshold ? 'sufficient' : 'insufficient'),
         ];
     }
