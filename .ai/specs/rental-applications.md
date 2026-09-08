@@ -2970,3 +2970,266 @@ Branch: `feature/rental-applications-numeric-fix-final-2026-09-08`
 (the `...-2026-09-08` branch without `-final` was rebased twice as QA1
 moved during the night and could not be force-pushed under this
 session's permissions — this is the one to land).
+
+---
+
+## Review screen — two live blockers, root-caused by actually loading the screen (Johan, 2026-09-08)
+
+Johan hit two blockers that made the review screen unusable, both
+reported as "working" by every prior check tonight — real-HTTP save
+round-trips, direct DB reads, adversarial re-tests. Every one of those
+checks was still a check of the SERVER. None of them ever rendered this
+page in an actual browser. That gap is the real finding here, not just
+the two bugs it hid.
+
+**Verified this round with Puppeteer (headless Chromium) driving the
+actual page — real login, real clicks, real mouse drags, real
+keystrokes, reading the real DOM and the real browser console — not
+markup inspection, not an HTTP status code.** This is now available on
+this box (`/corex-qa1/node_modules/puppeteer`, `/usr/bin/chromium`) and
+should be the standard for anything where the failure mode is
+client-side rendering, exactly as it was here.
+
+### 6 — "highlighter dont work - just shows a little black x but no colour applied"
+
+Root cause, found the moment the page was actually opened in a browser:
+the real console showed a real, reproducible error on every single draw —
+`Failed to execute 'importNode' on 'Document': parameter 1 is not of
+type 'Node'`, followed by repeated `mark is not defined`. Both come from
+one fact about how browsers parse HTML: a `<template x-for>`/`<template
+x-if>` (Alpine's cloning mechanism for lists/conditionals) placed
+DIRECTLY INSIDE an `<svg>` element is parsed as foreign SVG content, not
+as the special HTML `<template>` element — so it never gets the
+"`.content` is a cloneable DocumentFragment" treatment real HTML
+`<template>` elsewhere on this exact page gets. Alpine's clone step threw
+on every attempt, so every polyline's `points`/`stroke`/`stroke-width`
+came back blank — literally an invisible line at zero width. The one
+thing that DID render was the little remove-mark `×` button, because it
+lives as a plain HTML `<button>` OUTSIDE the svg, in ordinary HTML
+parsing context — which is exactly what Johan saw and described.
+
+This could never have shown up in any check this module has run all
+night — real HTTP save/reload proves the SERVER stores and returns the
+right bytes, which it always did; the failure is 100% client-side
+rendering, invisible to curl, invisible to a database read, invisible to
+reading the Blade source (which looks completely correct — this is a
+genuine browser-parsing gotcha, not a typo).
+
+**Fixed:** replaced the `<template>`-based polyline rendering inside the
+`<svg>` with a single `x-html` binding on the `<svg>` itself, driven by a
+new `strokesSvgFor(pageIndex)` method that builds the polyline markup as
+a plain string (existing strokes + the live in-progress drag preview).
+`x-html` re-evaluates on every dependency change exactly like
+`x-text`/`x-show` do, so this stays fully reactive with no `<template>`
+inside SVG anywhere. Every value going into the string comes from this
+component's own numeric point/color/width state, never free-typed text,
+so there's nothing here that needs HTML-escaping.
+
+**Verified with a real drag, not a markup check:** logged in, opened a
+document, dragged an actual highlight stroke with Puppeteer's mouse API,
+then read the real DOM: the `<svg>` now contains a genuine `<polyline
+points="...", stroke="#ffeb3b", stroke-width="22">` with real coordinates
+— confirmed with a screenshot showing an actual visible yellow stroke on
+the document. Zero console errors, where there had been dozens.
+
+### 7 — "note does not work - clicked, shows small modal but cannot type anything in it"
+
+Root cause, found the same way: the pending-note popup (the little
+textarea that appears when the agent clicks with the Note tool active)
+sits inside the SAME draw-surface `<div>` that has
+`@pointerdown.prevent="startDraw(...)"` with no `.stop`. A `pointerdown`
+that starts on the textarea (clicking into it to type) bubbles up to that
+ancestor, and Alpine's `.prevent` modifier calls `event.preventDefault()`
+on it BEFORE `startDraw()` even runs — and calling `preventDefault()` on
+a `pointerdown`/`mousedown` is a well-known way to cancel the browser's
+own default FOCUS behaviour for whatever was about to receive it. The
+textarea was never actually gaining focus, so every keystroke went
+nowhere. The existing `@click.stop` on the textarea couldn't help —
+`click` fires AFTER `pointerdown`, once the focus had already failed to
+happen.
+
+**Fixed:** added `@pointerdown.stop` to the pending-note wrapper, the
+existing-note marker/popover wrapper, and the remove-stroke buttons —
+nothing inside these overlays can have its pointerdown intercepted by the
+draw surface's own handler again.
+
+**Verified with real keystrokes, not a markup check:** switched to the
+Note tool, clicked on the document with Puppeteer, confirmed via
+`document.activeElement` that the textarea was NOT focused before the
+fix and WAS focused after, then typed real characters with
+`page.keyboard.type()` and read the result back from both the DOM
+element's `.value` and Alpine's own reactive `pendingNoteText` — both
+showed the typed text, confirmed with a screenshot showing real typed
+characters in the box.
+
+### 8 — button placement, third time (Johan)
+
+*"same fight with placement of buttons - submit to auth should be on the
+header at the top, not off screen at the bottom... every primary action
+on this screen belongs in the header where it is always visible."*
+"Request more info from applicant" and "Submit to authoriser" (with its
+existing "Re-submit" relabel once already pending) moved from the
+aside's "Next step" block into the sticky header's right slot, alongside
+"Back to application" — same visibility guard as before (hidden once
+approved/declined). The note captured for "Request more info" became a
+native `prompt()` rather than a header-embedded textarea, so the whole
+action — including the button — fits one header row without inventing a
+dropdown/popover for one short line of text; declining the prompt sends
+nothing and loses nothing. The aside keeps only the feedback line (what
+happened after using the header button) and the informational decision
+banners (approved/declined/pending), which are state, not actions.
+Verified with Puppeteer: header shows both buttons when no document is
+open, swaps to the highlighter's own toolbar while one is, and reverts
+correctly on Close; clicking "Request more info" in the header produces
+a real `prompt()`, a real POST, and real feedback ("Sent to the
+applicant.").
+
+### 10 — "how do I save the work on the right hand panel? does it auto save?"
+
+It already did — confirmed working all along (autosave-on-blur, a real
+`updated_at`-seeded "Saved at HH:MM" badge) — but the only place that
+said so was a line of body text easy to miss, visible only once scrolled
+to. Fixed by adding a permanent, standing badge ("AUTOSAVES") next to the
+"Affordability Assessment" heading itself — same visual weight as
+"Marked up" and the highlighter's own save toast elsewhere on this
+screen, visible from the instant the panel loads, before the agent has
+typed anything, not only after. **Answer for Johan, plainly: yes, it
+autosaves — every field in the Affordability Assessment panel saves the
+moment you click away from it, no button needed, and the badge next to
+the heading says so now.**
+
+### Scrolling — "everything should fit that the whole screen doesnt scroll, but the left and right panels scroll in the screen"
+
+The two panels' `max-height: calc(100vh - 88px)` was a guess that never
+accounted for the QA/env banner's real height (`partials._env-banner`,
+visible on QA1 as the blue "QA · 127.0.0.1" bar — real pixels, not zero)
+or the sticky header's actual margins, so the panels came out taller than
+the space genuinely left inside `#appScroll` (`layouts/corex.blade.php`'s
+own scroll container) — `#appScroll` then had to scroll too, which is
+the double-scroll Johan was seeing. A bigger guessed number would only
+be correct for one banner/viewport combination and wrong for the next.
+
+**Fixed by measuring the real available space at runtime instead of
+guessing it** — a new `rentalReviewLayout()` component reads `#appScroll`'s
+actual box height, the sticky header's actual rendered height and
+margin, and this page's own top margin, computes what's genuinely left,
+and sets it as a CSS custom property (`--rr-panel-h`) both panels size
+against. Every value read is independent of `#appScroll`'s own scroll
+position, so this stays correct regardless of how the page is scrolled,
+and recalculates on window resize.
+
+Also added `overflow-x: hidden` to `.rental-review-aside` directly, since
+a 260px fixed column has no legitimate reason to ever need horizontal
+scroll — investigated for an actual cause first (none found at 1600px
+width; Puppeteer's own `scrollWidth`/`clientWidth` read confirmed no
+overflow either way) but this removes any possibility going forward
+rather than leaving it to reappear from some future addition.
+
+**Verified with Puppeteer, not a visual guess:** `#appScroll.scrollHeight
+=== #appScroll.clientHeight` (no outer scroll) both on initial load AND
+after expanding the "Submitted Application" summary (which grows
+`.rental-review-main`'s own internal content) — confirming the fix
+correctly isolates panel-internal scrolling from ever leaking into the
+outer page. `.rental-review-aside.scrollWidth === .clientWidth` (no
+horizontal overflow).
+
+### Files touched
+
+`resources/views/corex/rental-applications/review.blade.php` only — every
+fix above lives in this one file. No backend changes; RA-04/RA-06/the
+critical partial-save fix from earlier tonight are untouched and
+unaffected.
+
+### The standing lesson, named plainly since Johan asked for it directly
+
+Real-HTTP verification (login, CSRF, curl, direct DB reads) proves the
+SERVER did the right thing. It cannot prove the BROWSER rendered the
+right thing — those are different layers, and a bug can live entirely in
+either one while every check of the other layer stays green. Tonight's
+highlighter bug is the clean version of this: the server has always
+stored and returned byte-perfect mark data; the failure was 100%
+client-side, a real browser-parsing gotcha (`<template>` inside `<svg>`)
+that no amount of curl or `php artisan tinker` could ever have surfaced.
+The standing rule this earns, alongside BUILD_STANDARD.md §5a's
+transport/data-state axes: **for any feature whose failure mode could be
+rendering, layout, or interaction — not just data correctness — verify
+it with an actual browser** (Puppeteer/headless Chromium, available on
+this box), not markup inspection and not an HTTP round-trip alone. A
+real screenshot and a real `document.activeElement`/console-error read
+are cheap insurance against exactly this class of "everyone verified it,
+none of them looked at it."
+
+### Investigated, NOT built — skew/angled text highlighting (Johan's design question, decision pending)
+
+Johan's own words: *"still not sure if the draw a box is the right
+option or if we should move to a click and highlight option... scans
+come back not square so the agent can highlight skew text as well which
+the box option dont offer."*
+
+**Worth correcting first: the box is already gone.** The rectangle
+highlighter was replaced with a freehand marker-pen stroke in an earlier
+round ("In-place annotation, stroke marks, notes, and speed," item 3) —
+the CURRENT tool captures the agent's actual drag path, at any angle,
+not a rectangle. An agent can already drag diagonally along skewed text
+today; nothing prevents that specific motion. What the current tool
+genuinely lacks is PRECISION — it's a shaky, hand-traced line with no
+awareness of where the actual text sits, not a snap-to-word selection.
+That gap is real and is what Johan is actually reacting to, even though
+"draw a box" isn't quite what's shipping anymore.
+
+**Three options, real effort estimates, ordered cheapest to most
+expensive:**
+
+**Option A — straight-line assist on the existing freehand tool.**
+Small, additive change: detect a mostly-straight drag (or a modifier key
+held) and snap the committed stroke to a clean straight line between
+start and end, at whatever angle the agent dragged, instead of preserving
+every shaky intermediate point. Solves "my hand isn't steady enough to
+follow a skewed line cleanly" without touching the backend, the storage
+shape, or the burn path at all — a highlight is still just `points`.
+**Estimate: a few hours, one file, no new dependency, low risk.**
+
+**Option B — true text-snap highlighting, PDFs with a real text layer
+only.** Extract each page's word bounding boxes server-side (Poppler's
+`pdftotext -bbox`, already installed alongside the `pdftoppm`/`pdfinfo`
+this module already uses), hit-test the agent's drag path against those
+boxes client-side, and burn per-word rectangles instead of a freehand
+stroke — genuine Adobe/Word-style click-and-drag text selection.
+**Real limitation worth being explicit about: this only works on a PDF
+that has an actual embedded text layer.** A SCANNED document — a photo
+or scan of a payslip or ID, which is exactly the case Johan is
+describing — is just a raster image with no text data in it at all;
+`pdftotext -bbox` finds nothing on a page like that, so this option
+delivers ZERO improvement for the specific documents driving the
+question. It would still be a real, worthwhile upgrade for digitally-
+generated PDFs (bank statement exports, typed application forms). Not
+yet confirmed whether Poppler reports a rotation angle for skewed text
+runs in a native PDF (uncommon, but possible) or only an axis-aligned
+box around the tilted glyphs — would need a real test document to
+confirm before committing to this shipping "text-snap that follows
+skew" rather than "text-snap that only works on upright native text."
+**Estimate: comparable to or larger than the original "own the viewer"
+rebuild — a new server extraction step, a client-side hit-testing
+algorithm, and a different burn path. Call it 1.5–2.5 working sessions.**
+
+**Option C — OCR-based text detection on the scanned image itself.**
+The only option that actually addresses skewed SCANS, since it works on
+pixels rather than an embedded text layer: run OCR (e.g. Tesseract,
+not currently installed anywhere in this stack) on the rasterized page
+to detect word regions, which requires either pre-deskewing the image
+(detecting the dominant text angle and rotating before OCR — a real
+image-processing problem, not a library call) or an OCR mode that can
+report ROTATED bounding boxes directly, which is a materially harder and
+less reliable problem than axis-aligned word detection. This is a new
+system dependency, a real computer-vision R&D risk (accuracy on poor-
+quality phone photos of documents is genuinely uncertain, not just a
+matter of engineering time), and the most expensive option by a wide
+margin. **Estimate: multiple working sessions minimum (3–5+), with real
+uncertainty about final quality — this is the one option where "more
+time" doesn't guarantee "works reliably."**
+
+**Not decided, not built, per instruction.** Recommend Option A as a
+near-free interim improvement regardless of which longer-term direction
+Johan picks — it's cheap, low-risk, and helps the "my line is shaky"
+complaint immediately while B/C (both real, larger projects) get
+decided.

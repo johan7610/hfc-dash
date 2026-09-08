@@ -44,8 +44,26 @@
             </div>
         </x-slot>
         <x-slot name="right">
+            {{-- 2026-09-08 — Johan, three times now: "same fight with placement
+                 of buttons - submit to auth should be on the header at the
+                 top, not off screen at the bottom... every primary action on
+                 this screen belongs in the header where it is always
+                 visible." Moved from the aside's own "Next step" block —
+                 same actions, same guard (hidden once a decision exists),
+                 just reachable regardless of scroll position now. The note
+                 textarea became a plain prompt() so the whole flow fits a
+                 single header row without inventing a dropdown/popover for
+                 one short line of text. --}}
             <template x-if="activeDocId === null">
-                <a href="{{ route('corex.rental-applications.show', $rentalApplication) }}" class="corex-btn-outline text-xs">Back to application</a>
+                <div class="flex items-center gap-2 flex-wrap justify-end">
+                    @unless(in_array($rentalApplication->status, ['approved', 'declined'], true))
+                        <button type="button" class="corex-btn-outline text-xs" :disabled="moreInfoSending"
+                                @click="promptRequestMoreInfo()" x-text="moreInfoSending ? 'Sending…' : 'Request more info from applicant'"></button>
+                        <button type="button" class="corex-btn-primary text-xs" :disabled="submittingForApproval"
+                                @click="submitForApproval()" x-text="submittingForApproval ? 'Submitting…' : ({{ $isPendingAuthorisation ? 'true' : 'false' }} ? 'Re-submit to authoriser' : 'Submit to authoriser')"></button>
+                    @endunless
+                    <a href="{{ route('corex.rental-applications.show', $rentalApplication) }}" class="corex-btn-outline text-xs">Back to application</a>
+                </div>
             </template>
             <template x-if="activeDocId !== null">
                 <div class="flex items-center gap-3 flex-wrap justify-end">
@@ -124,27 +142,33 @@
          entire time an agent is highlighting a payslip. This was a pure
          presentational change — the mark-persistence backend never knew or cared
          whether its UI was a modal or inline; only the wrapping markup moved. --}}
-    {{-- Independent scrolling, 2026-09-07 — Johan: "the right and left panels
-         should scroll independently... to get more screen for the loaded pdf
-         to show." Copied the same proven mechanism as
-         docuperfect/signatures/review.blade.php's #agentAmendPanel: each
-         column gets its own max-height (viewport minus a fixed margin) and
-         its own scrollbar, so scrolling the document list never drags the
-         assessment panel off-screen and vice versa. align-self:stretch is
-         load-bearing there too — without it a sticky/capped column with no
-         taller sibling has zero scroll travel. --}}
+    {{-- Independent scrolling, 2026-09-07/08 — Johan: "the right and left
+         panels should scroll independently... essentially everything should
+         fit that the whole screen doesnt scroll." The original fixed
+         "100vh - 88px" guess didn't account for the QA/env banner
+         (partials._demo-watermark / _env-banner, real height on QA1 — visible
+         in a screenshot as the "QA · 127.0.0.1" bar) or the sticky header's
+         real margins, so the panels were taller than the space actually left
+         inside #appScroll (layouts/corex.blade.php's own scroll container) —
+         #appScroll then had to scroll too, exactly the double-scroll Johan
+         flagged. A bigger hardcoded guess would only be right for one
+         viewport/banner combination and wrong for the next. Fixed by
+         MEASURING the real available space at runtime (rentalReviewLayout()
+         below) instead of guessing it — stable across banner/viewport
+         changes because it reads the actual rendered header height and
+         #appScroll's actual box, not an assumption about them. --}}
     <style>
         .rental-review-columns { display: flex; flex-direction: column; gap: 20px; }
         .rental-review-main    { flex: 1 1 auto; min-width: 0; }
         .rental-review-aside   { width: 100%; }
         @media (min-width: 1280px) {
             .rental-review-columns { flex-direction: row; gap: 16px; align-items: stretch; }
-            .rental-review-main    { max-height: calc(100vh - 88px); overflow-y: auto; }
-            .rental-review-aside   { flex: 0 0 260px; width: 260px; align-self: stretch; position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; }
+            .rental-review-main    { height: var(--rr-panel-h, calc(100vh - 160px)); max-height: var(--rr-panel-h, calc(100vh - 160px)); overflow-y: auto; }
+            .rental-review-aside   { flex: 0 0 260px; width: 260px; align-self: stretch; position: sticky; top: 72px; height: var(--rr-panel-h, calc(100vh - 160px)); max-height: var(--rr-panel-h, calc(100vh - 160px)); overflow-y: auto; overflow-x: hidden; }
         }
     </style>
 
-    <div class="rental-review-columns mt-5">
+    <div class="rental-review-columns mt-5" x-data="rentalReviewLayout()">
 
         {{-- MAIN — the submitted application + supporting documents, viewable on screen. Dominant column. --}}
         <div class="rental-review-main space-y-4">
@@ -270,28 +294,51 @@
                                                          @dragstart.prevent>
                                                         {{-- Highlight strokes — connected line segments following the
                                                              actual drag path, an SVG polyline with a thick translucent
-                                                             stroke (a real marker-pen gesture, not a rectangle). --}}
-                                                        <svg class="absolute inset-0" style="pointer-events:none; width:100%; height:100%;">
-                                                            <template x-for="(mark, mi) in strokesFor(page.index)" :key="'s'+mi">
-                                                                <polyline :points="mark.points.map(p => p.x + ',' + p.y).join(' ')"
-                                                                          fill="none" :stroke="colorCss(mark.color)" stroke-opacity="0.4"
-                                                                          :stroke-width="mark.width" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                                                            </template>
-                                                            <template x-if="drag.active && drag.page === page.index && activeTool === 'highlight'">
-                                                                <polyline :points="drag.points.map(p => p.x + ',' + p.y).join(' ')"
-                                                                          fill="none" :stroke="colorCss(activeColor)" stroke-opacity="0.4"
-                                                                          :stroke-width="strokeWidth" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                                                            </template>
-                                                        </svg>
+                                                             stroke (a real marker-pen gesture, not a rectangle).
+                                                             2026-09-08 — Johan: "highlighter dont work - just shows a
+                                                             little black x but no colour applied." Root cause found by
+                                                             actually loading the screen (real browser console, not a
+                                                             markup check): a browser parses <template x-for>/<template
+                                                             x-if> INSIDE an <svg> as foreign SVG content, so it never
+                                                             gets the special "content is a cloneable fragment"
+                                                             treatment real HTML <template> gets elsewhere on this same
+                                                             page — Alpine's clone step threw a real, reproducible
+                                                             "Failed to execute 'importNode'" error on every draw,
+                                                             silently leaving every polyline's points/stroke/width
+                                                             blank. The little black x (the remove-mark button below)
+                                                             is a plain HTML button OUTSIDE the svg, so it rendered
+                                                             fine and was the only visible sign anything existed. Fixed
+                                                             by building the polyline markup as a STRING and binding it
+                                                             with x-html directly on the <svg> — no <template> inside
+                                                             SVG at all, still fully reactive since x-html re-evaluates
+                                                             on every dependency change same as x-text/x-show. --}}
+                                                        <svg class="absolute inset-0" style="pointer-events:none; width:100%; height:100%;"
+                                                             x-html="strokesSvgFor(page.index)"></svg>
                                                         {{-- Remove-stroke handles (one per stroke, at its first point). --}}
                                                         <template x-for="(mark, mi) in strokesFor(page.index)" :key="'r'+mi">
                                                             <button type="button" title="Remove this mark"
                                                                     @pointerdown.stop.prevent="removeMark(page.index, mi, 'highlight')"
                                                                     :style="{ position:'absolute', left:(mark.points[0].x-9)+'px', top:(mark.points[0].y-9)+'px', width:'18px', height:'18px', borderRadius:'9999px', background:'#475569', color:'#fff', fontSize:'12px', lineHeight:'16px', textAlign:'center', border:'1px solid #fff', padding:'0', pointerEvents:'auto', cursor:'pointer' }">&times;</button>
                                                         </template>
-                                                        {{-- Notes — a pinned marker + its text, visible inline. --}}
+                                                        {{-- Notes — a pinned marker + its text, visible inline.
+                                                             2026-09-08 — Johan: "note does not work - clicked, shows
+                                                             small modal but cannot type anything in it." Root cause,
+                                                             found the same way as the highlighter bug above (a real
+                                                             browser, not a markup check): the draw-surface div this
+                                                             sits inside has @pointerdown.prevent="startDraw(...)" with
+                                                             no .stop, so a pointerdown that starts on the textarea
+                                                             (clicking into it to type) bubbles up and gets
+                                                             preventDefault()'d there — which cancels the browser's own
+                                                             default focus behaviour for that pointerdown. The textarea
+                                                             was never actually receiving focus, so every keystroke
+                                                             went nowhere; @click.stop on the textarea couldn't help
+                                                             because click fires AFTER pointerdown, once the damage was
+                                                             already done. Fixed by stopping the pointerdown itself
+                                                             from ever reaching the draw surface, on every interactive
+                                                             element here (not just the textarea — the marker dot and
+                                                             its popover buttons had the same latent exposure). --}}
                                                         <template x-for="(note, ni) in notesFor(page.index)" :key="'n'+ni">
-                                                            <div :style="{ position:'absolute', left:note.x+'px', top:note.y+'px', transform:'translate(-50%,-50%)', pointerEvents:'auto' }">
+                                                            <div @pointerdown.stop :style="{ position:'absolute', left:note.x+'px', top:note.y+'px', transform:'translate(-50%,-50%)', pointerEvents:'auto' }">
                                                                 <div class="rounded-full" :style="{ width:'16px', height:'16px', background: colorCss(note.color), border:'2px solid #fff', boxShadow:'0 0 0 1px rgba(0,0,0,0.3)', cursor:'pointer' }"
                                                                      @click="toggleNotePopover(page.index, ni)"></div>
                                                                 <div x-show="openNote && openNote.page === page.index && openNote.index === ni" x-cloak
@@ -305,7 +352,7 @@
                                                             </div>
                                                         </template>
                                                         {{-- Pending note being typed (note tool, awaiting text). --}}
-                                                        <div x-show="pendingNote && pendingNote.page === page.index" x-cloak
+                                                        <div x-show="pendingNote && pendingNote.page === page.index" x-cloak @pointerdown.stop
                                                              :style="{ position:'absolute', left:(pendingNote ? pendingNote.x : 0)+'px', top:(pendingNote ? pendingNote.y : 0)+'px', transform:'translate(-50%,-50%)', pointerEvents:'auto' }">
                                                             <div class="rounded-md p-2" style="width:220px; background: var(--surface); border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
                                                                 <textarea x-model="pendingNoteText" rows="3" class="corex-input text-xs w-full" placeholder="Note text…" @click.stop x-ref="pendingNoteInput"></textarea>
@@ -355,16 +402,22 @@
              Narrow, fixed 260px working column. Never covered by anything —
              see the in-place-annotation note above the layout <style> block. --}}
         <div class="rental-review-aside rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
-            <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Affordability Assessment</h2>
-            {{-- 2026-09-08 — Johan: "right hand panel? is that filled in from
-                 where?" It wasn't filled in from anywhere — every field below
-                 is blank until an agent types into it, and nothing here is
-                 ever pre-populated from the application. Saying so plainly,
-                 on screen, is the fix (not just in a code comment he'll never
-                 see). --}}
+            <div class="flex items-center justify-between gap-2 mb-1">
+                <h2 class="text-sm font-semibold" style="color: var(--text-primary);">Affordability Assessment</h2>
+                {{-- 2026-09-08 — Johan: "how do I save the work on the right hand
+                     panel? does it auto save?" He'd already been told once in
+                     body text below (easy to miss, and not visible until the
+                     panel scrolls past it); this is now a standing, permanent
+                     badge next to the title itself, visible from the moment the
+                     screen loads — before he has typed anything, not only after
+                     — the same visual weight as "Marked up" and the highlighter's
+                     own "Saved" toast elsewhere on this screen. He should never
+                     need to ask this again by looking at the screen. --}}
+                <span class="ds-badge ds-badge-info flex-shrink-0" title="Every field below saves the moment you click away from it — no button needed.">Autosaves</span>
+            </div>
             <p class="text-xs mb-4" style="color: var(--text-muted);">
                 You type these — nothing here is pre-filled from the application, and nothing here is
-                sent to the applicant or shown anywhere else. Saved automatically as you type.
+                sent to the applicant or shown anywhere else.
             </p>
 
             <div class="space-y-3">
@@ -460,14 +513,14 @@
                     </div>
                 @endif
 
+                {{-- 2026-09-08 — the ACTIONS themselves moved to the sticky
+                     header (see the comment there). This is feedback only —
+                     the result of whichever header button the agent just
+                     used — so it stays here, next to the status it relates
+                     to, rather than adding a second place to look. --}}
                 @unless(in_array($rentalApplication->status, ['approved', 'declined'], true))
-                    <p class="text-xs font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Next step</p>
-                    <textarea x-model="moreInfoNote" rows="2" class="corex-input text-xs w-full mb-2" placeholder="What do you need from the applicant? (for Request more info)"></textarea>
-                    <div class="flex flex-col gap-2">
-                        <button type="button" class="corex-btn-outline text-xs w-full" :disabled="moreInfoSending || !moreInfoNote.trim()" @click="requestMoreInfo()" x-text="moreInfoSending ? 'Sending…' : 'Request more info from applicant'"></button>
-                        <button type="button" class="corex-btn-primary text-xs w-full" :disabled="submittingForApproval" @click="submitForApproval()" x-text="submittingForApproval ? 'Submitting…' : ({{ $isPendingAuthorisation ? 'true' : 'false' }} ? 'Re-submit to authoriser' : 'Submit to authoriser')"></button>
-                    </div>
-                    <p class="text-xs mt-2" x-show="agentActionStatus" x-text="agentActionStatus" :style="agentActionError ? 'color: var(--ds-red, #dc2626);' : 'color: var(--ds-emerald, #059669);'"></p>
+                    <p class="text-xs" x-show="agentActionStatus" x-text="agentActionStatus" :style="agentActionError ? 'color: var(--ds-red, #dc2626);' : 'color: var(--ds-emerald, #059669);'"></p>
+                    <p class="text-xs" x-show="!agentActionStatus" style="color: var(--text-muted);">Use "Request more info from applicant" or "Submit to authoriser" in the header above.</p>
                 @endunless
             </div>
         </div>
@@ -500,6 +553,19 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
         submittingForApproval: false,
         agentActionStatus: '',
         agentActionError: false,
+        // 2026-09-08 — the header button's own entry point. A native
+        // prompt() rather than a header-embedded textarea — this is a
+        // short line of text ("what do you need from the applicant"), and
+        // a prompt keeps the whole action, header button included, to one
+        // click without inventing a dropdown/popover for it.
+        promptRequestMoreInfo() {
+            const note = window.prompt('What do you need from the applicant?');
+            if (note === null) return; // cancelled — nothing sent, nothing lost
+            const trimmed = note.trim();
+            if (!trimmed) return;
+            this.moreInfoNote = trimmed;
+            this.requestMoreInfo();
+        },
         async requestMoreInfo() {
             if (this.moreInfoSending || !this.moreInfoNote.trim()) return;
             this.moreInfoSending = true;
@@ -782,6 +848,23 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
         },
         strokesFor(p) { return this.marks.filter(m => m.type === 'highlight' && m.page === p); },
         notesFor(p) { return this.marks.filter(m => m.type === 'note' && m.page === p); },
+        // 2026-09-08 — built as a markup STRING and bound via x-html on the
+        // <svg> itself, deliberately NOT <template x-for>/<template x-if>
+        // inside the svg (see the comment above the <svg> tag for why that
+        // silently failed in every real browser). Still fully reactive:
+        // x-html re-evaluates this expression on every dependency change
+        // exactly like x-text/x-show does, and every value here comes from
+        // this component's own numeric drag/mark state, never free-typed
+        // text, so there is nothing here that needs HTML-escaping.
+        strokesSvgFor(p) {
+            const poly = (points, color, width) =>
+                '<polyline points="' + points.map(pt => Number(pt.x) + ',' + Number(pt.y)).join(' ') + '" fill="none" stroke="' + this.colorCss(color) + '" stroke-opacity="0.4" stroke-width="' + Number(width) + '" stroke-linecap="round" stroke-linejoin="round"></polyline>';
+            let svg = this.strokesFor(p).map(m => poly(m.points, m.color, m.width)).join('');
+            if (this.drag.active && this.drag.page === p && this.activeTool === 'highlight') {
+                svg += poly(this.drag.points, this.activeColor, this.strokeWidth);
+            }
+            return svg;
+        },
         clearPage(p) { this.pushHistory(); this.marks = this.marks.filter(m => m.page !== p); this.dirty = true; },
         markCount() { return this.marks.length; },
 
@@ -970,6 +1053,37 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
 
 function formatTime(iso) {
     return new Date(iso).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+}
+
+// 2026-09-08 — Johan: "essentially everything should fit that the whole
+// screen doesnt scroll, but the left and right panels scroll in the
+// screen." MEASURES the real space left inside #appScroll (layouts/corex.
+// blade.php's own scroll container) rather than guessing a fixed vh
+// number — the guess was wrong because it never accounted for the real,
+// variable height of the QA/env banner above the app, so the panels ended
+// up taller than the space actually available and #appScroll itself had
+// to scroll too. All values read here (header height, its margin, this
+// element's own margin) are independent of #appScroll's OWN scroll
+// position, so this stays correct however the page is scrolled.
+function rentalReviewLayout() {
+    return {
+        init() {
+            const recalc = () => {
+                const scrollEl = document.getElementById('appScroll');
+                const header = document.querySelector('.sticky.top-0.z-50');
+                if (!scrollEl || !header) return;
+                const headerSpace = header.offsetHeight + parseFloat(getComputedStyle(header).marginBottom || 0);
+                const columnsMarginTop = parseFloat(getComputedStyle(this.$el).marginTop || 0);
+                const available = scrollEl.clientHeight - headerSpace - columnsMarginTop - 8;
+                this.$el.style.setProperty('--rr-panel-h', Math.max(300, available) + 'px');
+            };
+            recalc();
+            window.addEventListener('resize', recalc);
+            // Fonts/images can still shift real heights slightly after the
+            // first paint — one more pass once layout has settled.
+            setTimeout(recalc, 300);
+        },
+    };
 }
 
 // Agent-added-documents, 2026-09-08 — cc4's widget, handed to me for this
