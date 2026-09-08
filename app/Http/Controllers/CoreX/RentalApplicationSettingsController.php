@@ -142,6 +142,14 @@ class RentalApplicationSettingsController extends Controller
     {
         $agencyId = $request->user()->effectiveAgencyId();
 
+        // RA-02 (cc5 re-test, Round 8) — same sanitizer as every other
+        // numeric money field on this feature; this one is a ratio rather
+        // than a rand amount, but agents type it the same way.
+        $request->merge(RentalApplication::sanitizeNumericInput(
+            $request->only(['income_to_rent_multiplier']),
+            ['income_to_rent_multiplier'],
+        ));
+
         $validated = $request->validate([
             'income_to_rent_multiplier' => ['required', 'numeric', 'min:0.1', 'max:99.99'],
         ]);
