@@ -118,7 +118,10 @@ final class RentalApplicationRound8FixesTest extends TestCase
 
     // ── RA-02: assessment panel — every SA money spelling, each field ────
 
-    public function test_assessment_monthly_income_accepts_every_south_african_money_spelling(): void
+    // Round 9 (item 5) — monthly_income/other_monthly_income/monthly_expenses
+    // became growable item lists; see RentalApplicationRound9AffordabilityTest
+    // for the money-format + auto-row-add + soft-delete-sync coverage.
+    public function test_assessment_income_items_accept_every_south_african_money_spelling(): void
     {
         $agent = $this->agent();
         $cases = ['8,500' => '8500.00', '8 500' => '8500.00', 'R8 500' => '8500.00', '8500.50' => '8500.50'];
@@ -127,15 +130,15 @@ final class RentalApplicationRound8FixesTest extends TestCase
             $app = $this->application();
             $this->actingAs($agent)->post(
                 route('corex.rental-applications.review.assessment', $app),
-                ['monthly_income' => $typed]
+                ['income_items' => [['description' => 'Salary', 'amount' => $typed]]]
             )->assertSessionDoesntHaveErrors();
 
             $assessment = RentalApplicationAssessment::where('rental_application_id', $app->id)->first();
-            $this->assertSame($expected, $assessment->monthly_income, "monthly_income typed '{$typed}' must store as {$expected}.");
+            $this->assertSame($expected, $assessment->incomeItems->first()->amount, "income item typed '{$typed}' must store as {$expected}.");
         }
     }
 
-    public function test_assessment_other_monthly_income_accepts_every_south_african_money_spelling(): void
+    public function test_assessment_expense_items_accept_every_south_african_money_spelling(): void
     {
         $agent = $this->agent();
         $cases = ['8,500' => '8500.00', '8 500' => '8500.00', 'R8 500' => '8500.00', '8500.50' => '8500.50'];
@@ -144,28 +147,11 @@ final class RentalApplicationRound8FixesTest extends TestCase
             $app = $this->application();
             $this->actingAs($agent)->post(
                 route('corex.rental-applications.review.assessment', $app),
-                ['other_monthly_income' => $typed]
+                ['expense_items' => [['description' => 'Rent', 'amount' => $typed]]]
             )->assertSessionDoesntHaveErrors();
 
             $assessment = RentalApplicationAssessment::where('rental_application_id', $app->id)->first();
-            $this->assertSame($expected, $assessment->other_monthly_income, "other_monthly_income typed '{$typed}' must store as {$expected}.");
-        }
-    }
-
-    public function test_assessment_monthly_expenses_accepts_every_south_african_money_spelling(): void
-    {
-        $agent = $this->agent();
-        $cases = ['8,500' => '8500.00', '8 500' => '8500.00', 'R8 500' => '8500.00', '8500.50' => '8500.50'];
-
-        foreach ($cases as $typed => $expected) {
-            $app = $this->application();
-            $this->actingAs($agent)->post(
-                route('corex.rental-applications.review.assessment', $app),
-                ['monthly_expenses' => $typed]
-            )->assertSessionDoesntHaveErrors();
-
-            $assessment = RentalApplicationAssessment::where('rental_application_id', $app->id)->first();
-            $this->assertSame($expected, $assessment->monthly_expenses, "monthly_expenses typed '{$typed}' must store as {$expected}.");
+            $this->assertSame($expected, $assessment->expenseItems->first()->amount, "expense item typed '{$typed}' must store as {$expected}.");
         }
     }
 

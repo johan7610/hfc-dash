@@ -9,6 +9,8 @@ use App\Models\Branch;
 use App\Models\Contact;
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationAssessment;
+use App\Models\RentalApplicationExpenseItem;
+use App\Models\RentalApplicationIncomeItem;
 use App\Models\RentalApplicationQualifyingSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -60,6 +62,29 @@ final class RentalApplicationRound9AffordabilityTest extends TestCase
         ], $attrs));
     }
 
+    /**
+     * Round 10 — monthly_income/other_monthly_income/monthly_expenses
+     * became growable item lists (see RentalApplicationRound10ReviewScreenTest).
+     * $income/$otherIncome/$expenses of null are skipped (no item created),
+     * matching how a genuinely never-filled-in field behaves.
+     */
+    private function assessmentWithAmounts(RentalApplication $app, ?float $income = null, ?float $otherIncome = null, ?float $expenses = null): RentalApplicationAssessment
+    {
+        $assessment = RentalApplicationAssessment::create(['agency_id' => $this->agency->id, 'rental_application_id' => $app->id]);
+
+        if ($income !== null) {
+            RentalApplicationIncomeItem::create(['agency_id' => $this->agency->id, 'rental_application_assessment_id' => $assessment->id, 'description' => 'Salary', 'amount' => $income]);
+        }
+        if ($otherIncome !== null) {
+            RentalApplicationIncomeItem::create(['agency_id' => $this->agency->id, 'rental_application_assessment_id' => $assessment->id, 'description' => 'Other income', 'amount' => $otherIncome]);
+        }
+        if ($expenses !== null) {
+            RentalApplicationExpenseItem::create(['agency_id' => $this->agency->id, 'rental_application_assessment_id' => $assessment->id, 'description' => 'Expenses', 'amount' => $expenses]);
+        }
+
+        return $assessment->fresh();
+    }
+
     private function authoriser(): User
     {
         $user = User::factory()->create(['agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'role' => 'admin']);
@@ -80,10 +105,7 @@ final class RentalApplicationRound9AffordabilityTest extends TestCase
     public function test_worked_example_eighteen_thousand_gross_qualifies_up_to_fifty_four_hundred_rent(): void
     {
         $app = $this->application(['current_rental_amount' => 5400]);
-        $assessment = RentalApplicationAssessment::create([
-            'agency_id' => $this->agency->id, 'rental_application_id' => $app->id,
-            'monthly_income' => 18000, 'other_monthly_income' => 0, 'monthly_expenses' => 4000,
-        ]);
+        $assessment = $this->assessmentWithAmounts($app, income: 18000, expenses: 4000);
 
         $result = $assessment->qualifyingResult(30.00);
 
@@ -106,16 +128,10 @@ final class RentalApplicationRound9AffordabilityTest extends TestCase
         // Same gross income, wildly different expenses — the verdict must
         // be identical, because expenses are not part of the legal test.
         $appLowExpenses = $this->application(['current_rental_amount' => 5400]);
-        $lowExpenseAssessment = RentalApplicationAssessment::create([
-            'agency_id' => $this->agency->id, 'rental_application_id' => $appLowExpenses->id,
-            'monthly_income' => 18000, 'other_monthly_income' => 0, 'monthly_expenses' => 200,
-        ]);
+        $lowExpenseAssessment = $this->assessmentWithAmounts($appLowExpenses, income: 18000, expenses: 200);
 
         $appHighExpenses = $this->application(['current_rental_amount' => 5400]);
-        $highExpenseAssessment = RentalApplicationAssessment::create([
-            'agency_id' => $this->agency->id, 'rental_application_id' => $appHighExpenses->id,
-            'monthly_income' => 18000, 'other_monthly_income' => 0, 'monthly_expenses' => 15000,
-        ]);
+        $highExpenseAssessment = $this->assessmentWithAmounts($appHighExpenses, income: 18000, expenses: 15000);
 
         $lowResult = $lowExpenseAssessment->qualifyingResult(30.00);
         $highResult = $highExpenseAssessment->qualifyingResult(30.00);
@@ -178,10 +194,7 @@ final class RentalApplicationRound9AffordabilityTest extends TestCase
     {
         $ro = $this->authoriser();
         $app = $this->application(['current_rental_amount' => 5400, 'submitted_for_approval_at' => now()]);
-        RentalApplicationAssessment::create([
-            'agency_id' => $this->agency->id, 'rental_application_id' => $app->id,
-            'monthly_income' => 18000, 'other_monthly_income' => 0, 'monthly_expenses' => 4000,
-        ]);
+        $this->assessmentWithAmounts($app, income: 18000, expenses: 4000);
 
         $response = $this->actingAs($ro)->get(route('corex.rental-applications.authorisation.show', $app));
 

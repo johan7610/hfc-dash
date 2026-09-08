@@ -3557,3 +3557,196 @@ in the authorisation controller's `compact()` call, caught before push,
 plus this round's tests). Pushed to origin. Not merged into the shared
 `QA1` checkout — awaiting review.blade.php's release to finish items 1/3/4
 and to design item 5.
+
+## Round 10 — review screen released: net-income label, gross-income label, growable income/expense rows (2026-09-08)
+
+Conductor: "RELEASED — the review screen and its controller are yours.
+cc6 has finished its investigation and is holding with no code in flight."
+Finishes the three items Round 9 could not reach because `review.blade.php`
+and `RentalApplicationReviewController.php` were still sequenced behind
+cc6's and cc3's concurrent work.
+
+### Item 1 — net income labelled unmistakably as reference-only
+
+The live review screen (as landed by cc6's own investigation/fixes,
+confirmed by reading the file fresh before touching it) did not display
+`net_income` at all — the "actively misleading" state cc5 originally
+flagged no longer existed on this exact screen by the time of this round.
+Rather than leave it out, it was added back deliberately correctly the
+first time: a separate, visually distinct block (dashed border, own
+heading "FOR YOUR REFERENCE ONLY — DOES NOT AFFECT THE GUIDELINE CHECK
+ABOVE", `data-verify`-free plain markup) placed AFTER the pass/fail badge,
+never beside it — the exact adjacency that made the old screen
+misleading in the first place.
+
+### Item 2/3 — gross-income labelling on the agent's own panel
+
+The old fixed "Monthly income"/"Other monthly income" fields are gone
+(replaced by item 5's growable rows, below), so the "gross, before
+deductions" language moved to the section HEADING ("Income (gross,
+before deductions)") plus a one-line hint underneath, rather than
+per-row — a row's own label is free text the agent chooses ("Salary",
+"Side income"), unlike the applicant/agent-detail-page forms' single
+fixed field from Round 9. Same clarity goal, different UI shape because
+the rows themselves changed shape this round.
+
+### Item 5 — growable income/expense rows
+
+**Data model.** `monthly_income`/`other_monthly_income`/`monthly_expenses`
+(fixed decimal columns) replaced with two new tables,
+`rental_application_income_items` and `rental_application_expense_items`
+(migration `2026_09_08_180000_create_rental_application_income_expense_items_tables.php`),
+matching the existing `PayrollPayslipLine` precedent for a financial
+line-item ledger belonging to one parent record — including `SoftDeletes`
+(non-negotiable #1: an agent removing an income/expense line from a
+financial record is a real, recoverable event, never a hard delete).
+Existing captured data was migrated, not discarded: any assessment with
+values in the old columns got one income/expense item each, preserving
+real agent-entered amounts (confirmed against real QA1 data before
+writing the migration — see Verification below). Caught one MySQL
+identifier-length bug before it could break: the auto-generated foreign
+key name for `rental_application_income_items.rental_application_assessment_id`
+exceeded MySQL's 64-character limit — fixed with an explicit short
+constraint name (`rai_items_assessment_fk`/`rae_items_assessment_fk`).
+
+**`RentalApplicationAssessment`** gains `incomeItems()`/`expenseItems()`
+(`hasMany`, ordered by `sort_order`); `qualifyingResult()` now sums those
+relations instead of reading the two fixed income columns and the one
+fixed expenses column.
+
+**`RentalApplicationReviewController::saveAssessment()`** accepts
+`income_items`/`expense_items` arrays (`{id?, description?, amount}`
+each), sanitizes each item's `amount` through the existing
+`RentalApplication::sanitizeNumericInput()`, and syncs them via a new
+private `syncItems()`: matched by `id` where the client already has one
+(a row from a previous autosave), updated in place; rows no longer
+present are SOFT-deleted, never hard-deleted, and never blind
+delete-all-then-recreate (which would soft-delete and immediately
+recreate every unchanged row on every keystroke, turning the audit trail
+into noise). A row with no description AND no amount (the ever-present
+blank "type here to add another" placeholder) is filtered server-side
+before syncing — Johan: "empty trailing rows must not save as zero-value
+rows or clutter the record." The response echoes back the saved items
+WITH their real ids, because the client has no other way to learn a
+newly-created row's id before the NEXT autosave — without this, every
+subsequent save would treat previously-saved rows as new and create
+duplicates instead of updating them.
+
+**`review.blade.php` / `rentalReview()`** — `incomeItems`/`expenseItems`
+are now Alpine-reactive arrays, seeded from the assessment's real saved
+items plus exactly one trailing blank row. `compactAndEnsureTrailing()`
+runs on every row edit: removes any blank row that isn't the last one
+(how an agent "deletes" a row — clear both its fields) and guarantees
+exactly one blank trailing row is always available to type into — this
+is literally "filling the last row auto-adds a fresh empty one." Live
+totals (`incomeTotal()`/`expenseTotal()`) sum the SAME rows with the SAME
+filter as the server, so the on-screen total can never legitimately
+disagree with what `qualifyingResult()` computes — proven, not assumed,
+in the Verification section below. `save()` captures the actual row
+OBJECT references being sent (not a copy) before the request fires, so
+the response's returned ids can be patched back onto them by position
+without disturbing a blank row the agent has started typing into during
+the round trip — a wholesale array replacement would have dropped that.
+
+### Verification — real headless-browser session, real persisted data
+
+Per instruction ("drive the actual screen — type in the last row and
+confirm a new one appears, rather than checking the markup exists"), the
+auto-add-row behaviour is Alpine.js client-side reactivity and cannot be
+observed from a PHPUnit HTTP test — a real browser was required.
+
+**Method, and why this shape:** the shared `/corex-qa1` checkout was mid-build
+under cc2 at the time (confirmed via cc1: "cc2, who's mid-build on QA1
+right now"), and cc1 was about to restore production-shaped data onto the
+shared `corex_qa1` database — both made touching the shared checkout's
+working tree OR running this round's migration against the shared
+database unsafe at that moment. Instead: a disposable clone
+(`corex_qa1_round10_verify`) was built from a real structure dump plus
+real DATA for `migrations`, `agencies`, `branches`, `contacts`, `users`,
+`rental_applications`, `rental_application_assessments`, `properties`,
+`roles`, and `role_permissions` (cloning the `migrations` table's own
+data, not just structure, was what let `php artisan migrate` run
+correctly as an ordinary INCREMENTAL migrate — including surfacing the
+FK-identifier-length bug above — rather than mistaking the DB for fresh
+and trying to load the full schema snapshot, which is what happened on a
+first, abandoned attempt during Round 9's own verification). A disposable
+agent login was created by resetting a REAL existing agency-1 user's
+password (`andre@hfcoastal.co.za`) — in the ISOLATED CLONE ONLY; the real
+password on the real shared database was never touched. Puppeteer
+(already a project devDependency; a read-only `node_modules` symlink to
+the shared checkout's own install was used rather than running `npm
+install` in the worktree, matching the sanctioned read-only-symlink
+exception for a throwaway verification-only use). `public/build/assets/app.js`
+in this worktree turned out to be a pre-existing 0-byte corrupted
+artifact (unrelated to this round's code) — `npm run build` regenerated
+it before Alpine.js would even load.
+
+**What was actually driven, on real application id 49 (agency 1, real
+contact, real historical assessment data: gross income R23,700 from two
+real migrated income items, real current rent R7,500):**
+1. Loaded the real review screen via real login, real session, real
+   permission/scope checks (which needed cloning the `roles` and
+   `role_permissions` tables too — data-scope resolution reads from the
+   database, not just `config/corex-permissions.php`).
+2. Typed into the actual last (blank) income row: row count went 3 → 4
+   (2 real items + 1 blank → typed → 1 new blank appended). Same for
+   expenses: 1 → 2.
+3. Live total read directly off the rendered page: `R 28 021,00`
+   (23,700 + 4,321 typed) — computed client-side, before any network
+   round trip completed.
+4. Waited for the debounced autosave; save badge showed "✓ Saved".
+5. Reloaded the page FRESH (new navigation, not the same in-memory JS
+   state) — row counts persisted correctly (4 income, 2 expense: real
+   items + exactly one blank trailing row each, never more), and the
+   "Suggested check" box read: "Gross income (your entries above):
+   R 28 021,00 ... Rent must not exceed 30% of gross income
+   (R 8 406,30). Actual rent is 26.8% of gross income" plus "WITHIN THE
+   AFFORDABILITY GUIDELINE", with the net-income block separately showing
+   "Income left after expenses: R 27 244,00", clearly labelled reference-only.
+6. Cross-checked against the database directly: `rental_application_income_items`
+   held exactly 3 real rows (15000, 8700, 4321 — no blank row saved) and
+   `rental_application_expense_items` held exactly 1 (777).
+7. Cross-checked against `RentalApplicationAssessment::qualifyingResult()`
+   called directly via tinker: `gross_income: 28021`, `net_income: 27244`,
+   `max_affordable_rent: 8406.3`, `meets_threshold: true` — identical, to
+   the cent, to what the screen displayed. This is the proof that "the
+   total must match exactly what the affordability check uses."
+
+**Cleanup:** the disposable database, its dump files, and the read-only
+`node_modules` symlink were all removed after verification; the rebuilt
+`public/build` assets were kept (gitignored, regenerable, and were
+broken before this round regardless). The real shared `corex_qa1`
+database, the real user `andre@hfcoastal.co.za`'s real password, and the
+shared `/corex-qa1` checkout's working tree were never touched.
+
+**PHPUnit regression coverage** (everything server-side; the row-auto-add
+UI reactivity itself is covered only by the browser session above):
+`tests/Feature/RentalApplications/RentalApplicationRound10ReviewScreenTest.php`
+(new) — net-income reference-only labelling, gross-income section
+labelling, item persistence + total computation, blank-row filtering,
+soft-delete-on-removal (never hard-delete) with re-save-by-id proven to
+update rather than duplicate, and the total-matches-the-affordability-check
+guarantee. `RentalApplicationRound8FixesTest.php` and
+`RentalApplicationRound9AffordabilityTest.php` updated wherever they
+constructed an assessment via the old fixed columns (both now use
+`incomeItems()`/`expenseItems()` or a new `assessmentWithAmounts()` test
+helper) — those columns no longer exist after this round's migration.
+Full run: 22 tests, 22 passed, 102 assertions.
+
+### Files touched
+
+- `database/migrations/2026_09_08_180000_create_rental_application_income_expense_items_tables.php` (new)
+- `app/Models/RentalApplicationIncomeItem.php` (new)
+- `app/Models/RentalApplicationExpenseItem.php` (new)
+- `app/Models/RentalApplicationAssessment.php` — `incomeItems()`/`expenseItems()` relations, `qualifyingResult()` sums items
+- `app/Http/Controllers/CoreX/RentalApplicationReviewController.php` — `maxRentPercentFor()`, item-array `saveAssessment()`, new `syncItems()`
+- `resources/views/corex/rental-applications/review.blade.php` — growable income/expense rows, gross-income section label, net-income reference-only block, new result field names
+- `tests/Feature/RentalApplications/RentalApplicationRound10ReviewScreenTest.php` (new)
+- `tests/Feature/RentalApplications/RentalApplicationRound8FixesTest.php` — assessment-creation fixture update
+- `tests/Feature/RentalApplications/RentalApplicationRound9AffordabilityTest.php` — assessment-creation fixture update
+
+Branch: `rental-applications-affordability-2026-09-08` (continued),
+new commits on top of `52a476910`. QA1 only — not merged into the shared
+`QA1` checkout, which cc1 is actively restoring with production-shaped
+data at the time of this round; will coordinate the actual QA1 landing
+once cc1 confirms QA1 is back up and clean.

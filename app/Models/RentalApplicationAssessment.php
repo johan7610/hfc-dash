@@ -5,32 +5,44 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToAgency;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * AT-392 Phase 2 — the agent's own affordability capture for a rental
  * application, one row per application (see the migration for the "why").
  * Autosaved from the review screen's right panel; every field nullable so
  * a partially-filled assessment never blocks anything.
+ *
+ * Round 9 (item 5) — monthly_income/other_monthly_income/monthly_expenses
+ * were fixed columns; replaced with incomeItems()/expenseItems(), an
+ * agent-growable list of lines each (Johan: "filling the last row auto-adds
+ * a fresh empty one"). See
+ * 2026_09_08_180000_create_rental_application_income_expense_items_tables.php
+ * for the data migration that preserved existing captured amounts.
  */
 class RentalApplicationAssessment extends Model
 {
     use BelongsToAgency;
 
     protected $fillable = [
-        'agency_id', 'rental_application_id',
-        'monthly_income', 'other_monthly_income', 'monthly_expenses', 'notes',
-        'updated_by_user_id',
-    ];
-
-    protected $casts = [
-        'monthly_income' => 'decimal:2',
-        'other_monthly_income' => 'decimal:2',
-        'monthly_expenses' => 'decimal:2',
+        'agency_id', 'rental_application_id', 'notes', 'updated_by_user_id',
     ];
 
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by_user_id');
+    }
+
+    public function incomeItems(): HasMany
+    {
+        return $this->hasMany(RentalApplicationIncomeItem::class, 'rental_application_assessment_id')
+            ->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function expenseItems(): HasMany
+    {
+        return $this->hasMany(RentalApplicationExpenseItem::class, 'rental_application_assessment_id')
+            ->orderBy('sort_order')->orderBy('id');
     }
 
     /**
@@ -63,12 +75,11 @@ class RentalApplicationAssessment extends Model
      */
     public function qualifyingResult(float $maxRentPercent): array
     {
-        $grossIncome = null;
-        if ($this->monthly_income !== null || $this->other_monthly_income !== null) {
-            $grossIncome = (float) ($this->monthly_income ?? 0) + (float) ($this->other_monthly_income ?? 0);
-        }
+        $incomeItems = $this->incomeItems;
+        $grossIncome = $incomeItems->isEmpty() ? null : (float) $incomeItems->sum('amount');
 
-        $netIncome = $grossIncome === null ? null : $grossIncome - (float) ($this->monthly_expenses ?? 0);
+        $totalExpenses = (float) $this->expenseItems->sum('amount');
+        $netIncome = $grossIncome === null ? null : $grossIncome - $totalExpenses;
 
         $rentalApplication = $this->rentalApplication;
         $rent = $rentalApplication?->current_rental_amount !== null
