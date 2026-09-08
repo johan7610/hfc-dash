@@ -3371,3 +3371,66 @@ returning null.
 - `resources/views/rental-applications/public/show.blade.php` — still-living tick box, rental term quick-select buttons
 - `resources/views/corex/rental-applications/show.blade.php` — same two, agent-side, plus the legacy-text note
 - `resources/views/corex/rental-applications/pdf.blade.php` — renders "Still living there" and months-based term
+
+---
+
+## Note auto-focus — the discrepancy cc1 found, root-caused (2026-09-08)
+
+cc1 independently drove the real screen and found the note textarea did
+NOT auto-focus — `document.activeElement` stayed on the "Note" tool
+button after placing a note. My own commit had claimed this was
+verified. It wasn't, and the reason why matters more than the bug.
+
+**What my own verification actually did, on inspection:** placed a note,
+then called `.click()` on the textarea MYSELF, then checked
+`document.activeElement` and typed. That manual click was never part of
+the feature — it was my own workaround, one line before the assertion —
+and it made a genuinely broken auto-focus pass every time, because the
+thing I checked ("can this element be focused") is not the thing that
+was claimed ("does opening a note focus it automatically"). Reproduced
+properly this time — a real click to place the note, checking
+`document.activeElement` immediately with no manual step of my own in
+between — and got exactly what cc1 got: `BUTTON`, not `TEXTAREA`.
+
+**Root cause, found from there:** the pending-note textarea lives inside
+`<template x-for="page in pages">` — one element per loaded page, ALL
+declaring the same `x-ref="pendingNoteInput"`. With every page loaded,
+17 separate elements answered to that one ref name (confirmed via
+`document.querySelectorAll` — the actual count was higher still,
+51, consistent with `x-ref` collisions producing unreliable resolution
+rather than a clean "last one wins"). Alpine's `$refs.pendingNoteInput`
+has no defined behaviour for duplicate ref names within a component —
+it does not reliably resolve to the one instance currently visible for
+the page the agent is actually working on. Calling `.focus()` on
+whichever (likely hidden, `display:none`) element it actually resolved
+to does nothing, silently — no error, no warning, exactly why this
+was invisible to every prior check.
+
+**Fixed:** removed the shared `x-ref` entirely. The textarea now carries
+`:data-pending-note-page="page.index"`, and the focus call queries
+`document.querySelector('textarea[data-pending-note-page="' + page +
+'"]')` for the SPECIFIC page whose note was just placed, inside the same
+`$nextTick()`. No ref-name collision possible — each page's element has
+a distinct, addressable identity.
+
+**Verified the way cc1 did it, not the way I did it the first time:**
+placed a note with a single real click, checked `document.activeElement`
+immediately (no manual click) — now `TEXTAREA`, both immediately and
+after a 300ms wait. Typed with no click at all — the text landed in the
+real DOM value. Then the full round trip: typed a note, clicked "Add
+note", clicked the real Save button, reloaded the page fresh, reopened
+the document, and confirmed the exact text came back from the server.
+
+**The standing lesson — written into BUILD_STANDARD.md §5b:** a test of
+an AUTOMATIC behaviour must never itself perform the action the code is
+supposed to perform unprompted. My script's own manual `.click()`
+silently changed what was being tested, from "does this happen on its
+own" to the much weaker "can this happen at all" — and both answers look
+identical in a passing test unless someone reads the script line by
+line. General rule now on record: if a test needs an extra step of its
+own to make the assertion pass, that extra step IS the missing feature,
+not a helpful setup step.
+
+**Files touched:** `resources/views/corex/rental-applications/
+review.blade.php` (the `x-ref` → `data-` attribute fix) and
+`.ai/BUILD_STANDARD.md` (§5b, docs only).

@@ -177,6 +177,40 @@ someone doubted.**
   exercises brand-new rows is testing a database that does not exist in
   production.
 
+### 5b. Never perform, inside a test, the exact automatic behaviour the test exists to check
+
+A distinct failure mode from §5a, found the same night on the same
+module: a test that verifies an AUTOMATIC/PROACTIVE behaviour (autosave,
+auto-focus, auto-anything the code is supposed to do without being
+asked) must never manually trigger that same behaviour itself before
+checking whether it happened. Doing so silently changes the claim being
+tested — from "does the code do this on its own" to the much weaker "is
+this element/state capable of this at all" — and the test will pass
+either way, so the difference is invisible until someone else runs the
+real thing without the same manual step.
+
+Concretely: a note-placement feature was supposed to auto-focus a text
+box the instant it appeared (`$nextTick(() => el.focus())`). The
+verification script placed the note, then called `.click()` on the
+textarea itself, THEN checked focus and typed — and reported success.
+That `.click()` was never part of the feature; it was the tester's own
+workaround, inserted one line before the assertion, and it made a
+genuinely broken auto-focus pass every time. The real bug — the
+underlying `x-ref` was shared across every loop iteration of a list, so
+Alpine's ref resolution was unreliable and `.focus()` was silently
+landing on a hidden element for a different item, which real browsers
+don't even error on — was found only when a second person drove the
+real screen with no such extra click and watched
+`document.activeElement` stay on the wrong element.
+
+**The rule:** when a test's own actions include a step that duplicates
+what the code under test is supposed to do automatically, stop and
+delete that step before trusting the result. Check the state
+IMMEDIATELY after the triggering action (the one a real user actually
+performs — clicking to place the note, not clicking on its result), with
+zero intervening steps of your own. If the test needs an extra action to
+make the assertion pass, that extra action IS the missing feature.
+
 ---
 
 ## 6. Fix the class, not the instance

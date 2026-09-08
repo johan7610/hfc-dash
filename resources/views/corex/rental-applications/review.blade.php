@@ -355,7 +355,7 @@
                                                         <div x-show="pendingNote && pendingNote.page === page.index" x-cloak @pointerdown.stop
                                                              :style="{ position:'absolute', left:(pendingNote ? pendingNote.x : 0)+'px', top:(pendingNote ? pendingNote.y : 0)+'px', transform:'translate(-50%,-50%)', pointerEvents:'auto' }">
                                                             <div class="rounded-md p-2" style="width:220px; background: var(--surface); border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                                                                <textarea x-model="pendingNoteText" rows="3" class="corex-input text-xs w-full" placeholder="Note text…" @click.stop x-ref="pendingNoteInput"></textarea>
+                                                                <textarea x-model="pendingNoteText" rows="3" class="corex-input text-xs w-full" placeholder="Note text…" @click.stop :data-pending-note-page="page.index"></textarea>
                                                                 <div class="flex justify-end gap-2 mt-1">
                                                                     <button type="button" class="text-xs" style="color: var(--text-muted);" @click.stop="pendingNote = null; pendingNoteText = ''">Cancel</button>
                                                                     <button type="button" class="text-xs font-semibold" style="color: var(--ds-blue, #2563eb);" @click.stop="commitNote()">Add note</button>
@@ -942,7 +942,27 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
                 const x = e.clientX - r.left, y = e.clientY - r.top;
                 this.pendingNote = { page, x, y };
                 this.pendingNoteText = '';
-                this.$nextTick(() => this.$refs.pendingNoteInput && this.$refs.pendingNoteInput.focus());
+                // 2026-09-08 — cc1 caught this: focus silently never landed.
+                // Root cause found by re-testing exactly the way cc1 did (a
+                // real click, checking document.activeElement immediately,
+                // no manual click of my own in between — my earlier "proof"
+                // had quietly clicked the textarea myself before checking,
+                // which tested "can this element be focused" instead of
+                // "does opening a note focus it automatically", and masked
+                // the real bug). This markup lives inside x-for="page in
+                // pages" — one note textarea per loaded page, ALL sharing
+                // the ref name x-ref="pendingNoteInput". With N pages loaded,
+                // there were N elements answering to that one name, so
+                // $refs.pendingNoteInput resolved unreliably — not
+                // necessarily the page actually visible — and calling
+                // .focus() on a hidden (display:none) element does nothing,
+                // silently, no error. Fixed by never relying on a ref shared
+                // across loop iterations: query the ONE textarea tagged with
+                // THIS page's own index instead.
+                this.$nextTick(() => {
+                    const el = document.querySelector('textarea[data-pending-note-page="' + page + '"]');
+                    if (el) el.focus();
+                });
                 return;
             }
             if (!this.drag.active || this.drag.page !== page) return;
