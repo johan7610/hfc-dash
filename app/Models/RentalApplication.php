@@ -92,19 +92,59 @@ class RentalApplication extends Model
      * list so this one sanitizer serves every numeric money field on this
      * feature — no reason to duplicate the same three lines of string
      * cleanup in every controller that touches a rand amount.
+     *
+     * SECOND regression on this exact area, 2026-09-08 — Johan: "everyone
+     * will enter amounts like 40638.40, the std that everyone uses...
+     * hitting the . on an amount clears the values." The OLD rule (strip
+     * every comma and space, leave dots alone) was blind to a genuine
+     * ambiguity: "40638,40" (comma as decimal — some people do write it
+     * that way) looks identical in shape to "40,638" (comma as a thousands
+     * mark). Johan's own resolution rule, applied exactly as he stated it:
+     * the LAST separator (comma, dot, OR space) is the decimal point ONLY
+     * when it is followed by EXACTLY two digits and nothing else after —
+     * every other separator, and a last separator not followed by exactly
+     * two digits, is a thousands mark and is stripped. This is what makes
+     * "40,638.40" (dot decimal), "40638,40" (comma decimal), and
+     * "40 638.40"/"R40 638.40" (space thousands, dot decimal) all resolve
+     * to the same 40638.40, while "40,638" (comma thousands, no decimal
+     * at all) resolves to the whole number 40638, not 40.638 or 4063.8.
+     *
+     * Deliberately NOT applied to the qualifying-formula percentage field
+     * (max_rent_percent_of_gross_income) — flagged to Johan rather than
+     * silently decided: a percentage like "28.5" has only ONE digit after
+     * its decimal point, so this money-shaped rule would misread it as a
+     * thousands-separated whole number ("285"). Percentages never carry a
+     * thousands separator in the first place, so that field's own
+     * sanitisation stays a plain trim, unrelated to this method.
      */
     public static function sanitizeNumericInput(array $input, ?array $fields = null): array
     {
         foreach ($fields ?? self::NUMERIC_FIELDS as $field) {
             if (isset($input[$field]) && is_string($input[$field]) && $input[$field] !== '') {
-                $value = trim($input[$field]);
-                $value = preg_replace('/^R\s*/i', '', $value);
-                $value = str_replace([',', ' '], '', $value);
-                $input[$field] = $value;
+                $input[$field] = self::disambiguateMoneyString($input[$field]);
             }
         }
 
         return $input;
+    }
+
+    private static function disambiguateMoneyString(string $value): string
+    {
+        $value = trim($value);
+        $value = preg_replace('/^R\s*/i', '', $value);
+
+        // Last separator followed by exactly two digits and nothing else
+        // = the decimal point; everything before it (once its own
+        // separators are stripped) is the whole-rand part.
+        if (preg_match('/^(.*)[,.\s](\d{2})$/', $value, $matches)) {
+            $wholePart = preg_replace('/[,.\s]/', '', $matches[1]);
+
+            return $wholePart . '.' . $matches[2];
+        }
+
+        // No separator, or the last one isn't followed by exactly two
+        // digits — every separator present is a thousands mark.
+        return preg_replace('/[,.\s]/', '', $value);
     }
 
     /**

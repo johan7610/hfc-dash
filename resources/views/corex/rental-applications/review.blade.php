@@ -6,16 +6,31 @@
      see if tenant qualifies." --}}
 @extends('layouts.corex')
 
+@php
+    // Computed here, not inline inside the x-data string below — a
+    // multi-line arrow-function/array literal nested inside a Blade
+    // expression has already caused one real outage on this feature
+    // (rental-applications/public/show.blade.php's @json() incident,
+    // 2026-09-08) — never assume a closure inline in a Blade echo is safe
+    // without proving the compiled output first.
+    $initialIncomeItems = $assessment->incomeItems->map(fn ($i) => [
+        'id' => $i->id, 'description' => $i->description, 'amount' => $i->amount,
+    ])->values();
+    $initialExpenseItems = $assessment->expenseItems->map(fn ($i) => [
+        'id' => $i->id, 'description' => $i->description, 'amount' => $i->amount,
+    ])->values();
+@endphp
+
 @section('corex-content')
 <div class="w-full"
      x-data="rentalReview({
          saveUrl: '{{ route('corex.rental-applications.review.assessment', $rentalApplication) }}',
          initial: {
-             monthly_income: {{ $assessment->monthly_income !== null ? $assessment->monthly_income : 'null' }},
-             other_monthly_income: {{ $assessment->other_monthly_income !== null ? $assessment->other_monthly_income : 'null' }},
-             monthly_expenses: {{ $assessment->monthly_expenses !== null ? $assessment->monthly_expenses : 'null' }},
              notes: {{ Js::from($assessment->notes) }},
+             statement_months: {{ Js::from($assessment->statement_months) }},
          },
+         initialIncomeItems: {{ Js::from($initialIncomeItems) }},
+         initialExpenseItems: {{ Js::from($initialExpenseItems) }},
          initialResult: {{ Js::from($result) }},
          initialSavedAt: {{ $assessment->exists ? Js::from($assessment->updated_at->toIso8601String()) : 'null' }},
          initialMarkedUpDocIds: {{ Js::from($documents->filter(fn ($row) => $row['has_highlights'])->pluck('document.id')->values()) }},
@@ -420,21 +435,83 @@
                 sent to the applicant or shown anywhere else.
             </p>
 
-            <div class="space-y-3">
+            <div class="space-y-4">
+                {{-- Round 11 — Johan: "we have to ask the nr of months the
+                     bank statement is for... by what do I divide once
+                     ready to get a monthly avg?" A lump sum captured from a
+                     multi-month statement is meaningless for the
+                     affordability rule (which needs a MONTHLY gross
+                     figure) without this. Placed above both lists since it
+                     applies to the whole capture, not just income. --}}
                 <div>
-                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Monthly income</label>
-                    <input type="number" step="0.01" min="0" class="corex-input text-sm w-full"
-                           x-model.number="fields.monthly_income" @blur="save()" placeholder="0.00">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
+                        Number of months this bank statement covers
+                    </label>
+                    <input type="number" step="1" min="1" max="36" class="corex-input text-sm w-20"
+                           x-model="statementMonths" @blur="save()" placeholder="e.g. 3">
+                    <p class="text-[11px] mt-1" style="color: var(--text-muted);">
+                        Used to turn the totals below into a monthly average — leave blank if you're
+                        only capturing a single month.
+                    </p>
+                </div>
+                {{-- Round 9 (item 5) — Johan: "filling the last row auto-adds
+                     a fresh empty one, income and expenses both, total
+                     recalculating live." Growable lists, not fixed fields —
+                     see incomeItems/expenseItems in rentalReview() below.
+                     "Gross" stated once at the section heading (Round 9 item
+                     2/3) rather than per-row, since a row's own label is
+                     free text the agent chooses ("Salary", "Side income"),
+                     unlike the applicant/agent-detail-page forms' single
+                     fixed field. --}}
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
+                        Income (gross, before deductions)
+                    </label>
+                    <p class="text-[11px] mb-2" style="color: var(--text-muted);">
+                        What's on the payslip before tax and other deductions — not take-home pay.
+                    </p>
+                    <div class="space-y-2">
+                        <template x-for="(item, index) in incomeItems" :key="index">
+                            <div class="flex items-center gap-1.5">
+                                <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Salary"
+                                       x-model="item.description" @input="onIncomeRowInput()" @blur="save()">
+                                <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
+                                       x-model="item.amount" @input="onIncomeRowInput()" @blur="save()">
+                            </div>
+                        </template>
+                    </div>
+                    <p class="text-xs mt-2" style="color: var(--text-secondary);">
+                        Total gross income: <strong x-text="formatR(incomeTotal())"></strong>
+                    </p>
+                    {{-- Round 11 — DISPLAY ONLY. Does not feed the
+                         affordability decision below until Johan confirms
+                         replacing the raw total with this average is what
+                         he wants (his own stated view: yes — pending). --}}
+                    <p class="text-xs mt-1" x-show="statementMonths" style="color: var(--text-secondary);">
+                        Monthly average (÷ <span x-text="statementMonths"></span> months):
+                        <strong x-text="formatR(monthlyAverage(incomeTotal()))"></strong>
+                        <span class="ds-badge ds-badge-muted" style="margin-left: 4px;">not yet used in the guideline check</span>
+                    </p>
                 </div>
                 <div>
-                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Other monthly income</label>
-                    <input type="number" step="0.01" min="0" class="corex-input text-sm w-full"
-                           x-model.number="fields.other_monthly_income" @blur="save()" placeholder="0.00">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Monthly expenses / existing debt</label>
-                    <input type="number" step="0.01" min="0" class="corex-input text-sm w-full"
-                           x-model.number="fields.monthly_expenses" @blur="save()" placeholder="0.00">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Expenses / existing debt</label>
+                    <div class="space-y-2">
+                        <template x-for="(item, index) in expenseItems" :key="index">
+                            <div class="flex items-center gap-1.5">
+                                <input type="text" class="corex-input text-sm flex-1" placeholder="e.g. Car payment"
+                                       x-model="item.description" @input="onExpenseRowInput()" @blur="save()">
+                                <input type="text" inputmode="decimal" class="corex-input text-sm w-24" placeholder="0.00"
+                                       x-model="item.amount" @input="onExpenseRowInput()" @blur="save()">
+                            </div>
+                        </template>
+                    </div>
+                    <p class="text-xs mt-2" style="color: var(--text-secondary);">
+                        Total expenses: <strong x-text="formatR(expenseTotal())"></strong>
+                    </p>
+                    <p class="text-xs mt-1" x-show="statementMonths" style="color: var(--text-secondary);">
+                        Monthly average (÷ <span x-text="statementMonths"></span> months):
+                        <strong x-text="formatR(monthlyAverage(expenseTotal()))"></strong>
+                    </p>
                 </div>
                 <div>
                     <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Notes</label>
@@ -473,14 +550,42 @@
                      what rent it was measured against. Naming the source
                      (the applicant's own self-reported current rent, from
                      the application form) here, not just in a tooltip. --}}
+                {{-- Round 9 — the rule is now stated as the law states it:
+                     rent as a percentage of GROSS income, checked directly
+                     against the agency's configured ceiling (default 30%,
+                     the legal guideline) — not a rent multiplier. Same
+                     wording style as authorisation/show.blade.php, so an
+                     agent and an authoriser see the identical arithmetic. --}}
                 <template x-if="result.label !== 'incomplete'">
                     <div class="text-sm space-y-1">
-                        <p>Total income (your entries above): <strong x-text="formatR(result.total_income)"></strong></p>
+                        <p>Gross income (your entries above): <strong x-text="formatR(result.gross_income)"></strong></p>
                         <p>Rent (applicant's self-reported current rent, from the application): <strong x-text="formatR(result.rent)"></strong></p>
-                        <p>Income needed at &times; <span x-text="result.multiplier"></span>: <strong x-text="formatR(result.required_income)"></strong></p>
+                        <p>Rent must not exceed <span x-text="result.max_rent_percent"></span>% of gross income
+                           (<strong x-text="formatR(result.max_affordable_rent)"></strong>).
+                           Actual rent is <span x-text="result.rent_as_percent_of_gross"></span>% of gross income.</p>
                         <p class="mt-2">
                             <span class="ds-badge" :class="result.meets_threshold ? 'ds-badge-success' : 'ds-badge-warning'"
-                                  x-text="result.meets_threshold ? 'Income appears to cover the rent — worth a closer look either way' : 'Income may not cover the rent — worth a closer look'"></span>
+                                  x-text="result.meets_threshold ? 'Within the affordability guideline — worth a closer look either way' : 'Exceeds the affordability guideline — worth a closer look'"></span>
+                        </p>
+                    </div>
+                </template>
+                {{-- Round 9 (item 1) — cc5: "an agent sees a net figure
+                     sitting next to a pass or fail badge and reasonably
+                     assumes net is what was tested. It is not." Deliberately
+                     NOT inside the box above, with its own heading and
+                     colour so it can never be read as part of the
+                     guideline check — net income plays no part in
+                     meets_threshold (see RentalApplicationAssessment::
+                     qualifyingResult()'s own docblock). Kept, not removed
+                     (Johan's call) — genuinely useful context for the agent,
+                     what's left after the expenses typed in above. --}}
+                <template x-if="result.label !== 'incomplete'">
+                    <div class="rounded-md p-2 mt-3" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px dashed var(--border);">
+                        <p class="text-[10px] font-semibold uppercase tracking-wide" style="color: var(--text-muted);">
+                            For your reference only — does not affect the guideline check above
+                        </p>
+                        <p class="text-sm mt-1">
+                            Income left after expenses: <strong x-text="formatR(result.net_income)"></strong>
                         </p>
                     </div>
                 </template>
@@ -528,7 +633,7 @@
 </div>
 
 <script>
-function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initialMarkedUpDocIds, requestMoreInfoUrl, submitForApprovalUrl }) {
+function rentalReview({ saveUrl, initial, initialIncomeItems, initialExpenseItems, initialResult, initialSavedAt, initialMarkedUpDocIds, requestMoreInfoUrl, submitForApprovalUrl }) {
     return {
         // 2026-09-08 — Johan: "clicking back to application shows a changes
         // may be lost popup but there's no save button visible anywhere." No
@@ -542,6 +647,55 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
             window.addEventListener('beforeunload', (e) => {
                 if (this.dirty) { e.preventDefault(); e.returnValue = ''; }
             });
+            this.compactAndEnsureTrailing(this.incomeItems);
+            this.compactAndEnsureTrailing(this.expenseItems);
+        },
+        // ── Income/expense line items — Round 9 (item 5). Johan: "filling
+        // the last row auto-adds a fresh empty one, income and expenses
+        // both, total recalculating live." A row carries an `id` once the
+        // server has persisted it (used to match it on the next autosave,
+        // never re-created); a row typed fresh has no `id` yet. ──────────
+        incomeItems: (initialIncomeItems && initialIncomeItems.length) ? initialIncomeItems : [{ id: null, description: '', amount: '' }],
+        expenseItems: (initialExpenseItems && initialExpenseItems.length) ? initialExpenseItems : [{ id: null, description: '', amount: '' }],
+        rowIsBlank(row) {
+            return (!row.description || !row.description.trim()) && (row.amount === '' || row.amount === null || row.amount === undefined);
+        },
+        // Removes any blank row that isn't the last one (how an agent
+        // "deletes" a row — clear both its fields), then guarantees exactly
+        // one blank trailing row is always available to type into.
+        compactAndEnsureTrailing(list) {
+            for (let i = list.length - 2; i >= 0; i--) {
+                if (this.rowIsBlank(list[i])) list.splice(i, 1);
+            }
+            if (!list.length || !this.rowIsBlank(list[list.length - 1])) {
+                list.push({ id: null, description: '', amount: '' });
+            }
+        },
+        onIncomeRowInput() {
+            this.compactAndEnsureTrailing(this.incomeItems);
+            this.save();
+        },
+        onExpenseRowInput() {
+            this.compactAndEnsureTrailing(this.expenseItems);
+            this.save();
+        },
+        // Sums exactly what the server will sum (RentalApplicationAssessment::
+        // qualifyingResult() sums the same persisted amounts) — this MUST
+        // never be allowed to disagree with result.gross_income, so it uses
+        // the identical rows, the identical filter, and plain addition.
+        incomeTotal() {
+            return this.incomeItems.filter(r => !this.rowIsBlank(r)).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+        },
+        expenseTotal() {
+            return this.expenseItems.filter(r => !this.rowIsBlank(r)).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+        },
+        // Round 11 — display only (see the field's own comment above).
+        statementMonths: initial.statement_months ?? '',
+        monthlyAverage(total) {
+            const months = parseInt(this.statementMonths, 10);
+            if (!months || months < 1) return null;
+
+            return total / months;
         },
         // ── Affordability assessment (unchanged) ──────────────────────────
         fields: initial,
@@ -631,6 +785,13 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
             this.saveTimer = setTimeout(() => {
                 this.saveStatus = 'Saving…';
                 this.saveError = false;
+                // Capture the actual row OBJECTS being sent (not a copy) so
+                // the response's ids can be patched back onto them by
+                // position after the round trip, without disturbing any
+                // blank row the agent has started typing into since —
+                // wholesale-replacing the array here would drop that.
+                const sentIncomeRows = this.incomeItems.filter(r => !this.rowIsBlank(r));
+                const sentExpenseRows = this.expenseItems.filter(r => !this.rowIsBlank(r));
                 fetch(saveUrl, {
                     method: 'POST',
                     headers: {
@@ -638,10 +799,17 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
                         'Accept': 'application/json',
                     },
-                    body: JSON.stringify(this.fields),
+                    body: JSON.stringify({
+                        income_items: sentIncomeRows,
+                        expense_items: sentExpenseRows,
+                        notes: this.fields.notes,
+                        statement_months: this.statementMonths,
+                    }),
                 }).then(r => r.json()).then(data => {
                     if (data.ok) {
                         this.result = data.result;
+                        (data.income_items || []).forEach((saved, i) => { if (sentIncomeRows[i]) sentIncomeRows[i].id = saved.id; });
+                        (data.expense_items || []).forEach((saved, i) => { if (sentExpenseRows[i]) sentExpenseRows[i].id = saved.id; });
                         this.saveStatus = data.saved_at ? ('Saved at ' + formatTime(data.saved_at)) : 'Saved';
                     } else {
                         this.saveError = true;

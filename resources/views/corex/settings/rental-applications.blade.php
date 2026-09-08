@@ -47,23 +47,46 @@
 
     {{-- AT-392 Phase 2 — Johan: "qualifying formula - agency can set this."
          Separate <form>/route so this save can never interfere with the
-         checklist form above. --}}
+         checklist form above.
+         2026-09-08 — Johan, from his own reading of the law: "the law
+         states you may not spend more than 30% of your gross income on
+         rentals... its not 3.5 or what you created it as of nett
+         disposable income. its of the gross income." Rewritten from a
+         "multiplier of rent" (the same arithmetic wearing a disguise) to
+         the actual legal figure — a percentage OF GROSS INCOME. The law
+         sets a CEILING (30%), not a fixed number: an agency may set a
+         STRICTER (lower) figure, but the figure it applies to (gross
+         income) is never itself configurable. --}}
     <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
         <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Qualifying Formula</h2>
         <p class="text-xs mb-3" style="color: var(--text-muted);">
-            Used on the application review screen to suggest whether a tenant's stated income
-            covers the rent — a prompt for the agent to look closer, never a rule that blocks or
-            decides anything.
+            Used on the application review screen to suggest whether a tenant's stated GROSS
+            income covers the rent — a prompt for the agent to look closer, never a rule that
+            blocks or decides anything. The legal guideline (Rental Housing Act) is that rent
+            should not exceed 30% of gross income — you may set a stricter (lower) figure for
+            your own agency.
         </p>
+
+        {{-- Persistent, not a one-time toast — Johan: "do not silently
+             accept it as normal." A toast on save vanishes in a few
+             seconds; a legal-compliance concern shouldn't be that easy to
+             miss on a later visit to this same screen. --}}
+        @if($qualifyingExceedsLegalCeiling)
+            <div class="rounded-md px-3 py-2 text-xs mb-3" style="background: var(--ds-amber-soft, #fffbeb); color: var(--ds-amber, #b45309); border: 1px solid var(--ds-amber, #b45309);">
+                This agency's qualifying formula ({{ number_format($qualifyingMaxRentPercent, 2) }}% of gross income) is above the legal guideline of 30%. Confirm this is intentional.
+            </div>
+        @endif
+
         <form method="POST" action="{{ route('corex.settings.rental-applications.qualifying-formula') }}" class="flex items-end gap-3">
             @csrf
             <div>
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
-                    Gross monthly income must be at least this many times the rent
+                    Rent must not exceed this % of GROSS monthly income
                 </label>
-                <input type="number" name="income_to_rent_multiplier" step="0.01" min="0.1" max="99.99"
-                       value="{{ old('income_to_rent_multiplier', $qualifyingMultiplier) }}"
+                <input type="number" name="max_rent_percent_of_gross_income" step="0.01" min="0.1" max="100"
+                       value="{{ old('max_rent_percent_of_gross_income', $qualifyingMaxRentPercent) }}"
                        class="corex-input text-sm" style="width: 100px;">
+                <p class="text-[11px] mt-1" style="color: var(--text-muted);">Legal guideline: 30%. Set lower for a stricter agency policy.</p>
             </div>
             <button type="submit" class="corex-btn-primary text-xs">Save Formula</button>
         </form>

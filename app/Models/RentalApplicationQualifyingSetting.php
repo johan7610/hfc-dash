@@ -9,29 +9,49 @@ use Illuminate\Database\Eloquent\Model;
  * AT-392 Phase 2 — Johan: "qualifying formula - agency can set this."
  * Deliberately follows STANDARDS.md Rule 17's safe pattern: forAgency()
  * NEVER creates a row on read, only returns a sensible in-memory default
- * (multiplier 3.0) when the agency has never opened the settings screen.
- * A row is only ever written when the agency explicitly saves.
+ * when the agency has never opened the settings screen. A row is only
+ * ever written when the agency explicitly saves.
+ *
+ * 2026-09-08 — replaced income_to_rent_multiplier (a multiplier of rent,
+ * ~3x, worked out to roughly 33% of income by coincidence of arithmetic)
+ * with the actual legal figure: rent must not exceed 30% of GROSS
+ * income (Johan, from his own reading of the law). The law sets a
+ * CEILING, not a fixed number — an agency may set a STRICTER (lower)
+ * figure, but the figure it applies to (gross income) is never itself
+ * configurable. No real agency had ever configured the old column at
+ * the point of this migration (the one row that existed was a leftover
+ * test artifact from an earlier round, cleaned up separately) — a clean
+ * replace, not a second column living alongside the first.
  */
 class RentalApplicationQualifyingSetting extends Model
 {
     use BelongsToAgency;
 
-    public const DEFAULT_MULTIPLIER = 3.00;
+    public const DEFAULT_MAX_RENT_PERCENT = 30.00;
 
-    protected $fillable = ['agency_id', 'income_to_rent_multiplier'];
+    /** The legal guideline itself — used to warn, never to block, when an agency sets higher. */
+    public const LEGAL_CEILING_PERCENT = 30.00;
+
+    protected $fillable = ['agency_id', 'max_rent_percent_of_gross_income'];
 
     protected $casts = [
-        'income_to_rent_multiplier' => 'decimal:2',
+        'max_rent_percent_of_gross_income' => 'decimal:2',
     ];
 
-    public static function multiplierFor(?int $agencyId): float
+    public static function maxRentPercentFor(?int $agencyId): float
     {
         if ($agencyId === null || $agencyId <= 0) {
-            return self::DEFAULT_MULTIPLIER;
+            return self::DEFAULT_MAX_RENT_PERCENT;
         }
 
         $row = static::where('agency_id', $agencyId)->first();
 
-        return $row ? (float) $row->income_to_rent_multiplier : self::DEFAULT_MULTIPLIER;
+        return $row ? (float) $row->max_rent_percent_of_gross_income : self::DEFAULT_MAX_RENT_PERCENT;
+    }
+
+    /** True when a configured figure goes beyond the legal guideline — the settings screen must warn, never silently accept this as normal. */
+    public static function exceedsLegalCeiling(float $percent): bool
+    {
+        return $percent > self::LEGAL_CEILING_PERCENT;
     }
 }

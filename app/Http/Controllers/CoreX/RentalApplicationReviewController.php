@@ -8,6 +8,8 @@ use App\Models\Document;
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationAssessment;
 use App\Models\RentalApplicationDocumentHighlight;
+use App\Models\RentalApplicationExpenseItem;
+use App\Models\RentalApplicationIncomeItem;
 use App\Models\RentalApplicationQualifyingSetting;
 use App\Models\RentalApplicationStatusHistory;
 use App\Services\RentalApplications\RentalApplicationDocumentHighlightService;
@@ -48,9 +50,11 @@ class RentalApplicationReviewController extends Controller
             ['rental_application_id' => $rentalApplication->id],
             ['agency_id' => $rentalApplication->agency_id],
         );
+        $assessment->setRelation('incomeItems', $assessment->exists ? $assessment->incomeItems : collect());
+        $assessment->setRelation('expenseItems', $assessment->exists ? $assessment->expenseItems : collect());
 
-        $multiplier = RentalApplicationQualifyingSetting::multiplierFor((int) $rentalApplication->agency_id);
-        $result = $assessment->exists ? $assessment->qualifyingResult($multiplier) : null;
+        $maxRentPercent = RentalApplicationQualifyingSetting::maxRentPercentFor((int) $rentalApplication->agency_id);
+        $result = $assessment->exists ? $assessment->qualifyingResult($maxRentPercent) : null;
 
         $highlightedByDocId = RentalApplicationDocumentHighlight::whereIn('document_id', $rentalApplication->documents->pluck('id'))
             ->whereNotNull('highlighted_file_path')
@@ -65,7 +69,7 @@ class RentalApplicationReviewController extends Controller
         });
 
         return view('corex.rental-applications.review', compact(
-            'rentalApplication', 'assessment', 'multiplier', 'result', 'documents'
+            'rentalApplication', 'assessment', 'maxRentPercent', 'result', 'documents'
         ))->with('isPendingAuthorisation', $rentalApplication->isPendingAuthorisation());
     }
 
@@ -150,42 +154,121 @@ class RentalApplicationReviewController extends Controller
         $this->guardRentalApplication($rentalApplication);
 
         // RA-02 (cc5 re-test, Round 8) — every numeric money field on this
-        // feature, not just the ones on RentalApplication itself. Same
-        // sanitizer, an explicit field list since these three live on
-        // RentalApplicationAssessment, a different model.
-        $request->merge(RentalApplication::sanitizeNumericInput(
-            $request->only(['monthly_income', 'other_monthly_income', 'monthly_expenses']),
-            ['monthly_income', 'other_monthly_income', 'monthly_expenses'],
-        ));
+        // feature. Round 9 (item 5) — monthly_income/other_monthly_income/
+        // monthly_expenses became growable lists; the sanitizer still
+        // applies to each item's own 'amount', not a top-level field.
+        $incomeItemsInput = array_map(
+            fn ($item) => RentalApplication::sanitizeNumericInput((array) $item, ['amount']),
+            (array) $request->input('income_items', []),
+        );
+        $expenseItemsInput = array_map(
+            fn ($item) => RentalApplication::sanitizeNumericInput((array) $item, ['amount']),
+            (array) $request->input('expense_items', []),
+        );
+        $request->merge(['income_items' => $incomeItemsInput, 'expense_items' => $expenseItemsInput]);
 
         $validated = $request->validate([
-            'monthly_income' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
-            'other_monthly_income' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
-            'monthly_expenses' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            'income_items' => ['nullable', 'array'],
+            'income_items.*.id' => ['nullable', 'integer'],
+            'income_items.*.description' => ['nullable', 'string', 'max:255'],
+            'income_items.*.amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            'expense_items' => ['nullable', 'array'],
+            'expense_items.*.id' => ['nullable', 'integer'],
+            'expense_items.*.description' => ['nullable', 'string', 'max:255'],
+            'expense_items.*.amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'notes' => ['nullable', 'string', 'max:5000'],
+            // Round 11 — Johan: "we have to ask the nr of months the bank
+            // statement is for." A bank statement's captured lines are a
+            // lump sum over this many months, not a monthly figure.
+            'statement_months' => ['nullable', 'integer', 'min:1', 'max:36'],
         ]);
 
-        // Empty-string inputs (a field the agent cleared) must persist as
-        // NULL, never as a validation reject or a stray '' in a decimal
-        // column (BUILD_STANDARD §2 — optional-and-empty must be accepted
-        // gracefully, never break the column's own type contract).
-        $fields = array_map(fn ($v) => $v === '' ? null : $v, $validated);
+        // A row the agent never filled in (no description, no amount) is the
+        // ever-present trailing "type here to add another" placeholder —
+        // Johan: "empty trailing rows must not save as zero-value rows or
+        // clutter the record." Filtered server-side too, not just by the
+        // frontend, since this is the only thing standing between a crafted
+        // request and a junk row.
+        $isBlank = fn ($item) => empty($item['description'] ?? null) && (($item['amount'] ?? null) === null || $item['amount'] === '');
 
         $assessment = RentalApplicationAssessment::updateOrCreate(
             ['rental_application_id' => $rentalApplication->id],
-            array_merge($fields, [
+            [
                 'agency_id' => $rentalApplication->agency_id,
+                'notes' => ($validated['notes'] ?? '') === '' ? null : ($validated['notes'] ?? null),
+                'statement_months' => ($validated['statement_months'] ?? '') === '' ? null : ($validated['statement_months'] ?? null),
                 'updated_by_user_id' => $request->user()->id,
-            ]),
+            ],
         );
 
-        $multiplier = RentalApplicationQualifyingSetting::multiplierFor((int) $rentalApplication->agency_id);
+        $this->syncItems(
+            $assessment,
+            RentalApplicationIncomeItem::class,
+            array_values(array_filter($validated['income_items'] ?? [], fn ($i) => ! $isBlank($i))),
+        );
+        $this->syncItems(
+            $assessment,
+            RentalApplicationExpenseItem::class,
+            array_values(array_filter($validated['expense_items'] ?? [], fn ($i) => ! $isBlank($i))),
+        );
 
+        $maxRentPercent = RentalApplicationQualifyingSetting::maxRentPercentFor((int) $rentalApplication->agency_id);
+        $assessment = $assessment->fresh(['incomeItems', 'expenseItems']);
+
+        // Round 9 (item 5) — the client must learn each row's real id after
+        // its first save, or the NEXT autosave would have no way to match
+        // existing rows and would create duplicates instead of updating
+        // them. Echoing the canonical saved list back is simpler and safer
+        // than the client guessing its own ids.
         return response()->json([
             'ok' => true,
-            'result' => $assessment->qualifyingResult($multiplier),
+            'result' => $assessment->qualifyingResult($maxRentPercent),
+            'income_items' => $assessment->incomeItems->map(fn ($i) => ['id' => $i->id, 'description' => $i->description, 'amount' => $i->amount])->values(),
+            'expense_items' => $assessment->expenseItems->map(fn ($i) => ['id' => $i->id, 'description' => $i->description, 'amount' => $i->amount])->values(),
             'saved_at' => $assessment->updated_at?->toIso8601String(),
         ]);
+    }
+
+    /**
+     * Replace an assessment's income/expense line items with $items,
+     * matched by id where the client already has one (a row it typed into
+     * on a previous autosave). Rows no longer present are SOFT-deleted
+     * (non-negotiable #1 — an agent removing a line from a financial
+     * record is a real, recoverable event, never a hard delete), never
+     * blind delete-all-then-recreate — that would soft-delete and
+     * immediately recreate every unchanged row on every keystroke,
+     * turning the audit trail into noise.
+     *
+     * @param class-string<RentalApplicationIncomeItem>|class-string<RentalApplicationExpenseItem> $modelClass
+     */
+    private function syncItems(RentalApplicationAssessment $assessment, string $modelClass, array $items): void
+    {
+        $keptIds = [];
+        foreach (array_values($items) as $sortOrder => $item) {
+            $attributes = [
+                'agency_id' => $assessment->agency_id,
+                'rental_application_assessment_id' => $assessment->id,
+                'description' => ($item['description'] ?? '') === '' ? null : $item['description'],
+                'amount' => ($item['amount'] ?? '') === '' ? null : $item['amount'],
+                'sort_order' => $sortOrder,
+            ];
+
+            $row = ! empty($item['id'])
+                ? $modelClass::where('rental_application_assessment_id', $assessment->id)->find($item['id'])
+                : null;
+
+            if ($row) {
+                $row->update($attributes);
+            } else {
+                $row = $modelClass::create($attributes);
+            }
+
+            $keptIds[] = $row->id;
+        }
+
+        $modelClass::where('rental_application_assessment_id', $assessment->id)
+            ->whereNotIn('id', $keptIds ?: [0])
+            ->delete();
     }
 
     /**

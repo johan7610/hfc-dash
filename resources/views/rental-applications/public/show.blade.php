@@ -94,7 +94,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <x-rental-application-field name="current_landlord_name" label="Name" :value="$application->current_landlord_name" />
                     <x-rental-application-field name="current_landlord_tel" label="Tel" :value="$application->current_landlord_tel" />
-                    <x-rental-application-field name="current_rental_amount" label="Current rental amount (R)" type="number" :value="$application->current_rental_amount" />
+                    <x-rental-application-field name="current_rental_amount" label="Current rental amount (R)" type="text" inputmode="decimal" :value="$application->current_rental_amount" />
                     <div></div>
                     <x-rental-application-field name="current_rental_from" label="From" type="date" :value="optional($application->current_rental_from)->format('Y-m-d')" />
                     <div x-data="{ stillLiving: {{ old('current_rental_still_living', $application->current_rental_still_living) ? 'true' : 'false' }} }">
@@ -131,7 +131,8 @@
                     <x-rental-application-field name="employer_name" label="Employer" :value="$application->employer_name" />
                     <x-rental-application-field name="employer_position" label="Position" :value="$application->employer_position" />
                     <x-rental-application-field name="employer_tel" label="Employer tel" :value="$application->employer_tel" />
-                    <x-rental-application-field name="monthly_salary" label="Monthly salary (R)" type="number" :value="$application->monthly_salary" />
+                    <x-rental-application-field name="monthly_salary" label="Gross monthly income, before deductions (R)" type="text" inputmode="decimal" :value="$application->monthly_salary"
+                        hint="The amount on your payslip BEFORE tax and other deductions — not what actually lands in your bank account." />
                     <div class="sm:col-span-2">
                         <label class="block text-xs text-slate-500 mb-1">Employer address</label>
                         <textarea name="employer_address" rows="2" class="w-full rounded-lg border px-3 py-2 text-sm {{ $errors->has('employer_address') ? 'border-red-400' : 'border-slate-300' }}">{{ old('employer_address', $application->employer_address) }}</textarea>

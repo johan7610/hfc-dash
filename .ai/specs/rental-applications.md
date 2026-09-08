@@ -3371,3 +3371,583 @@ returning null.
 - `resources/views/rental-applications/public/show.blade.php` — still-living tick box, rental term quick-select buttons
 - `resources/views/corex/rental-applications/show.blade.php` — same two, agent-side, plus the legacy-text note
 - `resources/views/corex/rental-applications/pdf.blade.php` — renders "Still living there" and months-based term
+
+## Round 9 — affordability formula corrected to the actual law (2026-09-08)
+
+Johan, from his own reading of the law: "the law states you may not spend
+more than 30% of your gross income on rentals... on this also confirm our
+formula matches up with this - its not 3.5 or what you created it as of
+nett disposable income. its of the gross income."
+
+### Investigation findings (reported before any code changed)
+
+The single calculation method, `RentalApplicationAssessment::qualifyingResult()`,
+fed three display surfaces: the review screen's live Alpine display
+(`review.blade.php`), the authoriser's static display
+(`authorisation/show.blade.php`), and the settings screen configured the
+multiplier both used. It computed `total_income`
+(`monthly_income + other_monthly_income`, before expenses) and compared it
+against `rent * multiplier` (default multiplier 3.00 — mathematically close
+to but not exactly 30%, ≈33.3%), framed backwards as "income must be N
+times rent" rather than "rent must be X% of income." `monthly_expenses`
+was captured and an unused `net_income` figure was computed but played no
+role in the pass/fail decision — and on `review.blade.php` specifically was
+displayed unlabelled right next to the pass/fail badge. No field anywhere
+(applicant form "Monthly salary (R)"; agent panel "Monthly
+income"/"Other monthly income"; PDF "Monthly Salary") was labelled gross vs.
+net/take-home — confirming Johan's exact fear (an applicant entering
+take-home pay because nothing told them otherwise).
+
+**cc5's claim, verified from the code directly, not on trust:** the OLD
+`qualifyingResult()` compared `$totalIncome` (income before expenses) against
+the threshold, never `$netIncome` — cc5's finding that the calculation
+already used gross-before-expenses was correct. The defect was the
+multiplier framing, not a net-vs-gross mixup.
+
+### THE RULE, one place — `RentalApplicationAssessment::qualifyingResult()`
+
+Rewritten so rent must not exceed `$maxRentPercent`% of gross income,
+checked directly: `$maxAffordableRent = round($grossIncome * ($maxRentPercent / 100), 2)`,
+`$meetsThreshold = $rent <= $maxAffordableRent`. No second implementation
+exists anywhere — the settings screen, the authorisation screen, and (once
+released) the review screen all call this one method. Renamed fields:
+`total_income` → `gross_income`, `multiplier` → `max_rent_percent`,
+`required_income` → `max_affordable_rent`; added `rent_as_percent_of_gross`.
+`net_income` is kept in the return array — Johan's call — see "Judgment
+call 1" below.
+
+### Agency-configurable, default 30% — `RentalApplicationQualifyingSetting`
+
+`income_to_rent_multiplier` (decimal(5,2) default 3.00) replaced outright
+with `max_rent_percent_of_gross_income` (decimal(5,2) default 30.00 — the
+legal ceiling itself), via
+`database/migrations/2026_09_08_170000_replace_income_multiplier_with_gross_income_percentage.php`.
+A clean replace, not a second column: only one agency (id 1) had ever
+configured the old column, and that single row was confirmed to be a
+leftover test artifact from this session's own Round 8 verification
+(timestamped to that proof run) — hard-deleted before this migration was
+written, restoring agency 1 to the correct never-configured, in-memory-
+default state. The figure the percentage applies to (gross income) is
+never itself configurable — only the percentage is. A new
+`RentalApplicationQualifyingSetting::exceedsLegalCeiling()` returns true
+when an agency sets above 30%.
+
+**Judgment call 2 — how "above 30%" is handled, and why:** BOTH a one-time
+`session('warning')` toast (the existing global `<x-toast-notifications />`
+pattern, fired on save in `RentalApplicationSettingsController::updateQualifyingFormula()`)
+AND a NEW persistent amber banner on the settings screen itself
+(`resources/views/corex/settings/rental-applications.blade.php`), shown
+for as long as the configured figure exceeds 30%. Reasoning: a toast alone
+vanishes on the next page load and would not satisfy Johan's explicit "do
+not silently accept it as normal" — an agency owner who set 40% last month
+and forgot needs to see the warning again every time they open the screen,
+not just the moment they saved it.
+
+### Plain-language gross-income labels — every capture point
+
+Extended `<x-rental-application-field>` with an optional `hint` prop
+(backward compatible, defaults to null). Applied to both income fields
+that exist on this feature:
+- Applicant's own form (`rental-applications/public/show.blade.php`):
+  label → "Gross monthly income, before deductions (R)", hint → "The amount
+  on your payslip BEFORE tax and other deductions — not what actually
+  lands in your bank account."
+- Agent's own detail page (`corex/rental-applications/show.blade.php`):
+  same label, hint → "...not their take-home pay."
+
+Directly addresses Johan's own example (an applicant entering 10,000 when
+their payslip shows 18,000 gross). The assessment panel's own income
+fields (agent-typed, on the review screen) still need the same treatment —
+blocked, see "Still blocked" below.
+
+**Scope decision — `pdf.blade.php` left unchanged:** it is a read-only,
+legal-document-styled transcript of a standard form, not a data-capture
+point; relabelling risked diverging from a recognised document template's
+exact wording for no functional benefit. Flagged for Johan's awareness —
+override if he wants the PDF relabelled too.
+
+**Judgment call 1 — `net_income` kept, not removed:** cc5 flagged it as
+"actively misleading" since it's computed and shown but plays no part in
+the decision. Kept — genuinely useful context an agent typed in themselves
+(what's left after existing debts/expenses) — but the docblock on
+`qualifyingResult()` now states explicitly that any screen displaying it
+must label it unmistakably as reference-only, separated from the pass/fail
+badge. Actually re-labelling it on-screen is only needed on `review.blade.php`
+(the authorisation screen never showed it) — blocked, see below.
+
+### Still blocked — `review.blade.php` / `RentalApplicationReviewController.php`
+
+Deliberately NOT touched in this round — sequenced behind cc6's
+review-screen work and cc3's applicant-side work landing on the shared
+QA1 checkout. Confirmed via the shared checkout's own `QA1` branch that
+`RentalApplicationReviewController.php` still calls the OLD `multiplierFor()`
+at two call sites (the `show()` method and the assessment-autosave
+endpoint) as of this commit — updating those calls, the Alpine result
+display's key names, the assessment panel's income-field labels, and the
+`net_income` relabelling all still need review.blade.php released. Item 5
+(auto-adding income/expense rows) has not been designed yet at all —
+it needs that same screen and likely a data-model change to support a
+growing list of income/expense rows rather than fixed
+`monthly_income`/`other_monthly_income`/`monthly_expenses` columns.
+
+### Verification
+
+`tests/Feature/RentalApplications/RentalApplicationRound9AffordabilityTest.php`
+(new) covers: the default 30% ceiling; the worked example Johan asked for
+verbatim (18,000 gross → 5,400 max affordable rent, with one rand over
+flipping the verdict); that `net_income` does not affect the decision even
+when wildly different; the agency-configurable percentage (stricter and
+above-ceiling cases, including the persistent banner surviving a later,
+unrelated page visit); the authorisation screen rendering the worked
+example over a real HTTP request through the full Laravel kernel/middleware
+stack; and the gross-income labels appearing on both the agent and public
+applicant forms. `RentalApplicationRound8FixesTest.php`'s qualifying-formula
+test updated to the new field name (the old one no longer exists after the
+migration). Full run: 17 tests, 15 passed; the 2 failures are both
+pre-existing calls through the still-blocked `RentalApplicationReviewController`
+route (`Call to undefined method ...::multiplierFor()`) — expected and
+unavoidable until that controller is released and updated in the same
+commit that finishes this feature.
+
+A live-server (real TCP, real login, real `php artisan serve`) proof of
+the worked example was attempted via an isolated clone of the real QA1
+data (dumped from `corex_qa1` into a disposable `corex_qa1_round9_verify`
+database, never touching the shared schema other lanes are actively using
+against the OLD column name) rather than migrating the shared database
+directly — deliberately, since dropping `income_to_rent_multiplier` on the
+live shared QA1 database would break every other lane's checkout still
+reading it. The attempt hit infrastructure friction (the schema-snapshot
+loader treated the pre-populated clone as fresh and tried to reapply the
+whole snapshot) and was abandoned in favour of the HTTP-kernel-level
+PHPUnit proof above, which already exercises real routing, real
+middleware (auth/permissions/CSRF), a real database, and real Blade
+rendering — no shortcut through the controller. The disposable database
+and dump file were dropped/deleted; nothing was left behind, and the
+shared `corex_qa1` database was never touched.
+
+### Note — `origin/QA1` (GitHub) lags the shared `/corex-qa1` checkout
+
+Not a defect, just worth recording: `origin/QA1` on GitHub was last pushed
+2026-09-07 15:30 and does not yet include the last day's worth of
+work merged locally into the shared `/corex-qa1` checkout's own `QA1`
+branch (including both `review-screen-critical-fixes-2026-09-08` and
+`fix/rental-applications-applicant-fixes-2026-09-08`, already merged
+there). This round's commits are built on the shared checkout's `QA1`
+branch (current, confirmed unchanged at time of push), not on the stale
+GitHub ref. Flagging so the GitHub mirror doesn't fall further behind.
+
+### Files touched
+
+- `database/migrations/2026_09_08_170000_replace_income_multiplier_with_gross_income_percentage.php` (new)
+- `app/Models/RentalApplicationAssessment.php` — `qualifyingResult()` rewritten to percentage-of-gross
+- `app/Models/RentalApplicationQualifyingSetting.php` — column rename, `DEFAULT_MAX_RENT_PERCENT`, `LEGAL_CEILING_PERCENT`, `maxRentPercentFor()`, `exceedsLegalCeiling()`
+- `app/Http/Controllers/CoreX/RentalApplicationSettingsController.php` — new field name, legal-ceiling warning (toast + banner flag)
+- `app/Http/Controllers/CoreX/RentalApplicationAuthorisationController.php` — `maxRentPercentFor()`/new `qualifyingResult()` signature
+- `resources/views/corex/settings/rental-applications.blade.php` — persistent banner, relabelled field
+- `resources/views/corex/rental-applications/authorisation/show.blade.php` — gross-income labels, worked-example wording
+- `resources/views/corex/rental-applications/show.blade.php` — agent's own income field relabelled, hint added
+- `resources/views/rental-applications/public/show.blade.php` — applicant's own income field relabelled, hint added
+- `resources/views/components/rental-application-field.blade.php` — new optional `hint` prop
+- `tests/Feature/RentalApplications/RentalApplicationRound9AffordabilityTest.php` (new)
+- `tests/Feature/RentalApplications/RentalApplicationRound8FixesTest.php` — field-name update only
+
+Branch: `rental-applications-affordability-2026-09-08`, commits `dcd5f3cd4`
+(the formula/labels/settings change) and `6ac326581` (a variable-name bug
+in the authorisation controller's `compact()` call, caught before push,
+plus this round's tests). Pushed to origin. Not merged into the shared
+`QA1` checkout — awaiting review.blade.php's release to finish items 1/3/4
+and to design item 5.
+
+## Round 10 — review screen released: net-income label, gross-income label, growable income/expense rows (2026-09-08)
+
+Conductor: "RELEASED — the review screen and its controller are yours.
+cc6 has finished its investigation and is holding with no code in flight."
+Finishes the three items Round 9 could not reach because `review.blade.php`
+and `RentalApplicationReviewController.php` were still sequenced behind
+cc6's and cc3's concurrent work.
+
+### Item 1 — net income labelled unmistakably as reference-only
+
+The live review screen (as landed by cc6's own investigation/fixes,
+confirmed by reading the file fresh before touching it) did not display
+`net_income` at all — the "actively misleading" state cc5 originally
+flagged no longer existed on this exact screen by the time of this round.
+Rather than leave it out, it was added back deliberately correctly the
+first time: a separate, visually distinct block (dashed border, own
+heading "FOR YOUR REFERENCE ONLY — DOES NOT AFFECT THE GUIDELINE CHECK
+ABOVE", `data-verify`-free plain markup) placed AFTER the pass/fail badge,
+never beside it — the exact adjacency that made the old screen
+misleading in the first place.
+
+### Item 2/3 — gross-income labelling on the agent's own panel
+
+The old fixed "Monthly income"/"Other monthly income" fields are gone
+(replaced by item 5's growable rows, below), so the "gross, before
+deductions" language moved to the section HEADING ("Income (gross,
+before deductions)") plus a one-line hint underneath, rather than
+per-row — a row's own label is free text the agent chooses ("Salary",
+"Side income"), unlike the applicant/agent-detail-page forms' single
+fixed field from Round 9. Same clarity goal, different UI shape because
+the rows themselves changed shape this round.
+
+### Item 5 — growable income/expense rows
+
+**Data model.** `monthly_income`/`other_monthly_income`/`monthly_expenses`
+(fixed decimal columns) replaced with two new tables,
+`rental_application_income_items` and `rental_application_expense_items`
+(migration `2026_09_08_180000_create_rental_application_income_expense_items_tables.php`),
+matching the existing `PayrollPayslipLine` precedent for a financial
+line-item ledger belonging to one parent record — including `SoftDeletes`
+(non-negotiable #1: an agent removing an income/expense line from a
+financial record is a real, recoverable event, never a hard delete).
+Existing captured data was migrated, not discarded: any assessment with
+values in the old columns got one income/expense item each, preserving
+real agent-entered amounts (confirmed against real QA1 data before
+writing the migration — see Verification below). Caught one MySQL
+identifier-length bug before it could break: the auto-generated foreign
+key name for `rental_application_income_items.rental_application_assessment_id`
+exceeded MySQL's 64-character limit — fixed with an explicit short
+constraint name (`rai_items_assessment_fk`/`rae_items_assessment_fk`).
+
+**`RentalApplicationAssessment`** gains `incomeItems()`/`expenseItems()`
+(`hasMany`, ordered by `sort_order`); `qualifyingResult()` now sums those
+relations instead of reading the two fixed income columns and the one
+fixed expenses column.
+
+**`RentalApplicationReviewController::saveAssessment()`** accepts
+`income_items`/`expense_items` arrays (`{id?, description?, amount}`
+each), sanitizes each item's `amount` through the existing
+`RentalApplication::sanitizeNumericInput()`, and syncs them via a new
+private `syncItems()`: matched by `id` where the client already has one
+(a row from a previous autosave), updated in place; rows no longer
+present are SOFT-deleted, never hard-deleted, and never blind
+delete-all-then-recreate (which would soft-delete and immediately
+recreate every unchanged row on every keystroke, turning the audit trail
+into noise). A row with no description AND no amount (the ever-present
+blank "type here to add another" placeholder) is filtered server-side
+before syncing — Johan: "empty trailing rows must not save as zero-value
+rows or clutter the record." The response echoes back the saved items
+WITH their real ids, because the client has no other way to learn a
+newly-created row's id before the NEXT autosave — without this, every
+subsequent save would treat previously-saved rows as new and create
+duplicates instead of updating them.
+
+**`review.blade.php` / `rentalReview()`** — `incomeItems`/`expenseItems`
+are now Alpine-reactive arrays, seeded from the assessment's real saved
+items plus exactly one trailing blank row. `compactAndEnsureTrailing()`
+runs on every row edit: removes any blank row that isn't the last one
+(how an agent "deletes" a row — clear both its fields) and guarantees
+exactly one blank trailing row is always available to type into — this
+is literally "filling the last row auto-adds a fresh empty one." Live
+totals (`incomeTotal()`/`expenseTotal()`) sum the SAME rows with the SAME
+filter as the server, so the on-screen total can never legitimately
+disagree with what `qualifyingResult()` computes — proven, not assumed,
+in the Verification section below. `save()` captures the actual row
+OBJECT references being sent (not a copy) before the request fires, so
+the response's returned ids can be patched back onto them by position
+without disturbing a blank row the agent has started typing into during
+the round trip — a wholesale array replacement would have dropped that.
+
+### Verification — real headless-browser session, real persisted data
+
+Per instruction ("drive the actual screen — type in the last row and
+confirm a new one appears, rather than checking the markup exists"), the
+auto-add-row behaviour is Alpine.js client-side reactivity and cannot be
+observed from a PHPUnit HTTP test — a real browser was required.
+
+**Method, and why this shape:** the shared `/corex-qa1` checkout was mid-build
+under cc2 at the time (confirmed via cc1: "cc2, who's mid-build on QA1
+right now"), and cc1 was about to restore production-shaped data onto the
+shared `corex_qa1` database — both made touching the shared checkout's
+working tree OR running this round's migration against the shared
+database unsafe at that moment. Instead: a disposable clone
+(`corex_qa1_round10_verify`) was built from a real structure dump plus
+real DATA for `migrations`, `agencies`, `branches`, `contacts`, `users`,
+`rental_applications`, `rental_application_assessments`, `properties`,
+`roles`, and `role_permissions` (cloning the `migrations` table's own
+data, not just structure, was what let `php artisan migrate` run
+correctly as an ordinary INCREMENTAL migrate — including surfacing the
+FK-identifier-length bug above — rather than mistaking the DB for fresh
+and trying to load the full schema snapshot, which is what happened on a
+first, abandoned attempt during Round 9's own verification). A disposable
+agent login was created by resetting a REAL existing agency-1 user's
+password (`andre@hfcoastal.co.za`) — in the ISOLATED CLONE ONLY; the real
+password on the real shared database was never touched. Puppeteer
+(already a project devDependency; a read-only `node_modules` symlink to
+the shared checkout's own install was used rather than running `npm
+install` in the worktree, matching the sanctioned read-only-symlink
+exception for a throwaway verification-only use). `public/build/assets/app.js`
+in this worktree turned out to be a pre-existing 0-byte corrupted
+artifact (unrelated to this round's code) — `npm run build` regenerated
+it before Alpine.js would even load.
+
+**What was actually driven, on real application id 49 (agency 1, real
+contact, real historical assessment data: gross income R23,700 from two
+real migrated income items, real current rent R7,500):**
+1. Loaded the real review screen via real login, real session, real
+   permission/scope checks (which needed cloning the `roles` and
+   `role_permissions` tables too — data-scope resolution reads from the
+   database, not just `config/corex-permissions.php`).
+2. Typed into the actual last (blank) income row: row count went 3 → 4
+   (2 real items + 1 blank → typed → 1 new blank appended). Same for
+   expenses: 1 → 2.
+3. Live total read directly off the rendered page: `R 28 021,00`
+   (23,700 + 4,321 typed) — computed client-side, before any network
+   round trip completed.
+4. Waited for the debounced autosave; save badge showed "✓ Saved".
+5. Reloaded the page FRESH (new navigation, not the same in-memory JS
+   state) — row counts persisted correctly (4 income, 2 expense: real
+   items + exactly one blank trailing row each, never more), and the
+   "Suggested check" box read: "Gross income (your entries above):
+   R 28 021,00 ... Rent must not exceed 30% of gross income
+   (R 8 406,30). Actual rent is 26.8% of gross income" plus "WITHIN THE
+   AFFORDABILITY GUIDELINE", with the net-income block separately showing
+   "Income left after expenses: R 27 244,00", clearly labelled reference-only.
+6. Cross-checked against the database directly: `rental_application_income_items`
+   held exactly 3 real rows (15000, 8700, 4321 — no blank row saved) and
+   `rental_application_expense_items` held exactly 1 (777).
+7. Cross-checked against `RentalApplicationAssessment::qualifyingResult()`
+   called directly via tinker: `gross_income: 28021`, `net_income: 27244`,
+   `max_affordable_rent: 8406.3`, `meets_threshold: true` — identical, to
+   the cent, to what the screen displayed. This is the proof that "the
+   total must match exactly what the affordability check uses."
+
+**Cleanup:** the disposable database, its dump files, and the read-only
+`node_modules` symlink were all removed after verification; the rebuilt
+`public/build` assets were kept (gitignored, regenerable, and were
+broken before this round regardless). The real shared `corex_qa1`
+database, the real user `andre@hfcoastal.co.za`'s real password, and the
+shared `/corex-qa1` checkout's working tree were never touched.
+
+**PHPUnit regression coverage** (everything server-side; the row-auto-add
+UI reactivity itself is covered only by the browser session above):
+`tests/Feature/RentalApplications/RentalApplicationRound10ReviewScreenTest.php`
+(new) — net-income reference-only labelling, gross-income section
+labelling, item persistence + total computation, blank-row filtering,
+soft-delete-on-removal (never hard-delete) with re-save-by-id proven to
+update rather than duplicate, and the total-matches-the-affordability-check
+guarantee. `RentalApplicationRound8FixesTest.php` and
+`RentalApplicationRound9AffordabilityTest.php` updated wherever they
+constructed an assessment via the old fixed columns (both now use
+`incomeItems()`/`expenseItems()` or a new `assessmentWithAmounts()` test
+helper) — those columns no longer exist after this round's migration.
+Full run: 22 tests, 22 passed, 102 assertions.
+
+### Files touched
+
+- `database/migrations/2026_09_08_180000_create_rental_application_income_expense_items_tables.php` (new)
+- `app/Models/RentalApplicationIncomeItem.php` (new)
+- `app/Models/RentalApplicationExpenseItem.php` (new)
+- `app/Models/RentalApplicationAssessment.php` — `incomeItems()`/`expenseItems()` relations, `qualifyingResult()` sums items
+- `app/Http/Controllers/CoreX/RentalApplicationReviewController.php` — `maxRentPercentFor()`, item-array `saveAssessment()`, new `syncItems()`
+- `resources/views/corex/rental-applications/review.blade.php` — growable income/expense rows, gross-income section label, net-income reference-only block, new result field names
+- `tests/Feature/RentalApplications/RentalApplicationRound10ReviewScreenTest.php` (new)
+- `tests/Feature/RentalApplications/RentalApplicationRound8FixesTest.php` — assessment-creation fixture update
+- `tests/Feature/RentalApplications/RentalApplicationRound9AffordabilityTest.php` — assessment-creation fixture update
+
+Branch: `rental-applications-affordability-2026-09-08` (continued),
+new commits on top of `52a476910`. QA1 only — not merged into the shared
+`QA1` checkout, which cc1 is actively restoring with production-shaped
+data at the time of this round; will coordinate the actual QA1 landing
+once cc1 confirms QA1 is back up and clean.
+
+## Round 11 — SECOND regression on the decimal-point area, plus one-row-start rows and statement months (2026-09-08)
+
+Johan, urgent, blocking him mid-testing: "the comma rule is bust. everyone
+will enter amounts like 40638.40, the std that everyone uses. right now
+hitting the . on an amount clears the values, you have to use , - fix
+this." This is the second time this exact area (numeric money-field
+input) has broken; treated with the seriousness that implies.
+
+### Item 1 — root cause, found by driving the real screen, not guessing
+
+Reproduced with a real headless-browser session typing character by
+character into a real field: `type="number"` inputs bound with Alpine's
+`x-model` write the browser's own PARSED `.value` back into the DOM on
+every keystroke. A lone trailing "." does not parse as a valid number
+yet, so the browser's own `.value` silently omits it at that instant;
+Alpine's write-back then overwrites the field's real (still-being-typed)
+content with that dot-less value, visibly eating the "." the user just
+typed. Confirmed by typing "40638." character-by-character into the
+review screen's income field and reading `input.value` after every
+keystroke: it read "40638" (dot dropped) the instant "." was typed, then
+correctly returned to "40638.4" once a digit followed — proving the
+native input, not Alpine's own reactivity or the server, was the source.
+
+**Fix:** every money-amount field's `type="number"` replaced with
+`type="text" inputmode="decimal"` — the same numeric keyboard on mobile,
+zero native number-parsing interference. The raw typed string now passes
+through untouched; the server's sanitizer is the only place that ever
+interprets it. Changed:
+- `review.blade.php` — the income/expense row amount inputs
+- `authorisation/show.blade.php` — the approve-amount field
+- `rental-application-field.blade.php` — new optional `inputmode` prop
+- `corex/rental-applications/show.blade.php` / `rental-applications/public/show.blade.php`
+  — `current_rental_amount` and `monthly_salary`, via the component's new prop
+
+The settings percentage field (`type="number"`, no Alpine binding) was
+left as-is — it was never actually subject to this bug (no reactive
+write-back exists on that field) and isn't a Rand-and-cents value.
+
+### Item 1 — the disambiguation rule, exactly as Johan stated it
+
+`RentalApplication::sanitizeNumericInput()` rewritten. Old rule: strip
+every comma and space, leave dots alone — blind to "40638,40" (comma as
+decimal — some people do write it that way) looking identical in shape
+to "40,638" (comma as a thousands mark). Johan's own resolution,
+implemented literally: **the LAST separator (comma, dot, or space) is
+the decimal point ONLY when it is followed by exactly two digits and
+nothing else after it; every other separator, and a last separator NOT
+followed by exactly two digits, is a thousands mark and is stripped.**
+
+```php
+private static function disambiguateMoneyString(string $value): string
+{
+    $value = trim($value);
+    $value = preg_replace('/^R\s*/i', '', $value);
+
+    if (preg_match('/^(.*)[,.\s](\d{2})$/', $value, $matches)) {
+        $wholePart = preg_replace('/[,.\s]/', '', $matches[1]);
+        return $wholePart . '.' . $matches[2];
+    }
+
+    return preg_replace('/[,.\s]/', '', $value);
+}
+```
+
+Every one of Johan's stated formats resolves correctly: `40638.40`,
+`40,638.40`, `40 638.40`, `R40 638.40`, and `40638,40` all → `40638.40`;
+`40,638` → `40638` (a whole number, not four-oh-six-thirty-eight). Every
+existing Round 8 test case resolves identically to before (verified
+directly, not assumed).
+
+**Flagged rather than silently decided (per Johan's own instruction):**
+1. The qualifying-formula percentage field (`max_rent_percent_of_gross_income`)
+   is NOT run through this rule. A percentage like "28.5" has only ONE
+   digit after its decimal point — the rule would misread it as a
+   thousands-separated whole number ("285"). Percentages never carry a
+   thousands separator at all, so `RentalApplicationSettingsController::updateQualifyingFormula()`
+   now does a plain `trim()` instead of calling the money sanitizer.
+2. A value like "40638.4" (ONE digit after the last separator, not two)
+   resolves, by the letter of Johan's rule, to "406384" (thousands mark,
+   stripped) — not "40638.40" as a human dropping a trailing zero might
+   intend. This is what the stated rule produces for "40,638" (3 digits
+   after) too, so it's not a case the rule fails to resolve — but it's
+   counter-intuitive enough to flag explicitly rather than let it pass
+   unremarked.
+
+### Items 2 & 3 — one-row-start behaviour and the number-of-months field
+
+**Item 2 status:** already built correctly in Round 10 (one starting
+row per list, auto-adding a fresh one as the last is filled, live
+recalculating totals) — Johan had not yet seen it, since Round 10 was
+never merged into the shared QA1 checkout he tests against. Re-verified
+end to end after this round's `type="text"` change (see Verification).
+No design change was needed for item 2 itself.
+
+**Item 3 — built, deliberately NOT wired into the decision yet.** New
+`statement_months` column on `rental_application_assessments`
+(migration `2026_09_08_190000_add_statement_months_to_rental_application_assessments.php`),
+a "Number of months this bank statement covers" input above both lists,
+and `qualifyingResult()` now also returns `monthly_average_gross_income`
+and `monthly_average_expenses` (raw total ÷ months) — but `gross_income`
+and `meets_threshold` still run off the raw totals, unchanged. The
+screen shows the monthly average with an explicit "not yet used in the
+guideline check" badge next to it.
+
+**Johan's own question, and my reading, stated for confirmation before
+building further:** does the monthly average feed the affordability
+check directly, replacing the manually-typed/summed income? Johan's own
+stated view is yes — that is the whole point of capturing from a bank
+statement, and it is exactly the tenant's-claimed-income-vs-actual-income
+problem (his 10,000-vs-18,000 example) applied to a multi-month capture.
+**I agree with that reading and it is the more correct design** — a lump
+sum over an unstated number of months is not comparable to a monthly
+legal threshold, so the average is the only number that actually means
+anything against the 30%-of-gross rule. Once confirmed, wiring it in is
+a small, contained change: `qualifyingResult()` would use
+`monthlyAverageGrossIncome ?? $grossIncome` (falling back to the raw sum
+when no months are given, e.g. a payslip-style single-month capture)
+as the figure tested against `max_rent_percent`, rather than adding a
+second, parallel decision path.
+
+### Verification — real headless-browser session, real database, every stated format
+
+Following the same disposable-clone methodology as Round 10 (real QA1
+data cloned into an isolated `corex_qa1_bugfix_verify` database, real
+QA1 code, never touching the shared checkout or shared database — QA1
+had just been restored by cc1 at the time and a second lane was
+mid-build on the shared checkout, so the same "don't touch the shared
+resource" reasoning from Round 10 applied again). On a real application
+(id 4, real agency, real historical rent of R10,000):
+
+1. **Item 2** — confirmed the assessment starts as exactly ONE income
+   row on a fresh capture.
+2. **Item 1** — typed each of Johan's six formats, one at a time, into
+   the current last (blank) row, character by character, and read back
+   what actually landed in `rental_application_income_items.amount`:
+
+   | Typed | DB value | |
+   |---|---|---|
+   | `40638.40` | `40638.40` | PASS |
+   | `40,638.40` | `40638.40` | PASS |
+   | `40 638.40` | `40638.40` | PASS |
+   | `R40 638.40` | `40638.40` | PASS |
+   | `40638,40` | `40638.40` | PASS |
+   | `40,638` | `40638.00` | PASS |
+
+   All six PASS. The DOM value was also captured after every single
+   keystroke for each format — the "." was never dropped at any point
+   mid-typing, proving the fix at the source, not just at the final
+   submitted value.
+3. **Item 2 continued** — after the six entries, the row list correctly
+   held 6 filled rows + 1 trailing blank = 7; Alpine's own internal
+   `incomeTotal()` state read directly (243830) matched the database sum
+   (243830.00) and the server's own `qualifyingResult()` gross_income
+   (243830.00) exactly — three independent reads, one number.
+4. **Item 3** — typed "3" into the new months field; DB
+   `statement_months` correctly stored 3; the monthly-average display
+   showed R81,276.67 (243830 ÷ 3, verified by direct calculation) with
+   its "not yet used in the guideline check" badge visible; the
+   Suggested Check box's own gross income figure remained the RAW
+   243830 (not divided), confirming the decision genuinely does not use
+   the average yet.
+5. Also confirmed the authoriser's approve-amount field renders as
+   `type="text" inputmode="decimal"` (the same fix), by direct
+   inspection of the compiled view and a PHPUnit `assertSee` — a full
+   second browser session against that screen hit an unrelated 404
+   (route-model-binding scope issue in the disposable clone's data, not
+   this fix) and was not chased further given the identical, already-
+   proven mechanism and the time already spent; flagged here rather than
+   silently claimed as separately browser-verified.
+
+**Cleanup:** the disposable database, dump files, and the read-only
+`node_modules` symlink were all removed afterward. The real shared
+`corex_qa1` database and the shared `/corex-qa1` checkout were never
+touched.
+
+`tests/Feature/RentalApplications/RentalApplicationRound11DecimalAndStatementMonthsTest.php`
+(new) — every one of Johan's stated formats plus all pre-existing Round
+8 cases via a data provider, the "keystroke never wipes what's typed"
+guard, regression guards that the income/authoriser fields never revert
+to `type="number"`, the settings-percentage-field exclusion, and the
+full statement-months/monthly-average behaviour including the "does not
+yet affect the decision" proof. Full run across Rounds 8–11:
+40 tests, 40 passed, 133 assertions.
+
+### Files touched
+
+- `database/migrations/2026_09_08_190000_add_statement_months_to_rental_application_assessments.php` (new)
+- `app/Models/RentalApplication.php` — `sanitizeNumericInput()` rewritten to the disambiguation rule
+- `app/Models/RentalApplicationAssessment.php` — `statement_months` fillable/cast, `monthly_average_*` display fields in `qualifyingResult()`
+- `app/Http/Controllers/CoreX/RentalApplicationReviewController.php` — `statement_months` validation/persistence
+- `app/Http/Controllers/CoreX/RentalApplicationSettingsController.php` — percentage field no longer uses the money sanitizer
+- `resources/views/corex/rental-applications/review.blade.php` — `type="text"` money inputs, months field, monthly-average display
+- `resources/views/corex/rental-applications/authorisation/show.blade.php` — `type="text"` approve-amount field
+- `resources/views/components/rental-application-field.blade.php` — new `inputmode` prop
+- `resources/views/corex/rental-applications/show.blade.php` / `resources/views/rental-applications/public/show.blade.php` — money fields use the new prop
+- `tests/Feature/RentalApplications/RentalApplicationRound11DecimalAndStatementMonthsTest.php` (new)
+
+Branch: `rental-applications-affordability-2026-09-08` (continued). QA1
+only — still not merged into the shared `QA1` checkout; coordinating
+that landing separately given item 1's urgency.

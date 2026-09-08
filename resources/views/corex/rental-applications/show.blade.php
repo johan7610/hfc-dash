@@ -263,7 +263,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <x-rental-application-field name="current_landlord_name" label="Name" :value="$rentalApplication->current_landlord_name" />
                 <x-rental-application-field name="current_landlord_tel" label="Tel number" :value="$rentalApplication->current_landlord_tel" />
-                <x-rental-application-field name="current_rental_amount" label="Current rental amount (R)" type="number" :value="$rentalApplication->current_rental_amount" />
+                <x-rental-application-field name="current_rental_amount" label="Current rental amount (R)" type="text" inputmode="decimal" :value="$rentalApplication->current_rental_amount" />
                 <x-rental-application-field name="current_rental_from" label="From" type="date" :value="optional($rentalApplication->current_rental_from)->format('Y-m-d')" />
                 <div x-data="{ stillLiving: {{ old('current_rental_still_living', $rentalApplication->current_rental_still_living) ? 'true' : 'false' }} }">
                     <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">To</label>
@@ -302,7 +302,8 @@
                 <x-rental-application-field name="employer_name" label="Employer" :value="$rentalApplication->employer_name" />
                 <x-rental-application-field name="employer_position" label="Position" :value="$rentalApplication->employer_position" />
                 <x-rental-application-field name="employer_tel" label="Employer tel number" :value="$rentalApplication->employer_tel" />
-                <x-rental-application-field name="monthly_salary" label="Monthly salary (R)" type="number" :value="$rentalApplication->monthly_salary" />
+                <x-rental-application-field name="monthly_salary" label="Gross monthly income, before deductions (R)" type="text" inputmode="decimal" :value="$rentalApplication->monthly_salary"
+                    hint="The amount on the applicant's payslip BEFORE tax and other deductions — not their take-home pay." />
             </div>
             <div class="mt-3">
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Employer address</label>

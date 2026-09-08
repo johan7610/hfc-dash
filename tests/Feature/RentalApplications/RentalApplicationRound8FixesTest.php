@@ -118,7 +118,10 @@ final class RentalApplicationRound8FixesTest extends TestCase
 
     // ── RA-02: assessment panel — every SA money spelling, each field ────
 
-    public function test_assessment_monthly_income_accepts_every_south_african_money_spelling(): void
+    // Round 9 (item 5) — monthly_income/other_monthly_income/monthly_expenses
+    // became growable item lists; see RentalApplicationRound9AffordabilityTest
+    // for the money-format + auto-row-add + soft-delete-sync coverage.
+    public function test_assessment_income_items_accept_every_south_african_money_spelling(): void
     {
         $agent = $this->agent();
         $cases = ['8,500' => '8500.00', '8 500' => '8500.00', 'R8 500' => '8500.00', '8500.50' => '8500.50'];
@@ -127,15 +130,15 @@ final class RentalApplicationRound8FixesTest extends TestCase
             $app = $this->application();
             $this->actingAs($agent)->post(
                 route('corex.rental-applications.review.assessment', $app),
-                ['monthly_income' => $typed]
+                ['income_items' => [['description' => 'Salary', 'amount' => $typed]]]
             )->assertSessionDoesntHaveErrors();
 
             $assessment = RentalApplicationAssessment::where('rental_application_id', $app->id)->first();
-            $this->assertSame($expected, $assessment->monthly_income, "monthly_income typed '{$typed}' must store as {$expected}.");
+            $this->assertSame($expected, $assessment->incomeItems->first()->amount, "income item typed '{$typed}' must store as {$expected}.");
         }
     }
 
-    public function test_assessment_other_monthly_income_accepts_every_south_african_money_spelling(): void
+    public function test_assessment_expense_items_accept_every_south_african_money_spelling(): void
     {
         $agent = $this->agent();
         $cases = ['8,500' => '8500.00', '8 500' => '8500.00', 'R8 500' => '8500.00', '8500.50' => '8500.50'];
@@ -144,28 +147,11 @@ final class RentalApplicationRound8FixesTest extends TestCase
             $app = $this->application();
             $this->actingAs($agent)->post(
                 route('corex.rental-applications.review.assessment', $app),
-                ['other_monthly_income' => $typed]
+                ['expense_items' => [['description' => 'Rent', 'amount' => $typed]]]
             )->assertSessionDoesntHaveErrors();
 
             $assessment = RentalApplicationAssessment::where('rental_application_id', $app->id)->first();
-            $this->assertSame($expected, $assessment->other_monthly_income, "other_monthly_income typed '{$typed}' must store as {$expected}.");
-        }
-    }
-
-    public function test_assessment_monthly_expenses_accepts_every_south_african_money_spelling(): void
-    {
-        $agent = $this->agent();
-        $cases = ['8,500' => '8500.00', '8 500' => '8500.00', 'R8 500' => '8500.00', '8500.50' => '8500.50'];
-
-        foreach ($cases as $typed => $expected) {
-            $app = $this->application();
-            $this->actingAs($agent)->post(
-                route('corex.rental-applications.review.assessment', $app),
-                ['monthly_expenses' => $typed]
-            )->assertSessionDoesntHaveErrors();
-
-            $assessment = RentalApplicationAssessment::where('rental_application_id', $app->id)->first();
-            $this->assertSame($expected, $assessment->monthly_expenses, "monthly_expenses typed '{$typed}' must store as {$expected}.");
+            $this->assertSame($expected, $assessment->expenseItems->first()->amount, "expense item typed '{$typed}' must store as {$expected}.");
         }
     }
 
@@ -175,24 +161,25 @@ final class RentalApplicationRound8FixesTest extends TestCase
     {
         $owner = User::factory()->create(['agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'role' => 'admin']);
 
-        // A ratio is realistically typed plainly (e.g. "3.5") — the sanitizer
-        // must still be harmless when applied (no-op) rather than break it.
+        // Round 9 — the field is now a percentage-of-gross-income (e.g.
+        // "28.5"), not a rent multiplier. The sanitizer must still be
+        // harmless when applied (no-op) rather than break it.
         $response = $this->actingAs($owner)->post(
             route('corex.settings.rental-applications.qualifying-formula'),
-            ['income_to_rent_multiplier' => '3.5']
+            ['max_rent_percent_of_gross_income' => '28.5']
         );
         $response->assertSessionDoesntHaveErrors();
         $setting = RentalApplicationQualifyingSetting::where('agency_id', $this->agency->id)->first();
-        $this->assertSame('3.50', $setting->income_to_rent_multiplier);
+        $this->assertSame('28.50', $setting->max_rent_percent_of_gross_income);
 
-        // A value with a stray space (e.g. "3 .5" mistyped, or genuinely
-        // "3.5 " from a mobile keyboard) is still cleaned, not rejected.
+        // A value with a stray space (e.g. "28.5 " from a mobile keyboard)
+        // is still cleaned, not rejected.
         $response2 = $this->actingAs($owner)->post(
             route('corex.settings.rental-applications.qualifying-formula'),
-            ['income_to_rent_multiplier' => '3.5 ']
+            ['max_rent_percent_of_gross_income' => '28.5 ']
         );
         $response2->assertSessionDoesntHaveErrors();
-        $this->assertSame('3.50', $setting->fresh()->income_to_rent_multiplier);
+        $this->assertSame('28.50', $setting->fresh()->max_rent_percent_of_gross_income);
     }
 
     // ── RA-03: the REAL review screen, not show.blade.php ────────────────
