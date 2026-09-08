@@ -2890,3 +2890,83 @@ plain agent with neither:
   stops the agent being shown a door they could never open.
 
 `php -l` clean. `php artisan view:clear` run after.
+
+## Round 8, completed — all four items applied, verified, pushed
+
+cc6 stood down from `review.blade.php`, `RentalApplicationAuthorisationController.php`,
+`RentalApplicationReviewController.php`, and `RentalApplicationSettingsController.php`
+(confirmed by the conductor directly with cc6) before any of the below
+was applied.
+
+**Applied:**
+1. `RentalApplicationAuthorisationController::approve()` — sanitizes
+   `approved_rental_amount` before validating.
+2. `RentalApplicationReviewController::saveAssessment()` — sanitizes
+   `monthly_income`/`other_monthly_income`/`monthly_expenses`.
+3. `RentalApplicationSettingsController::updateQualifyingFormula()` —
+   sanitizes `income_to_rent_multiplier`.
+4. `review.blade.php:194` (line shifted since the audit; found by
+   grepping for the attribution span cc6 already applied) — the "Added
+   after submission" badge, same condition/wording as `show.blade.php`.
+
+**Verified — real HTTP, real login, real session, on already-used data,
+every field individually, every South African spelling separately, DB
+read directly after each:**
+
+| Where | Typed | Stored |
+|---|---|---|
+| Authoriser approve (real app #9, pre-existing "Test Test55") | `8,500` | `8500.00` |
+| Authoriser approve (real app #13, same contact) | `8 500` | `8500.00` |
+| Authoriser approve (real app #6, pre-existing "test test") | `R8 500` | `8500.00` |
+| Authoriser approve (fresh, plainly-named test fixture, no 4th real candidate existed) | `8500.50` | `8500.50` |
+| Assessment `monthly_income` (real app #6, all 4 spellings run sequentially — autosave is repeatable, unlike approve) | `8,500` / `8 500` / `R8 500` / `8500.50` | each confirmed via the endpoint's own JSON response; final DB value `8500.50` |
+| Assessment `other_monthly_income` (same app, same 4 spellings) | ″ | final DB value `8500.50` |
+| Assessment `monthly_expenses` (same app, same 4 spellings) | ″ | final DB value `8500.50` |
+| Qualifying formula (agency 1's real settings row) | `3,5` / `3 5` / `R3.5` / `3.5` | final DB value `3.50` |
+
+A genuinely invalid value (`"not an amount"` / `"not money at all"`)
+still rejected after sanitizing, on both the approve action and the
+original 4 fields — confirmed the sanitizer doesn't mask real errors.
+
+**RA-03 badge, full walkthrough, real actions in real order:** a fresh
+test-labelled application's public link was submitted for real
+(`POST .../submit`, real signatures) → an agent added a document
+afterward via the real async endpoint → the agent's REAL REVIEW SCREEN
+(not `show.blade.php`) was rendered and shown to carry both "added by
+{agent}" and "Added after submission" with the correct timestamp,
+directly attached to that document's own row (confirmed by isolating
+the exact HTML block around the document, not a page-wide substring
+match).
+
+**The corrected test file proven to discriminate, not just proven to
+pass:** `RentalApplicationRound8FixesTest.php`'s 8 tests were run
+against the pre-fix code (temporarily swapping the 5 changed files back
+to their prior committed versions, keeping the new test file) — 5 of 8
+failed with the exact `"The ... field must be a number."` messages cc5
+originally reported; the 3 that still passed on old code are the ones
+that don't depend on the fix at all (rejecting genuinely invalid input,
+a plain "3.5" with no formatting, and "no badge before submission" —
+correctly unaffected either way). Restored the fix, re-ran: 8/8 pass.
+Full `tests/Feature/RentalApplications/` suite: 79 passed. Two failures
+in `RentalApplicationCrudStandardTest.php` (own/branch/agency scope
+toggle on the index screen) are pre-existing — reproduced identically
+against the pre-Round-8 code, confirmed unrelated to anything touched
+tonight, not fixed (cc3's own file, out of scope) — reported, not
+touched.
+
+**Test fixtures created tonight, all soft-deleted at the end, all named
+plainly as test accounts per the new standing rule** (a fixture
+described in words that sounded like a real staff member cost an hour
+earlier tonight): `CC4 TEST ACCOUNT - Round 8 Authoriser`, `CC4 TEST
+ACCOUNT - Round 8 Agent`, `CC4 TEST ACCOUNT - Round 8 Owner (settings)`
+(users), and two `RentalApplication` rows named `CC4 TEST FIXTURE -
+Round 8 approve decimal variant` / `CC4 TEST FIXTURE - Round 8 badge
+walkthrough`. Agency 1's `rental_application_ro_user_ids` — set to
+`[test authoriser's id]` only for the duration of the proof — restored
+to its original `NULL` afterward; the real CO user already configured
+there (a genuine staff member) was never touched or logged in as.
+
+Branch: `feature/rental-applications-numeric-fix-final-2026-09-08`
+(the `...-2026-09-08` branch without `-final` was rebased twice as QA1
+moved during the night and could not be force-pushed under this
+session's permissions — this is the one to land).

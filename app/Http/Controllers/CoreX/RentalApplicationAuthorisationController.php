@@ -153,6 +153,16 @@ class RentalApplicationAuthorisationController extends Controller
     ) {
         $decision = $this->guardCanDecide($rentalApplication);
 
+        // RA-02 (cc5 re-test, Round 8) — "the screen where an authoriser
+        // APPROVES a tenant still rejects a comma in the rand amount."
+        // Same sanitizer as every other money field on this feature: strip
+        // thousand-separator commas, spaces, and a leading "R" prefix
+        // before validation ever sees it.
+        $request->merge(RentalApplication::sanitizeNumericInput(
+            $request->only(['approved_rental_amount']),
+            ['approved_rental_amount'],
+        ));
+
         $validated = $request->validate([
             // Johan: "capture the approved amount... update agent rental
             // screen - tenant approved for x amount." Required — the whole

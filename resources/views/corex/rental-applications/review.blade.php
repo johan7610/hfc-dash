@@ -192,6 +192,14 @@
                                              (RentalApplicationController::uploadDocument()), markup
                                              handed to me since I own this file. --}}
                                         <span style="color: var(--text-muted); font-size: 11px;">— {{ $document->uploaded_by ? 'added by ' . ($document->uploader->name ?? 'an agent') : 'from applicant' }}</span>
+                                        {{-- RA-03 (cc5 re-test, Round 8) — this badge existed on
+                                             show.blade.php but was never handed over here, the
+                                             screen an agent actually reviews a returned
+                                             application on. Same condition, same wording. --}}
+                                        @if($rentalApplication->submitted_at && $document->created_at->greaterThanOrEqualTo($rentalApplication->submitted_at))
+                                            <span class="ds-badge ds-badge-warning" title="This document was added after the application was submitted">Added after submission</span>
+                                            <span style="color: var(--text-muted); font-size: 11px;">{{ $document->created_at->format('d M Y H:i') }}</span>
+                                        @endif
                                     </span>
                                     <span class="flex items-center gap-2">
                                         <span class="ds-badge ds-badge-success" x-show="markedUpDocIds.includes({{ $document->id }})" x-cloak title="This document has saved marks — visible to anyone who opens it next.">Marked up</span>

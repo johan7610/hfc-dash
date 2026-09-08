@@ -149,6 +149,15 @@ class RentalApplicationReviewController extends Controller
     {
         $this->guardRentalApplication($rentalApplication);
 
+        // RA-02 (cc5 re-test, Round 8) — every numeric money field on this
+        // feature, not just the ones on RentalApplication itself. Same
+        // sanitizer, an explicit field list since these three live on
+        // RentalApplicationAssessment, a different model.
+        $request->merge(RentalApplication::sanitizeNumericInput(
+            $request->only(['monthly_income', 'other_monthly_income', 'monthly_expenses']),
+            ['monthly_income', 'other_monthly_income', 'monthly_expenses'],
+        ));
+
         $validated = $request->validate([
             'monthly_income' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'other_monthly_income' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
