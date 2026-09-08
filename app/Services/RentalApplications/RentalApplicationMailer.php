@@ -26,7 +26,9 @@ class RentalApplicationMailer
         }
 
         try {
-            Mail::to($recipientEmail)->send(new RentalApplicationInviteMail($application));
+            Mail::to($recipientEmail)->send(
+                (new RentalApplicationInviteMail($application))->fromAgent($application->createdBy)
+            );
 
             return true;
         } catch (\Throwable $e) {

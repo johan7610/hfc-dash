@@ -2970,3 +2970,142 @@ Branch: `feature/rental-applications-numeric-fix-final-2026-09-08`
 (the `...-2026-09-08` branch without `-final` was rebased twice as QA1
 moved during the night and could not be force-pushed under this
 session's permissions — this is the one to land).
+
+## Round 9 — applicant-facing fixes: email branding, still-living tick, rental term, send redirect (Johan, QA1, 2026-09-08)
+
+Four items, all Johan's own words from testing.
+
+### 1 — "email sent to applicant needs the same email format as esign emails - agent details, photo etc."
+
+`RentalApplicationInviteMail` (`app/Mail/RentalApplicationInviteMail.php`) now
+extends `App\Mail\Signatures\BaseSignatureMail` — the exact same base class
+the e-sign "please sign" email (`SigningRequestMail`) uses — instead of a
+plain `Mailable`. This is direct reuse, not a second parallel layout: the
+From-address routing (agent's own address when on the agency's company
+domain, "Name via CoreX OS" fallback for a personal address, mailbox
+routing), reply-to, and the agent footer (photo, name, designation, phone,
+cell, FFC, PPRA number, agency logo, email disclaimer, POPI link) all come
+from `BaseSignatureMail`, unchanged. `RentalApplicationMailer::sendInvite()`
+now calls `->fromAgent($application->createdBy)` before sending, mirroring
+`SignatureService`'s own `->fromAgent($template->creator)` call exactly.
+`resources/views/emails/rental-application-invite.blade.php` swaps its old
+plain "agency name" footer for `@include('emails.signatures.partials.agent-footer')`
+— the identical partial the e-sign email includes, not a copy of it.
+
+Verified by actually sending: application id 10 (a real, already-existing
+draft, restored to its original state afterwards — see verification note
+below) sent from `johan@hfcoastal.co.za` to the one permitted test address,
+`can.assurance@gmail.com`, hardcoded and confirmed in the code before
+sending. Captured in the QA1 box's own local Mailpit catcher (mail on this
+environment is caught locally, never sent externally — confirmed via
+`ss -ltn` showing 127.0.0.1:1025/8025 listening, and via Mailpit's own API).
+The captured message showed Johan's photo, name, "CEO" designation, email,
+landline, cell, FFC number, website, the Home Finders Coastal logo, and the
+agency's email disclaimer — all rendering correctly, matching e-sign emails.
+
+**Found, not fixed (out of scope for this exact task, flagged per
+non-negotiable #2):** the three other rental-application mailers —
+`RentalApplicationApprovedMail`, `RentalApplicationDeclineMail`,
+`RentalApplicationMoreInfoRequestMail` — have the identical plain-`Mailable`,
+no-agent-footer pattern the invite email had before this fix. Johan's
+instruction named "the rental application email" (the applicant invite)
+specifically; these three were not touched. Same fix (extend
+`BaseSignatureMail`, pass `fromAgent()`, include the partial) would apply
+directly if Johan wants them brought in line too.
+
+### 2 — "current landlord we have from and to dates - put a tick at to date to tick that states still living in current premises"
+
+New column `current_rental_still_living` (boolean, nullable, default false)
+on `rental_applications` — a separate column from `current_rental_to`, not a
+sentinel/magic date value, because "still living there" (true) and "we
+don't know the end date" (still null, flag false) are two different facts
+for a reference check and must stay distinguishable. Migration:
+`2026_09_08_160000_add_still_living_and_rental_term_months_to_rental_applications.php`.
+
+Both the applicant-facing form (`resources/views/rental-applications/public/show.blade.php`)
+and the agent-side form (`resources/views/corex/rental-applications/show.blade.php`)
+now show a "Still living here — no end date" tick box next to the To date.
+Ticking it disables and clears the To date input client-side (Alpine). A
+standard hidden-input-plus-checkbox pair (`<input type="hidden" ... value="0">`
+immediately before the checkbox, same `name`) ensures an UNTICKED box is
+submitted as an explicit `0`, not silently absent — a plain checkbox alone
+would never transmit anything when unticked, leaving a stale `true` in place
+on save. Enforced server-side too, not just by disabling the input in the
+browser: `RentalApplication::normalizeStillLiving()` forces
+`current_rental_to` to null whenever `current_rental_still_living` is
+truthy, called from both `RentalApplicationController::update()` (agent
+side) and `RentalApplicationSigningController::submit()` (applicant side).
+
+The PDF (`resources/views/corex/rental-applications/pdf.blade.php`) shows
+"Still living there" in place of the To date when the flag is set.
+
+Verified over real HTTP against a real, already-existing draft application
+(id 10) via a local server bound to this fix's own worktree code but
+pointed at the real QA1 database: ticking + saving cleared and stored
+`current_rental_to = null`, `current_rental_still_living = true`; unticking
++ supplying a real date stored that date with the flag `false`.
+
+### 3 — "rental term required - we need to have it in years / months / maybe a couple of quick clicks buttons? 6 months, 1 year, 2 years... nothing longer as law states no lease may exceed 24 months"
+
+New column `rental_term_months` (unsigned small integer, nullable) — NOT a
+retype of the existing `rental_terms` string column, because `rental_terms`
+already holds real free-text values on 46 existing QA1 applications, and
+changing its type in place would corrupt that history. `rental_terms` is
+left untouched for old rows; new saves go through `rental_term_months`.
+Both forms now show three quick-select buttons — 6 / 12 / 24 months, in
+months only, nothing longer — replacing the old free-text input. 24 is a
+hard ceiling (validation `nullable|integer|in:6,12,24`, plus the client-side
+buttons simply don't offer anything above it) — the legal maximum for a
+lease; a renewal beyond that is explicitly a separate matter, not part of
+this form. The agent-side form additionally shows any pre-existing
+free-text `rental_terms` value as a one-line note ("previously recorded as
+free text: ...") when a record has old text but no new months value yet, so
+that history isn't silently hidden from the agent. The PDF prefers
+`rental_term_months` when present, falling back to the legacy `rental_terms`
+text for older records.
+
+Verified over real HTTP on the same application (id 10): submitting
+`rental_term_months=36` was rejected (validation, value never persisted);
+`rental_term_months=12` and `=6` both saved correctly.
+
+### 4 — "on rental application send - once send is clicked redirect back to rental application screen"
+
+`RentalApplicationController::send()` — only the SUCCESS path's redirect
+changed, from `corex.rental-applications.show` to
+`corex.rental-applications.index` (the list). The two error paths (no
+recipient email; mail failed to send) still redirect back to the
+application's own show page, deliberately — an agent fixing an error needs
+to stay on the record that has the problem, not lose it on the list.
+Verified over real HTTP: clicking Send on application id 10 returned a 302
+to `/corex/rental-applications`, confirmed via the response's `Location`
+header.
+
+### Verification note — real data, restored afterward
+
+Per instruction, verification used an already-existing real draft
+application (id 10, agency 1, created by user 22) rather than fabricated
+data, over real HTTP against the real QA1 database via a local server bound
+to this fix's own isolated worktree. Two applications initially picked for
+this (ids 51 and 47) turned out to already be soft-deleted from earlier,
+unrelated testing — not a live collision, just pre-existing archived
+records; skipped in favour of id 10, confirmed active first. Every field
+change made to id 10 for verification (email, still-living flag, To date,
+rental term, and the Send action's status/token changes) was captured
+before editing and restored exactly afterward, so the real record was left
+exactly as found. All disposable login fixtures created for verification
+(`cc3-verify-applicant-fixes@example.test`, id 191) were soft-deleted
+immediately after use, confirmed via `deleted_at` and normal `find()`
+returning null.
+
+### Files touched
+
+- `database/migrations/2026_09_08_160000_add_still_living_and_rental_term_months_to_rental_applications.php` (new)
+- `app/Models/RentalApplication.php` — fillable/casts/`fieldValidationRules()` for the two new fields; new `normalizeStillLiving()` helper
+- `app/Http/Controllers/CoreX/RentalApplicationController.php` — `update()` calls `normalizeStillLiving()`; `send()`'s success redirect now targets the index route
+- `app/Http/Controllers/RentalApplicationSigningController.php` — `submit()` calls `normalizeStillLiving()`
+- `app/Mail/RentalApplicationInviteMail.php` — now extends `BaseSignatureMail`
+- `app/Services/RentalApplications/RentalApplicationMailer.php` — `sendInvite()` passes `fromAgent($application->createdBy)`
+- `resources/views/emails/rental-application-invite.blade.php` — includes the shared agent-footer partial
+- `resources/views/rental-applications/public/show.blade.php` — still-living tick box, rental term quick-select buttons
+- `resources/views/corex/rental-applications/show.blade.php` — same two, agent-side, plus the legacy-text note
+- `resources/views/corex/rental-applications/pdf.blade.php` — renders "Still living there" and months-based term

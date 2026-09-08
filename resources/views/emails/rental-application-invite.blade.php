@@ -42,11 +42,7 @@
             If you have any questions, please contact your agent directly.
         </p>
 
-        <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 25px 0;">
-
-        <p style="color: #666; font-size: 13px; margin: 0;">
-            {{ $agencyName }}
-        </p>
+        @include('emails.signatures.partials.agent-footer')
     </div>
 
 </body>

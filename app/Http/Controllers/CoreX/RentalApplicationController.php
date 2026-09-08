@@ -319,6 +319,7 @@ class RentalApplicationController extends Controller
 
         $fields = collect($validated)->except(['property_id'])->all();
         $fields = array_map(fn ($v) => $v === '' ? null : $v, $fields);
+        $fields = RentalApplication::normalizeStillLiving($fields);
 
         DB::transaction(function () use ($rentalApplication, $validated, $fields) {
             $rentalApplication->update(array_merge(
@@ -465,9 +466,15 @@ class RentalApplicationController extends Controller
             $rentalApplication->save();
         }
 
+        // AT-392 — Johan, QA1: "once send is clicked redirect back to rental
+        // application screen" — the list, not the single application's own
+        // show page. Only the successful-send path moves; the two error
+        // returns above stay on show() so the agent can see and fix the
+        // problem (a missing email, a failed send) on the application that
+        // has it, rather than losing that context on the list.
         return redirect()
-            ->route('corex.rental-applications.show', $rentalApplication)
-            ->with('success', 'Sent to ' . $recipientEmail . '. Both the download link and the online link are on this page too, if you want to share them another way.');
+            ->route('corex.rental-applications.index')
+            ->with('success', 'Sent to ' . $recipientEmail . '. Both the download link and the online link are on the application page too, if you want to share them another way.');
     }
 
     public function pdf(RentalApplication $rentalApplication)
