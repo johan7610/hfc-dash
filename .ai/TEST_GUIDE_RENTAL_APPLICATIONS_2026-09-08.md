@@ -82,6 +82,10 @@ Applications**.
   way a save could have quietly wiped highlights on pages that hadn't
   finished loading yet — nothing was actually lost in practice, but it's
   now impossible rather than just unlikely.
+- **New:** if a document was added to an application after it was
+  submitted, the review screen now shows a badge marking it as added
+  late — right on that document's own row, not on documents that were
+  part of the original submission.
 
 ### Submitting to the authoriser
 - On the review screen, click **Submit to authoriser** (it says
@@ -92,8 +96,8 @@ Applications**.
   Authorisation**. (You'll only see this if you've been set up as an
   authoriser — see the settings note below.)
 - **Approve** — enter the rand amount the tenant is approved for and
-  confirm. (See the comma note below — a comma in this box currently
-  causes an error; type the amount without commas for now.)
+  confirm. A comma in the amount (e.g. `8,500`) is now accepted, same as
+  the money fields on the application itself.
 - **Decline** — decline the application, with an optional reason.
 - **Request more information** — sends it back to the agent, not the
   applicant, with your reason attached in a real email to the agent.
@@ -122,17 +126,7 @@ the reviewer level and the override level).
 
 ## 2. What is not done yet
 
-Both of these may already be fixed by the time you read this — check for
-yourself rather than trusting this list.
-
-- **A document added after submission may not show a warning on the
-  review screen** — open a returned application's review screen and see
-  whether a document added afterwards is marked as added late. If it
-  isn't marked there, don't worry — it does correctly appear on the
-  application's own page, just not yet on this particular screen.
-- **The authoriser's approve screen may reject a comma in the rand
-  amount.** Try approving with a comma, e.g. `8,500`. If it's refused,
-  type the number without commas instead (`8500`) until this is fixed.
+Nothing outstanding on the rental application side as at this morning.
 
 ---
 
