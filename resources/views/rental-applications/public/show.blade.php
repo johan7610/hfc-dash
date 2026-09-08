@@ -97,7 +97,20 @@
                     <x-rental-application-field name="current_rental_amount" label="Current rental amount (R)" type="number" :value="$application->current_rental_amount" />
                     <div></div>
                     <x-rental-application-field name="current_rental_from" label="From" type="date" :value="optional($application->current_rental_from)->format('Y-m-d')" />
-                    <x-rental-application-field name="current_rental_to" label="To" type="date" :value="optional($application->current_rental_to)->format('Y-m-d')" />
+                    <div x-data="{ stillLiving: {{ old('current_rental_still_living', $application->current_rental_still_living) ? 'true' : 'false' }} }">
+                        <label class="block text-xs text-slate-500 mb-1">To</label>
+                        <input type="date" name="current_rental_to" x-ref="currentRentalTo"
+                               :disabled="stillLiving"
+                               value="{{ old('current_rental_to', optional($application->current_rental_to)->format('Y-m-d')) }}"
+                               class="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400 {{ $errors->has('current_rental_to') ? 'border-red-400' : 'border-slate-300' }}">
+                        @error('current_rental_to') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
+                        <label class="flex items-center gap-2 mt-2 text-xs text-slate-600 cursor-pointer">
+                            <input type="hidden" name="current_rental_still_living" value="0">
+                            <input type="checkbox" name="current_rental_still_living" value="1" x-model="stillLiving"
+                                   @change="if (stillLiving) $refs.currentRentalTo.value = ''" class="rounded border-slate-300">
+                            Still living here — no end date
+                        </label>
+                    </div>
                 </div>
             </section>
 
@@ -131,7 +144,21 @@
                 <h2 class="font-semibold text-slate-700 mb-3">Lease Requirement</h2>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <x-rental-application-field name="occupation_date" label="Effective date of occupation" type="date" :value="optional($application->occupation_date)->format('Y-m-d')" />
-                    <x-rental-application-field name="rental_terms" label="Rental terms required" :value="$application->rental_terms" />
+                    <div x-data="{ months: {{ old('rental_term_months', $application->rental_term_months) ?: 'null' }} }" class="sm:col-span-2">
+                        <label class="block text-xs text-slate-500 mb-1">Rental terms required</label>
+                        <input type="hidden" name="rental_term_months" :value="months">
+                        <div class="flex gap-2">
+                            <template x-for="m in [6, 12, 24]" :key="m">
+                                <button type="button" @click="months = m"
+                                        :class="months === m ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300'"
+                                        class="px-4 py-2 rounded-lg border text-sm">
+                                    <span x-text="m"></span> months
+                                </button>
+                            </template>
+                        </div>
+                        @error('rental_term_months') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
+                        <p class="text-xs text-slate-400 mt-1">Maximum 24 months by law — a longer stay is arranged as a renewal later, not on this form.</p>
+                    </div>
                     <x-rental-application-field name="adults" label="Adults" type="number" :value="$application->adults" />
                     <x-rental-application-field name="children" label="Children" type="number" :value="$application->children" />
                     <div class="sm:col-span-2">

@@ -265,7 +265,22 @@
                 <x-rental-application-field name="current_landlord_tel" label="Tel number" :value="$rentalApplication->current_landlord_tel" />
                 <x-rental-application-field name="current_rental_amount" label="Current rental amount (R)" type="number" :value="$rentalApplication->current_rental_amount" />
                 <x-rental-application-field name="current_rental_from" label="From" type="date" :value="optional($rentalApplication->current_rental_from)->format('Y-m-d')" />
-                <x-rental-application-field name="current_rental_to" label="To" type="date" :value="optional($rentalApplication->current_rental_to)->format('Y-m-d')" />
+                <div x-data="{ stillLiving: {{ old('current_rental_still_living', $rentalApplication->current_rental_still_living) ? 'true' : 'false' }} }">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">To</label>
+                    <input type="date" name="current_rental_to" x-ref="currentRentalTo"
+                           :disabled="stillLiving"
+                           value="{{ old('current_rental_to', optional($rentalApplication->current_rental_to)->format('Y-m-d')) }}"
+                           class="w-full rounded-md px-3 py-2 text-sm disabled:opacity-50" style="border: 1px solid var(--border);">
+                    @error('current_rental_to')
+                        <p class="text-xs mt-1" style="color: var(--ds-red, #dc2626);">{{ $message }}</p>
+                    @enderror
+                    <label class="flex items-center gap-2 mt-2 text-xs cursor-pointer" style="color: var(--text-secondary);">
+                        <input type="hidden" name="current_rental_still_living" value="0">
+                        <input type="checkbox" name="current_rental_still_living" value="1" x-model="stillLiving"
+                               @change="if (stillLiving) $refs.currentRentalTo.value = ''">
+                        Still living here — no end date
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -302,7 +317,26 @@
             <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Requirement of Lease</h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <x-rental-application-field name="occupation_date" label="Effective date of occupation" type="date" :value="optional($rentalApplication->occupation_date)->format('Y-m-d')" />
-                <x-rental-application-field name="rental_terms" label="Rental terms required" :value="$rentalApplication->rental_terms" />
+                <div x-data="{ months: {{ old('rental_term_months', $rentalApplication->rental_term_months) ?: 'null' }} }" class="sm:col-span-2">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Rental terms required</label>
+                    <input type="hidden" name="rental_term_months" :value="months">
+                    <div class="flex gap-2">
+                        <template x-for="m in [6, 12, 24]" :key="m">
+                            <button type="button" @click="months = m"
+                                    :class="months === m ? 'bg-slate-800 text-white' : 'bg-white'"
+                                    class="px-4 py-2 rounded-md text-sm" style="border: 1px solid var(--border);">
+                                <span x-text="m"></span> months
+                            </button>
+                        </template>
+                    </div>
+                    @error('rental_term_months')
+                        <p class="text-xs mt-1" style="color: var(--ds-red, #dc2626);">{{ $message }}</p>
+                    @enderror
+                    @if($rentalApplication->rental_terms && ! $rentalApplication->rental_term_months)
+                        <p class="text-xs mt-1" style="color: var(--text-secondary);">Previously recorded as free text: "{{ $rentalApplication->rental_terms }}" — pick one of the options above to replace it.</p>
+                    @endif
+                    <p class="text-xs mt-1" style="color: var(--text-secondary);">Maximum 24 months by law — a longer stay is arranged as a renewal later, not on this form.</p>
+                </div>
                 <x-rental-application-field name="adults" label="Number of adults" type="number" :value="$rentalApplication->adults" />
                 <x-rental-application-field name="children" label="Number of children" type="number" :value="$rentalApplication->children" />
             </div>

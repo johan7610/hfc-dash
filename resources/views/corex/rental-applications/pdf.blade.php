@@ -39,7 +39,7 @@
 <div class="corex-h2">Current Landlord / Agent / Owner</div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Name: <span class="corex-field-value">{{ $application->current_landlord_name }}</span> &nbsp; Tel No: <span class="corex-field-value">{{ $application->current_landlord_tel }}</span></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Current Rental Amount: R<span class="corex-field-value">{{ $application->current_rental_amount }}</span></span></div>
-<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">From: <span class="corex-field-value">{{ optional($application->current_rental_from)->format('d/m/Y') }}</span> &nbsp; To: <span class="corex-field-value">{{ optional($application->current_rental_to)->format('d/m/Y') }}</span></span></div>
+<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">From: <span class="corex-field-value">{{ optional($application->current_rental_from)->format('d/m/Y') }}</span> &nbsp; To: <span class="corex-field-value">{{ $application->current_rental_still_living ? 'Still living there' : optional($application->current_rental_to)->format('d/m/Y') }}</span></span></div>
 
 <div class="corex-h2">Employment Details</div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Name of Employer: <span class="corex-field-value">{{ $application->employer_name }}</span></span></div>
@@ -48,7 +48,7 @@
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Tel No of Employer: <span class="corex-field-value">{{ $application->employer_tel }}</span> &nbsp; Monthly Salary: <span class="corex-field-value">{{ $application->monthly_salary }}</span></span></div>
 
 <div class="corex-h2">Requirement of Lease</div>
-<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Effective Date of Occupation: <span class="corex-field-value">{{ optional($application->occupation_date)->format('d/m/Y') }}</span> &nbsp; Rental Terms Required: <span class="corex-field-value">{{ $application->rental_terms }}</span></span></div>
+<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Effective Date of Occupation: <span class="corex-field-value">{{ optional($application->occupation_date)->format('d/m/Y') }}</span> &nbsp; Rental Terms Required: <span class="corex-field-value">{{ $application->rental_term_months ? $application->rental_term_months . ' months' : $application->rental_terms }}</span></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Special Conditions: <span class="corex-field-value">{{ $application->special_conditions }}</span></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Number of Occupants: Adults: <span class="corex-field-value">{{ $application->adults }}</span> &nbsp; Children: <span class="corex-field-value">{{ $application->children }}</span></span></div>
 

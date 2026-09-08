@@ -95,6 +95,7 @@ class RentalApplicationSigningController extends Controller
         // Optional-and-empty must never error (BUILD_STANDARD §2) — a blank
         // string is stored as NULL, never coerced into breaking a date/decimal cast.
         $fields = array_map(fn ($v) => $v === '' ? null : $v, $fields);
+        $fields = RentalApplication::normalizeStillLiving($fields);
 
         // Standing rule — transactions roll back clean: the record save and
         // both signature captures must land together or not at all. Without

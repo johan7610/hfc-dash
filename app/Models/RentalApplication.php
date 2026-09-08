@@ -107,6 +107,24 @@ class RentalApplication extends Model
         return $input;
     }
 
+    /**
+     * AT-392 — Johan, QA1: "put a tick at to date to tick that states still
+     * living in current premises. so theres no to date applicable?" Enforced
+     * server-side, not just by disabling the date input in the browser — a
+     * ticked "still living here" always wins over whatever a stale/crafted
+     * current_rental_to value arrives with, so the two states this exists to
+     * distinguish (still living there vs. we don't know the end date) can
+     * never be corrupted into a bogus date under the checkbox.
+     */
+    public static function normalizeStillLiving(array $fields): array
+    {
+        if (! empty($fields['current_rental_still_living'])) {
+            $fields['current_rental_to'] = null;
+        }
+
+        return $fields;
+    }
+
     public static function fieldValidationRules(): array
     {
         return [
@@ -129,6 +147,7 @@ class RentalApplication extends Model
             'current_rental_amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'current_rental_from' => ['nullable', 'date'],
             'current_rental_to' => ['nullable', 'date'],
+            'current_rental_still_living' => ['nullable', 'boolean'],
             'employer_name' => ['nullable', 'string', 'max:255'],
             'employer_position' => ['nullable', 'string', 'max:255'],
             'employer_address' => ['nullable', 'string', 'max:2000'],
@@ -137,6 +156,7 @@ class RentalApplication extends Model
             'employment_type' => ['nullable', 'in:' . implode(',', self::EMPLOYMENT_TYPES)],
             'occupation_date' => ['nullable', 'date'],
             'rental_terms' => ['nullable', 'string', 'max:255'],
+            'rental_term_months' => ['nullable', 'integer', 'in:6,12,24'],
             'special_conditions' => ['nullable', 'string', 'max:2000'],
             'adults' => ['nullable', 'integer', 'min:0', 'max:50'],
             'children' => ['nullable', 'integer', 'min:0', 'max:50'],
@@ -151,10 +171,10 @@ class RentalApplication extends Model
         'current_residential_address', 'email', 'cell', 'work_number',
         'emergency_contact_name', 'emergency_contact_cell', 'emergency_contact_work',
         'current_landlord_name', 'current_landlord_tel', 'current_rental_amount',
-        'current_rental_from', 'current_rental_to',
+        'current_rental_from', 'current_rental_to', 'current_rental_still_living',
         'employer_name', 'employer_position', 'employer_address', 'employer_tel',
         'monthly_salary', 'employment_type',
-        'occupation_date', 'rental_terms', 'special_conditions', 'adults', 'children',
+        'occupation_date', 'rental_terms', 'rental_term_months', 'special_conditions', 'adults', 'children',
     ];
 
     protected $casts = [
@@ -166,7 +186,9 @@ class RentalApplication extends Model
         'monthly_salary' => 'decimal:2',
         'current_rental_from' => 'date',
         'current_rental_to' => 'date',
+        'current_rental_still_living' => 'boolean',
         'occupation_date' => 'date',
+        'rental_term_months' => 'integer',
         'adults' => 'integer',
         'children' => 'integer',
     ];
