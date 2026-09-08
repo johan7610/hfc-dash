@@ -140,7 +140,7 @@ class RentalApplicationAuthorisationController extends Controller
         $alreadyDecided = in_array($rentalApplication->status, ['approved', 'declined'], true);
 
         return view('corex.rental-applications.authorisation.show', compact(
-            'rentalApplication', 'assessment', 'multiplier', 'result', 'documents', 'history', 'auditLog', 'canOverride', 'alreadyDecided'
+            'rentalApplication', 'assessment', 'maxRentPercent', 'result', 'documents', 'history', 'auditLog', 'canOverride', 'alreadyDecided'
         ));
     }
 

@@ -175,24 +175,25 @@ final class RentalApplicationRound8FixesTest extends TestCase
     {
         $owner = User::factory()->create(['agency_id' => $this->agency->id, 'branch_id' => $this->branch->id, 'role' => 'admin']);
 
-        // A ratio is realistically typed plainly (e.g. "3.5") — the sanitizer
-        // must still be harmless when applied (no-op) rather than break it.
+        // Round 9 — the field is now a percentage-of-gross-income (e.g.
+        // "28.5"), not a rent multiplier. The sanitizer must still be
+        // harmless when applied (no-op) rather than break it.
         $response = $this->actingAs($owner)->post(
             route('corex.settings.rental-applications.qualifying-formula'),
-            ['income_to_rent_multiplier' => '3.5']
+            ['max_rent_percent_of_gross_income' => '28.5']
         );
         $response->assertSessionDoesntHaveErrors();
         $setting = RentalApplicationQualifyingSetting::where('agency_id', $this->agency->id)->first();
-        $this->assertSame('3.50', $setting->income_to_rent_multiplier);
+        $this->assertSame('28.50', $setting->max_rent_percent_of_gross_income);
 
-        // A value with a stray space (e.g. "3 .5" mistyped, or genuinely
-        // "3.5 " from a mobile keyboard) is still cleaned, not rejected.
+        // A value with a stray space (e.g. "28.5 " from a mobile keyboard)
+        // is still cleaned, not rejected.
         $response2 = $this->actingAs($owner)->post(
             route('corex.settings.rental-applications.qualifying-formula'),
-            ['income_to_rent_multiplier' => '3.5 ']
+            ['max_rent_percent_of_gross_income' => '28.5 ']
         );
         $response2->assertSessionDoesntHaveErrors();
-        $this->assertSame('3.50', $setting->fresh()->income_to_rent_multiplier);
+        $this->assertSame('28.50', $setting->fresh()->max_rent_percent_of_gross_income);
     }
 
     // ── RA-03: the REAL review screen, not show.blade.php ────────────────
