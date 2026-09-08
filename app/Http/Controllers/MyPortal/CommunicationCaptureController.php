@@ -82,6 +82,16 @@ class CommunicationCaptureController extends Controller
     ) {
         $this->assertOwn($mailbox);
 
+        // AT-URGENT-2026-09-08 — the SMTP leg is guarded, but the IMAP
+        // Sent-folder append below is a different protocol entirely and
+        // cannot be intercepted at the mail layer. Refuse the whole action
+        // outright off production, before either leg runs.
+        if (\App\Support\OutboundMailGuard::isActive()) {
+            return back()
+                ->with('test_connection_result', \App\Support\OutboundMailGuard::blockedTestConnectionResult())
+                ->with('test_connection_mailbox_id', $mailbox->id);
+        }
+
         $rawMime = null;
         try {
             $mailable = (new Mailable())

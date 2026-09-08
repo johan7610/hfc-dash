@@ -92,6 +92,32 @@ class OutboundMailGuard
         return (int) env('MAIL_GUARD_SINK_PORT', env('MAIL_PORT', 1025));
     }
 
+    /**
+     * AT-URGENT-2026-09-08, follow-up — Johan's real mailbox connected to a
+     * real external server and a real Sent-folder copy was written over
+     * IMAP APPEND: a completely different protocol from SMTP, which never
+     * fires Illuminate\Mail\Events\MessageSending and so cannot be caught
+     * by the listener above. There is no mail-layer interception point for
+     * an IMAP append. The only safe fix is to refuse the whole action
+     * outright in any non-production environment — never attempt either
+     * leg, not just the SMTP one.
+     *
+     * Same shape every "Test Connection" controller already flashes back
+     * (`test_connection_result` => ['smtp' => [...], 'imap_append' => [...]])
+     * so the existing view needs no change to display this.
+     */
+    public static function blockedTestConnectionResult(): array
+    {
+        $message = 'Test Connection is disabled on this environment (' . (string) config('app.env')
+            . ') — it would otherwise write to a real mailbox over real SMTP/IMAP. This is not a setting; '
+            . 'it only runs on confirmed production.';
+
+        return [
+            'smtp' => ['ok' => false, 'message' => $message],
+            'imap_append' => ['ok' => false, 'message' => $message],
+        ];
+    }
+
     private static function configuredAppHost(): ?string
     {
         $url = (string) config('app.url', '');
