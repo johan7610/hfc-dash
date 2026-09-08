@@ -4225,3 +4225,57 @@ Branch: `rental-applications-affordability-2026-09-08` (continued). QA1
 only. cc1 was told the "hold" instruction changed and is confirming
 through their own coordinator channel before landing — not landed
 directly on my say-so.
+
+---
+
+## Notes not rendering on the review screen — a race, not a notes bug (Johan, 2026-09-08)
+
+Johan, application 9: *"added notes - they do not show on the
+document."* Reported as working before; it wasn't, and this is why the
+earlier check missed it — the failure is genuinely non-deterministic.
+
+**Reproduced first, not assumed.** Real document (2890, application 9)
+with 2 real saved notes confirmed directly in the database. Loaded the
+review screen with Puppeteer: first run, the notes were missing from the
+component's own mark list entirely — not a rendering issue, they never
+arrived. Ran the identical script again with no code changes: they were
+there. Same document, same code, different result — the signature of a
+race, not a logic bug.
+
+**Checked whether highlights had the same exposure, per instruction, not
+assumed either.** They did. On the run where restoration failed, ALL of
+page 0's marks were missing — three highlights along with the two
+notes — not notes specifically. Page 0 just happens to be the only page
+in this particular document that has any notes on it, so that's the
+only symptom Johan had a reason to report. Highlights on other pages
+were never at risk in this document only because none of them happened
+to land on the one page most likely to lose the race.
+
+**Root cause:** `restoreSavedMarksForPages()` waited on `this.$nextTick()`
+before reading `img.clientWidth` to compute the raster→display scale
+factor. `$nextTick()` guarantees Alpine's own DOM mutation has been
+applied — the `<img>` tag exists with its `src` set — it does NOT
+guarantee the browser has finished DECODING that image, and `clientWidth`
+for a `height:auto` image isn't reliably available until decode
+completes. Page 1's image is now delivered fast on purpose (this
+morning's progressive-load work) — which made the race easier to lose,
+not harder: restoration for page 1 can now genuinely run before the
+browser has decoded it, where the old, slower everything-at-once load
+gave it more incidental time to finish first.
+
+**Fix:** `img.decode()` — a real Promise that resolves only once
+decoding is genuinely complete — awaited before reading `clientWidth`,
+replacing the implicit assumption that `$nextTick` alone was enough.
+Falls through to the existing `clientWidth` guard regardless (decode()
+can reject if the element's been removed by fast document-switching;
+harmless, the guard still protects the push either way).
+
+**Verified by running the exact reproduction six times in a row, not
+once.** A single passing run proves little for a race condition; six
+consecutive identical passes under the same conditions that failed on
+the very first attempt pre-fix is the actual bar. All six: 26 total
+marks (24 highlights + 2 notes), 2 real `.rounded-full` note markers
+found in the DOM each time.
+
+**Files touched:** `resources/views/corex/rental-applications/
+review.blade.php` only — `restoreSavedMarksForPages()`.

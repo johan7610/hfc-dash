@@ -238,17 +238,34 @@ class RentalApplicationDocumentHighlightService
         imagesetthickness($img, 1);
     }
 
-    /** A pinned note: small marker + the note's own text burned in, so a flattened/downloaded copy still shows it, not just the live in-app view. */
+    /**
+     * A pinned note: small marker + the note's own text burned in, so a
+     * flattened/downloaded copy still shows it, not just the live in-app view.
+     *
+     * 2026-09-08 — Johan, testing the authoriser's flattened "View marked-up
+     * copy": "notes are visible. small and almost too small". Root cause:
+     * this burned text with GD's built-in bitmap font (imagestring font
+     * index 3), a fixed ~13px glyph height that does not scale with the
+     * page image's DPI::DPI (150) — legible in the small preview thumbnails
+     * ViewingPackRedactionService was built for, but tiny against a
+     * full-resolution page. Switched to a scalable TTF font sized relative
+     * to DPI, matching how Docuperfect\DocumentFlattener sizes its own
+     * burned-in text elsewhere in this codebase.
+     */
     private function burnNote($img, array $m, int $fill, array $rgb): void
     {
         $x = (int) round((float) ($m['x'] ?? 0));
         $y = (int) round((float) ($m['y'] ?? 0));
         $text = (string) ($m['text'] ?? '');
 
-        $lines = $text === '' ? [] : explode("\n", wordwrap($text, 40, "\n", true));
-        $lineHeight = 15;
-        $boxW = 260;
-        $boxH = 28 + (count($lines) * $lineHeight);
+        $font = $this->findFont();
+        $fontSize = self::DPI * 0.16; // ≈24px at 150 DPI — readable at full page resolution
+        $lineHeight = (int) round($fontSize * 1.35);
+        $wrapWidth = $font ? 32 : 40;
+
+        $lines = $text === '' ? [] : explode("\n", wordwrap($text, $wrapWidth, "\n", true));
+        $boxW = 420;
+        $boxH = 36 + (count($lines) * $lineHeight);
 
         $opaque = imagecolorallocate($img, $rgb[0], $rgb[1], $rgb[2]);
         $border = imagecolorallocate($img, max(0, $rgb[0] - 60), max(0, $rgb[1] - 60), max(0, $rgb[2] - 60));
@@ -262,11 +279,35 @@ class RentalApplicationDocumentHighlightService
         imagefilledrectangle($img, $boxX, $boxY, $boxX + $boxW, $boxY + $boxH, $fill);
         imagerectangle($img, $boxX, $boxY, $boxX + $boxW, $boxY + $boxH, $border);
 
-        $ty = $boxY + 10;
+        $ty = $boxY + 14 + (int) round($fontSize);
         foreach ($lines as $line) {
-            imagestring($img, 3, $boxX + 8, $ty, $line, $textColor);
+            if ($font && function_exists('imagettftext')) {
+                imagettftext($img, $fontSize, 0, $boxX + 10, $ty, $textColor, $font, $line);
+            } else {
+                imagestring($img, 5, $boxX + 10, $ty - $lineHeight + 4, $line, $textColor);
+            }
             $ty += $lineHeight;
         }
+    }
+
+    /** Regular-weight TTF for burned-in note text — same candidate paths DocumentFlattener resolves elsewhere in this codebase. */
+    private function findFont(): ?string
+    {
+        $candidates = [
+            'C:/Windows/Fonts/arial.ttf',
+            'C:/Windows/Fonts/segoeui.ttf',
+            'C:/Windows/Fonts/calibri.ttf',
+            resource_path('fonts/arial.ttf'),
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+        ];
+        foreach ($candidates as $path) {
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     /**

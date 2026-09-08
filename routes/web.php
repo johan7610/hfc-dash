@@ -2831,6 +2831,12 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/{rentalApplication}', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'show'])->name('corex.rental-applications.authorisation.show');
         Route::get('/{rentalApplication}/documents/{document}/view', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'viewDocumentInline'])->name('corex.rental-applications.authorisation.documents.view');
         Route::get('/{rentalApplication}/documents/{document}/highlighted-file', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'highlightedFile'])->name('corex.rental-applications.authorisation.documents.highlighted-file');
+        // Progressive load + save, 2026-09-08 — the authoriser now marks up
+        // documents too (Johan). Same three endpoints as the agent's own
+        // review screen, same shared trait, same completeness guard.
+        Route::get('/{rentalApplication}/documents/{document}/highlight-data/first', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'highlightFirstPage'])->name('corex.rental-applications.authorisation.documents.highlight-data.first');
+        Route::get('/{rentalApplication}/documents/{document}/highlight-data/remaining', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'highlightRemainingPages'])->name('corex.rental-applications.authorisation.documents.highlight-data.remaining');
+        Route::post('/{rentalApplication}/documents/{document}/highlight', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'applyHighlight'])->name('corex.rental-applications.authorisation.documents.highlight');
         Route::post('/{rentalApplication}/approve', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'approve'])->name('corex.rental-applications.authorisation.approve');
         Route::post('/{rentalApplication}/decline', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'decline'])->name('corex.rental-applications.authorisation.decline');
         Route::post('/{rentalApplication}/request-more-info', [\App\Http\Controllers\CoreX\RentalApplicationAuthorisationController::class, 'requestMoreInfo'])->name('corex.rental-applications.authorisation.request-more-info');

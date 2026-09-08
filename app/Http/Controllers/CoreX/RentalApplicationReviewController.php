@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Concerns\AuthorizesRentalApplicationAccess;
+use App\Http\Controllers\Concerns\HandlesRentalApplicationDocumentMarks;
 use App\Http\Controllers\Controller;
 use App\Models\Document;
 use App\Models\RentalApplication;
@@ -37,6 +38,14 @@ use Illuminate\View\View;
 class RentalApplicationReviewController extends Controller
 {
     use AuthorizesRentalApplicationAccess;
+    use HandlesRentalApplicationDocumentMarks;
+
+    /** Fulfils HandlesRentalApplicationDocumentMarks's guard requirement with the agent's own access rule. */
+    protected function guardDocumentMarkAccess(RentalApplication $rentalApplication, Document $document): void
+    {
+        $this->guardRentalApplication($rentalApplication);
+        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
+    }
 
     /** Mime types the browser can render natively — everything else gets a download-only fallback. */
     private const INLINE_VIEWABLE_MIME_PREFIXES = ['application/pdf', 'image/'];
@@ -271,165 +280,12 @@ class RentalApplicationReviewController extends Controller
             ->delete();
     }
 
-    /**
-     * Progressive load, 2026-09-08 — Johan's decision on the measured 9.2s
-     * cold-open cost: page 1 + total page count, fast, so the agent can
-     * start reading/marking immediately. Any marks already saved for this
-     * document come back here too (not split per page) — cheap, and avoids
-     * any risk of a mark for a not-yet-loaded page being dropped.
-     */
-    public function highlightFirstPage(RentalApplication $rentalApplication, Document $document, RentalApplicationDocumentHighlightService $highlights)
-    {
-        $this->guardRentalApplication($rentalApplication);
-        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
-
-        try {
-            return response()->json($highlights->firstPagePreview($document));
-        } catch (\Throwable $e) {
-            \Log::error('Rental application document first-page preview failed', ['document' => $document->id, 'error' => $e->getMessage()]);
-
-            return response()->json(['error' => 'This document could not be opened for highlighting.'], 422);
-        }
-    }
-
-    /**
-     * Progressive load, 2026-09-08 — the remaining pages behind
-     * highlightFirstPage() above. Called by the frontend right after the
-     * first page renders; the agent can already be reading/marking page 1
-     * while this is in flight.
-     */
-    public function highlightRemainingPages(RentalApplication $rentalApplication, Document $document, RentalApplicationDocumentHighlightService $highlights)
-    {
-        $this->guardRentalApplication($rentalApplication);
-        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
-
-        try {
-            return response()->json($highlights->remainingPagePreviews($document));
-        } catch (\Throwable $e) {
-            \Log::error('Rental application document remaining-pages preview failed', ['document' => $document->id, 'error' => $e->getMessage()]);
-
-            return response()->json(['error' => 'The rest of this document could not be loaded.'], 422);
-        }
-    }
-
-    /**
-     * AT-392 Phase 2 usability round — apply the current mark set. Mirrors
-     * ViewingPackController::redactDocument()'s request/response shape
-     * (fetch + FormData, JSON on success/failure) so the frontend pattern
-     * copied from show.blade.php's redactionTool() needs no adaptation here.
-     */
-    public function applyHighlight(Request $request, RentalApplication $rentalApplication, Document $document, RentalApplicationDocumentHighlightService $highlights)
-    {
-        $this->guardRentalApplication($rentalApplication);
-        $this->guardDocumentBelongsToApplication($rentalApplication, $document);
-
-        // RA-04, 2026-09-08 — cc5 found (and I reproduced at real HTTP level:
-        // real login, real CSRF, real curl, real DB read) that a malformed or
-        // stale-shape mark — e.g. the OLD box shape {x,y,w,h,color} from
-        // before this tool was redesigned from rectangles to marker-pen
-        // strokes — passed this rule (it's still technically an array) and
-        // was then SILENTLY DROPPED by normalizeForStorage() (no 'type', no
-        // 'points', no 'text' → fails the shape check → skipped, no error
-        // surfaced). Real HTTP 200, has_highlights:false, mark_count:0 —
-        // exactly the "nothing typed may ever be lost" failure this codebase
-        // exists to prevent, just silent instead of loud. Fixed here: every
-        // mark must now explicitly declare a valid type and the fields that
-        // type requires, or the WHOLE request is rejected with a real 422
-        // naming which mark and why — never a quiet no-op. The shape the
-        // CURRENT front-end (review.blade.php's stroke/note marks) actually
-        // sends already satisfies this and was re-verified end to end after
-        // this change (real HTTP POST → real DB row → real playback file).
-        $validated = $request->validate([
-            'marks' => ['nullable', 'array', function (string $attribute, $value, \Closure $fail) {
-                foreach ((array) $value as $page => $marksOnPage) {
-                    if (! is_array($marksOnPage)) {
-                        $fail("Page {$page}'s marks must be a list.");
-                        continue;
-                    }
-                    foreach ($marksOnPage as $i => $mark) {
-                        if (! is_array($mark)) {
-                            $fail("Mark {$page}.{$i} must be an object.");
-                            continue;
-                        }
-                        $type = $mark['type'] ?? null;
-                        if ($type === 'note') {
-                            if (! isset($mark['text']) || trim((string) $mark['text']) === '') {
-                                $fail("Mark {$page}.{$i} is a note but has no text.");
-                            }
-                        } elseif ($type === 'highlight') {
-                            if (! isset($mark['points']) || ! is_array($mark['points']) || count($mark['points']) < 2) {
-                                $fail("Mark {$page}.{$i} is a highlight but has fewer than 2 points.");
-                            }
-                        } else {
-                            $fail("Mark {$page}.{$i} has a missing or unrecognised type — expected 'highlight' or 'note'.");
-                        }
-                    }
-                }
-            }],
-            'marks.*' => ['array'],
-            'marks.*.*' => ['array'],
-        ]);
-
-        // 2026-09-08 — cc1 and an independent second agent both reproduced:
-        // POSTing marks for only SOME of a document's pages returns 200 and
-        // SILENTLY WIPES the other pages' already-saved marks, because
-        // applyMarks() REPLACES marks_json wholesale with whatever it's
-        // given. This is not specific to progressive loading — a stale tab,
-        // a slow connection, a double submit, or a retry can all reach this
-        // endpoint with an incomplete view of the document, with no button
-        // or client-side guard in the way at all. My own earlier
-        // verification checked that the rendered PAGE IMAGES came back
-        // complete; it never checked whether the SAVED MARKS survived —
-        // those are different questions, and this is exactly the class of
-        // mistake BUILD_STANDARD.md §5a (written earlier tonight, from this
-        // same module's RA-06 defect) exists to name.
-        //
-        // Fixed here, not client-side: a save must account for EVERY page
-        // of the document or it is refused outright — no merge, no partial
-        // acceptance. Chosen over merging because the invariant is provable
-        // ("this payload is either the complete truth or it's rejected")
-        // rather than requiring perfect merge semantics (correctly telling
-        // "page 3 has zero marks" apart from "page 3 was never mentioned")
-        // to be right in every caller, forever. This also doesn't cost the
-        // legitimate progressive-load flow anything new: the frontend
-        // already refuses to let an agent save before every page has
-        // loaded (see review.blade.php's pagesLoading guard) — this makes
-        // that a real server-side guarantee instead of a suggestion a
-        // stale tab or a crafted request could simply skip.
-        $totalPages = $highlights->totalPageCount($document);
-        $providedPages = array_map('intval', array_keys((array) ($validated['marks'] ?? [])));
-        sort($providedPages);
-        if ($providedPages !== range(0, $totalPages - 1)) {
-            return response()->json([
-                'error' => 'This document hasn\'t fully finished loading yet — wait for every page to load, then try saving again.',
-            ], 422);
-        }
-
-        try {
-            $highlight = $highlights->applyMarks(
-                $document,
-                (int) $rentalApplication->agency_id,
-                $request->user()->id,
-                (array) ($validated['marks'] ?? []),
-            );
-        } catch (\Throwable $e) {
-            // RA-06, 2026-09-08 — this previously interpolated $e->getMessage()
-            // straight into the JSON response. For a QueryException that is the
-            // raw SQL and driver error text (a real SQLSTATE reached the
-            // browser). No exception detail is ever user-facing, regardless of
-            // cause — only the log gets the real message.
-            \Log::error('Rental application document highlight apply failed', ['document' => $document->id, 'error' => $e->getMessage()]);
-
-            return response()->json(['error' => 'Could not save highlights on this document. Please try again.'], 422);
-        }
-
-        return response()->json([
-            'ok' => true,
-            'has_highlights' => $highlight->highlighted_file_path !== null,
-            'mark_count' => collect($highlight->marks_json ?? [])->flatten(1)->count(),
-            'saved_at' => $highlight->updated_at?->toIso8601String(),
-        ]);
-    }
+    // highlightFirstPage(), highlightRemainingPages(), applyHighlight() —
+    // 2026-09-08, moved to the shared HandlesRentalApplicationDocumentMarks
+    // trait (see its docblock) once the authoriser screen also needed to
+    // mark up documents — this controller's own copies would otherwise
+    // have been the second, independently-maintainable implementation of
+    // the exact partial-save protection the critical fix built.
 
     /**
      * Playback for "the next party" — mirrors ViewingPackController::
