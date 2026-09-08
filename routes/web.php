@@ -2878,6 +2878,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::prefix('rental-applications')->middleware('permission:rental_applications.view')->group(function () {
         Route::get('/{rentalApplication}/review', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'show'])->name('corex.rental-applications.review');
         Route::post('/{rentalApplication}/review/assessment', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'saveAssessment'])->name('corex.rental-applications.review.assessment');
+        Route::post('/{rentalApplication}/review/link-property', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'linkProperty'])->name('corex.rental-applications.review.link-property');
         Route::get('/{rentalApplication}/documents/{document}/view', [\App\Http\Controllers\CoreX\RentalApplicationReviewController::class, 'viewDocumentInline'])->name('corex.rental-applications.documents.view');
         // Usability round, 2026-09-07 — persistent highlight marks, reusing
         // ViewingPack's redaction architecture (own the render, persist

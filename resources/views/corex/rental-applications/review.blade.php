@@ -57,6 +57,57 @@
                 <p class="text-xs truncate" style="color: var(--text-muted);">
                     {{ $rentalApplication->property_address_override ?? optional($rentalApplication->property)->address ?? 'No property linked' }}
                 </p>
+
+                {{--
+                    AT-392, Johan (approved via conductor, 2026-09-08): "property
+                    linked should be an option then on review... if not linked and
+                    we want to test against it then we need to allow the agent to
+                    link it on this screen as well." The affordability check was
+                    silently testing the applicant's self-reported CURRENT rent
+                    when nothing was linked — meaningless. This picker reuses the
+                    exact same search-properties endpoint and Alpine pattern as
+                    the New Rental Application screen's property field
+                    (resources/views/corex/rental-applications/create.blade.php)
+                    — not a second implementation. A NESTED, independent x-data
+                    scope, deliberately not touching the shared rentalReview()
+                    component (cc4's affordability panel further down the page
+                    reads from that) — this widget only ever POSTs to its own
+                    link-property route and reloads.
+                --}}
+                <div class="mt-1" x-data="rentalReviewPropertyLink({{ Js::from([
+                    'searchUrl' => route('corex.rental-applications.search-properties'),
+                    'linkUrl' => route('corex.rental-applications.review.link-property', $rentalApplication),
+                    'currentLabel' => optional($rentalApplication->property)->title
+                        ?: optional($rentalApplication->property)?->buildDisplayAddress(),
+                ]) }})">
+                    <template x-if="!searching">
+                        <p class="text-xs">
+                            <span style="color: var(--text-muted);" x-show="currentLabel" x-text="'Linked for affordability: ' + currentLabel"></span>
+                            <span style="color: var(--ds-amber, #d97706);" x-show="!currentLabel">Link a property to check against its rent</span>
+                            <button type="button" class="underline ml-1" style="color: var(--brand-icon, #2563eb);" @click="searching = true">
+                                <span x-text="currentLabel ? 'Change' : 'Link a property'"></span>
+                            </button>
+                            <button type="button" class="underline ml-1" style="color: var(--ds-red, #dc2626);" x-show="currentLabel" @click="clear()">Clear</button>
+                        </p>
+                    </template>
+                    <template x-if="searching">
+                        <div class="relative" style="max-width: 22rem;">
+                            <input type="text" x-model="query" @input.debounce.300ms="search()" @keydown.escape="searching = false"
+                                   placeholder="Search rental properties…" autofocus
+                                   class="w-full rounded-md px-2 py-1 text-xs" style="border: 1px solid var(--border);">
+                            <button type="button" class="text-xs underline ml-1" style="color: var(--text-muted);" @click="searching = false">Cancel</button>
+                            <div class="absolute z-10 mt-1 w-full rounded-md" style="background: var(--surface); border: 1px solid var(--border);" x-show="results.length">
+                                <template x-for="p in results" :key="p.id">
+                                    <button type="button" @click="select(p)" class="block w-full text-left px-2 py-1 text-xs hover:bg-slate-50" x-text="p.label"></button>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                    <form :action="linkUrl" method="POST" x-ref="linkForm" class="hidden">
+                        @csrf
+                        <input type="hidden" name="property_id" x-ref="propertyIdInput">
+                    </form>
+                </div>
             </div>
         </x-slot>
         <x-slot name="right">
@@ -1381,6 +1432,37 @@ function agentDocumentUploadReview() {
             }
         },
         async onFilesSelected(fileList) { await Promise.all(Array.from(fileList).map(file => this.uploadFile(file))); },
+    };
+}
+
+// AT-392, Johan (2026-09-08) — property link on Review, so the affordability
+// check can test a real rent instead of falling back to the applicant's own
+// current rent. Deliberately independent of rentalReview() above (that
+// component owns the assessment/affordability panel) — this only ever POSTs
+// property_id to its own route and reloads, same shape as every other
+// single-field save action on this screen (e.g. the status form elsewhere
+// in this module).
+function rentalReviewPropertyLink({ searchUrl, linkUrl, currentLabel }) {
+    return {
+        linkUrl,
+        currentLabel: currentLabel || null,
+        searching: false,
+        query: '',
+        results: [],
+        async search() {
+            if (this.query.length < 2) { this.results = []; return; }
+            const res = await fetch(searchUrl + '?q=' + encodeURIComponent(this.query));
+            this.results = await res.json();
+        },
+        select(p) {
+            this.$refs.propertyIdInput.value = p.id;
+            this.$refs.linkForm.submit();
+        },
+        clear() {
+            if (!confirm('Clear the linked property? The affordability check will show "cannot be calculated" until a property is linked again.')) return;
+            this.$refs.propertyIdInput.value = '';
+            this.$refs.linkForm.submit();
+        },
     };
 }
 </script>

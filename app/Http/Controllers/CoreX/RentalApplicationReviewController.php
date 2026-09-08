@@ -50,6 +50,60 @@ class RentalApplicationReviewController extends Controller
     /** Mime types the browser can render natively — everything else gets a download-only fallback. */
     private const INLINE_VIEWABLE_MIME_PREFIXES = ['application/pdf', 'image/'];
 
+    /**
+     * AT-392, Johan (approved via the conductor, 2026-09-08): "property
+     * linked should be an option then on review - look when the agent
+     * creates the application they can link it, but if not linked and we
+     * want to test against it then we need to allow the agent to link it
+     * on this screen as well." The affordability check was testing the
+     * applicant's self-reported CURRENT rent when no property was linked —
+     * meaningless, since it answers "can they afford where they already
+     * live." cc4's qualifyingResult() now reads the rent from the linked
+     * property instead (App\Models\RentalApplicationAssessment) — this
+     * action is the only way to set/clear that link from Review.
+     *
+     * Deliberately its OWN action, not a reopening of
+     * RentalApplicationController::update() — that route is now hard-
+     * blocked for a submitted application (today's read-only-view fix) and
+     * stays blocked. This is a narrow, explicitly audited exception for
+     * exactly one field, not a backdoor to the rest of the form.
+     */
+    public function linkProperty(Request $request, RentalApplication $rentalApplication, \App\Services\RentalApplications\RentalApplicationAuditService $audit)
+    {
+        $this->guardRentalApplication($rentalApplication);
+
+        $validated = $request->validate([
+            'property_id' => ['nullable', 'integer', 'exists:properties,id'],
+        ]);
+
+        $oldPropertyId = $rentalApplication->property_id;
+        $newPropertyId = $validated['property_id'] ?? null;
+
+        if ($oldPropertyId === $newPropertyId) {
+            return back();
+        }
+
+        $oldProperty = $oldPropertyId ? \App\Models\Property::find($oldPropertyId) : null;
+        $newProperty = $newPropertyId ? \App\Models\Property::find($newPropertyId) : null;
+
+        $rentalApplication->property_id = $newPropertyId;
+        $rentalApplication->save();
+
+        $audit->log(
+            $rentalApplication,
+            eventCategory: 'property_link',
+            eventType: $newPropertyId ? ($oldPropertyId ? 'changed' : 'linked') : 'cleared',
+            user: $request->user(),
+            oldValues: ['property_id' => $oldPropertyId, 'address' => $oldProperty?->buildDisplayAddress()],
+            newValues: ['property_id' => $newPropertyId, 'address' => $newProperty?->buildDisplayAddress()],
+            humanSummary: $newProperty
+                ? "Linked property: {$newProperty->buildDisplayAddress()}"
+                : 'Cleared the linked property',
+        );
+
+        return back()->with('success', $newProperty ? 'Property linked.' : 'Property link cleared.');
+    }
+
     public function show(Request $request, RentalApplication $rentalApplication): View
     {
         $this->guardRentalApplication($rentalApplication);
